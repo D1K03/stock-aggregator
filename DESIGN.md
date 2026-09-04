@@ -90,9 +90,14 @@ respect robots.txt and ToS, and treat scrapers as the fragile layer.
 - **SEC EDGAR / Companies House** — filings
 - **Reddit official API** — free tier covers low-volume r/stocks, r/wallstreetbets pulls
 
-**Rejected — Bright Data.** An enterprise proxy network for defeating aggressive anti-bot
-defences at scale. API-first ingest means there is no bot problem to solve. If a target later
-hard-blocks, a cheap residential proxy or ScrapingBee-tier service is the proportionate answer.
+**Bright Data — available, off by default.** Previously rejected outright, on the grounds that
+an enterprise proxy network exists to defeat aggressive anti-bot defences at scale and API-first
+ingest has no such problem. That reasoning still holds, and the default fetch strategy is a
+direct request with no proxy anywhere in it. What reversed the rejection is price, not need: the
+proportionate answer the original entry named — a cheap residential proxy — is already
+provisioned and paid for on the same VPS for a sibling project, so having it available and
+switched off costs nothing. It is a per-source opt-in, never a default, and the spend cap is set
+in Bright Data's dashboard rather than enforced in code.
 
 **Rejected for now — Apify.** Free plan is $5/month of credits; Starter is $29. The real risk is
 that many Store Actors charge per-result or per-event fees *on top of* compute — exactly the
@@ -117,15 +122,19 @@ reissued.
 
 **"Raw metrics" and "raw payloads" are different things, and the retention rules differ.**
 Parsed metric values are canonical, immutable and stay in Postgres forever (~2–3 GB/yr at full
-universe). Unparsed source JSON goes to Azure Blob as gzipped files, with retention set by a
-storage-account lifecycle rule. Never conflate the two under "raw data".
+universe). Unparsed source JSON is gzipped and stored outside the database, with its own
+retention. Never conflate the two under "raw data".
 
-Payloads stay out of Postgres because Azure Flexible Server provisioned storage ratchets — it
-grows, never shrinks, and deleted rows do not return space without `VACUUM FULL`. A payload
-table peaking at 15 GB permanently raises the floor even after expiry. AWS was considered and
-offers no advantage: RDS has the same one-way ratchet, and only serverless-storage engines
-(Aurora, Neon) escape it. Once payloads are in Blob the limit is never approached, which
-removes the reason to migrate.
+Payloads stay out of Postgres regardless of where the database runs. Deleted rows do not return
+their space without `VACUUM FULL`, so a payload table peaking at 15 GB permanently raises the
+floor even after expiry — on a managed service that is a bill that never goes down, and on the
+VPS volume it is disk that never comes back. `ingest_observation.blob_path` records where a
+payload went, which keeps that decision out of the schema.
+
+**Where payloads actually land is open.** Azure Blob was the answer while the database was
+Azure; it no longer is. The candidates are a volume on the VPS with a pruning job, or an
+object store billed per GB. The ingest spec has to settle it, because that is the first thing
+that will write one.
 
 Ingest hashes each response and skips the blob write when unchanged, since most fundamentals
 endpoints return full history on every call. The observation row is still written every time —
@@ -208,14 +217,47 @@ Delivery is a single HTTP POST to a webhook. No OAuth, no bot hosting.
 
 - **VPS** (Hetzner CX22 / Netcup / small droplet, ~£4–6/month) for always-on work: cron,
   scrapers, FinBERT resident in memory, no cold starts.
-- **Azure** for database and storage — Postgres for snapshots, Blob for raw payloads. Chosen
-  partly for CV relevance, since Azure is used at work.
+- **Postgres on the VPS**, in the same compose stack, on a named volume. Previously Azure —
+  Postgres for snapshots and Blob for raw payloads, chosen partly for CV relevance. Reversed
+  because the deployment it has to fit is one VPS that already runs the tunnel, the tailnet and
+  the secrets client: adding a managed database to that buys a firewall allowlist, a second bill
+  and a network hop, for a workload measured in single-digit gigabytes per year. The cost of the
+  reversal is real and is not yet paid — nothing takes a backup on our behalf any more.
 - **Azure Functions consumption plan considered and downgraded**: 1.5 GB RAM and a slow vCPU
   gives ~5–10 texts/sec for FinBERT plus a cold-start model load. Fine for light orchestration,
   wrong for the scoring job.
 - Running cost target ~£5–10/month.
 - Acceptable v1 shortcut: run the daily job locally on cron / Task Scheduler and push results to
   the cloud database.
+
+**Secrets live in Infisical**, fetched into the process environment at startup by a machine
+identity. The only credentials on the server are the three that authenticate that exchange;
+everything else is fetched with them and never touches disk. A missing identity is a silent
+no-op so local development and CI read a `.env` as normal, but a *failed* fetch is fatal —
+starting with half a configuration means failing later, somewhere less obvious.
+
+**Ingress is a Cloudflare Tunnel**, which dials outward. Nothing listens on the public interface
+and there is no firewall rule to maintain. The cost is that the hostname mapping lives in
+Cloudflare's dashboard rather than in the repository; accepted because there is one rule, and
+the alternative puts a credentials file on the box.
+
+**Deploys reach the box over Tailscale.** The workflow joins the tailnet as an ephemeral tagged
+node for the length of the job, so no CI credential is usable from the public internet. The
+credential is a tagged, reusable, ephemeral auth key, because Tailscale does not expose OAuth
+client creation through its API and an auth key is the strongest thing that can be provisioned
+without clicking through the admin console. Auth keys expire, and the sibling project has already
+lost time to one failing as a connection timeout that reads like a network fault — so the deploy
+workflow checks the expiry date and fails with an explicit message before the join is attempted.
+An OAuth client is a strict improvement whenever someone makes one. Note that the VPS still accepts SSH on its public
+interface; closing port 22 to everything but the tailnet is a hardening step this deploy is ready
+for but does not depend on.
+
+**Deployment is a container image, built by CI and pulled by the VPS.** The commit is baked in at
+build time as `SCREENER_GIT_SHA`, because a container has no git history and `scoring_run.git_sha`
+is `not null`. Migrations run in the container's entrypoint under a Postgres advisory lock, so
+the running image is authoritative about its own schema and two containers starting at once
+cannot race each other into a duplicate-table crash loop. Rolling back across a migration is not
+supported: there are no down migrations.
 
 ## Standing constraints
 

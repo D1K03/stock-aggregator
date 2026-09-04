@@ -1,0 +1,28 @@
+# Production ingress: a Cloudflare Tunnel.
+#
+# An override file rather than a compose profile, because COMPOSE_PROFILES set
+# in a .env file is not honoured — compose only reads it from the shell — and a
+# silently inactive tunnel is a deploy that looks fine and serves nothing.
+#
+# The tunnel is token-based and managed from the Cloudflare Zero Trust
+# dashboard, so the hostname to service mapping is not in this repository.
+# That cuts against the grain here, where configuration is normally version
+# controlled; it is accepted because there is exactly one rule and the
+# alternative puts a credentials file on disk. Revisit when the deferred UI
+# adds routes. The rule to create is:
+#
+#   <subdomain>.edenmatrix.xyz  ->  http://app:8080
+#
+# Put a Cloudflare Access policy in front of it: /status reports which build is
+# running, which is low-grade reconnaissance rather than something to publish.
+name: stock-aggregator
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - app

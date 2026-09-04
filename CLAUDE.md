@@ -9,8 +9,9 @@ live in `docs/specs/`; the database schema is
 
 ## Status
 
-Skeleton — no source, dependencies, or tests on disk yet. Do not assume tooling that is not
-present. The database schema is specified but not implemented.
+The database schema and the infrastructure layer are built and tested; no ingest, scoring or
+alerting code exists yet. Runtime dependencies are `psycopg` and `httpx`, and nothing else —
+check `pyproject.toml` before assuming a library is available.
 
 ## What it does
 
@@ -58,11 +59,14 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   CPU only — no GPU, no CUDA. Never use an LLM to emit a sentiment number.
 - LLMs are for narrative extraction only (transcript summaries, guidance changes, risk-section
   flags), via OpenRouter with a cheap model.
-- VPS for the always-on job; Azure Postgres for snapshots, Blob for large raw payloads. Azure
-  Functions consumption plan is too weak for the scoring job. Running the daily job locally and
-  pushing to the cloud DB is an acceptable v1 shortcut.
-- Rejected: Bright Data (enterprise anti-bot, no bot problem here), Apify (per-result fees
-  compound daily). Make a case if you think either earns its place.
+- Everything runs on one VPS: the always-on job, and Postgres in the same compose stack on a
+  named volume. Serverless was considered and downgraded — too weak for the scoring job. Where
+  raw payloads land is still open; `DESIGN.md` says why.
+- Bright Data is available as an opt-in fetch strategy, off by default — the default strategy
+  list is `("direct",)` and a test enforces it. Apify remains rejected (per-result fees compound
+  daily); make a case if you think it earns its place.
+- Secrets come from Infisical at startup. Ingress is a Cloudflare Tunnel, SSH is Tailscale-only,
+  and deploys are a GHCR image rolled out by `.github/workflows/deploy.yml`.
 
 ## Commands
 
@@ -74,8 +78,29 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   `LiteralString`, so SQL assembled at runtime is rejected by design: build DDL with
   `psycopg.sql` composition, and reserve `cast(LiteralString, ...)` for trusted file
   content such as a migration.
-- Apply migrations: `python -c "import psycopg, pathlib; from screener.migrate import apply_migrations; from screener.config import settings; conn = psycopg.connect(settings().database_url, autocommit=True); print(apply_migrations(conn, pathlib.Path('migrations')))"`
+- Apply migrations: `python -m screener.boot migrate` (takes an advisory lock, then pre-creates
+  partitions a year ahead)
+- Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status` on 8080
+- Check every integration against the real world: `python -m screener.boot selftest`
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
 it unrecorded and the fixed file can be re-run.
+
+## Infrastructure layout
+
+Each piece is its own package with a small public surface exposed through `__init__.py`;
+nothing outside imports a submodule directly.
+
+- `screener.config` — process configuration. Credentials do **not** live here. Each subsystem
+  owns its own (`fetch.config`, `ai.config`, `notify.config`), so a process posting an alert
+  does not need a database URL it will never use.
+- `screener.secrets` — Infisical into `os.environ`, stdlib `urllib` only.
+- `screener.fetch` — `fetch(url, strategies)` over a `direct -> isp_proxy -> unlocker` chain.
+- `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
+- `screener.notify` — a `NotificationChannel` protocol and a Discord webhook.
+- `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
+- `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
+  `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
+  is not derived from process configuration.
+- `screener.boot` — secrets, then migrations under an advisory lock, then serve.

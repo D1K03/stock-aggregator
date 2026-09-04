@@ -1,0 +1,176 @@
+# Build an image, publish it, and roll it out to the VPS.
+#
+# Called by ci.yml after ci-ok passes on main, rather than triggering on `push`
+# itself. Two reasons: a push-triggered deploy races CI and can win, shipping a
+# commit whose tests are still running; and branch protection checks the pull
+# request head, which is not the merge commit that lands on main. Running from
+# ci.yml guarantees the thing deployed is the thing that went green.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: Existing tag to deploy. Blank builds from this commit.
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Existing tag to deploy — set to an older commit SHA to roll back. Blank builds from this ref.
+        type: string
+        required: false
+        default: ""
+
+# Deploys queue rather than cancelling. A half-applied rollout is worse than a
+# late one, and by the time compose is up the migrations have already run.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  # A lowercase literal, not ${{ github.repository_owner }}: the owner is
+  # `D1K03` and registry names must be lowercase, so deriving it fails the build
+  # on a tag the registry will not accept. It is spelled out here to match
+  # deploy/compose.prod.yaml, which pulls the same image and cannot compute a
+  # name at all.
+  IMAGE: ghcr.io/d1k03/stock-aggregator
+
+jobs:
+  build:
+    # Skipped when an existing tag was named, which is what makes a rollback
+    # fast: no rebuild, just point the box at an image that already exists.
+    if: inputs.image_tag == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          # Tagged with the commit as well as `latest`, because without an
+          # immutable tag there is no rollback other than reverting the commit
+          # and waiting for a rebuild.
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build]
+    # `always()` so a rollback (build skipped) still deploys, guarded so a
+    # failed build does not.
+    if: always() && needs.build.result != 'failure' && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner joins the tailnet as an ephemeral tagged node for the length
+      # of this job, so the deploy key is never usable from the public
+      # internet. This works whether or not port 22 is also open publicly.
+      # An expired Tailscale credential makes the step below fail with a
+      # connection timeout that reads like a network fault, which is how the
+      # sibling project lost an afternoon. This turns that into a dated,
+      # actionable error before it happens.
+      - name: Check the Tailscale key has not expired
+        run: |
+          EXPIRES=2026-12-03
+          LEFT=$(( ( $(date -u -d "$EXPIRES" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "TS_AUTHKEY expires $EXPIRES — $LEFT day(s) left"
+          if [ "$LEFT" -lt 0 ]; then
+            echo "::error::TS_AUTHKEY expired on $EXPIRES. Joining the tailnet will fail with a timeout that looks like a network fault. Mint a new key, or switch to an OAuth client, which does not expire — see deploy/README.md."
+            exit 1
+          fi
+          if [ "$LEFT" -lt 21 ]; then
+            echo "::warning::TS_AUTHKEY expires in $LEFT day(s). Replace it, ideally with an OAuth client."
+          fi
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v3
+        with:
+          # An auth key rather than an OAuth client, for one reason only:
+          # OAuth clients cannot be created through the Tailscale API, so this
+          # is the strongest credential that could be provisioned without
+          # someone clicking through the admin console. It is reusable,
+          # ephemeral and pinned to tag:ci, so the node removes itself when the
+          # job ends. Replacing it with an OAuth client is a strict improvement
+          # and the step above is what will remind you.
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          tags: tag:ci
+
+      # Only the compose files travel. Everything else is in the image, so the
+      # box never holds a checkout that could drift from what is running.
+      - name: Copy the compose files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: deploy/compose.prod.yaml,deploy/compose.tunnel.yaml
+          target: ${{ secrets.VPS_APP_DIR }}
+          overwrite: true
+
+      - name: Pull and restart
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VPS_APP_DIR }}
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export SCREENER_IMAGE_TAG="$IMAGE_TAG"
+            # --env-file is not optional: compose resolves a bare .env relative
+            # to the compose file's directory, not the working directory, so
+            # omitting it falls back to every default and starts the stack with
+            # no Infisical identity at all.
+            COMPOSE="docker compose --env-file .env -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml"
+            $COMPOSE pull
+            $COMPOSE up -d --remove-orphans
+            docker image prune -f
+
+      - name: Smoke test
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VPS_APP_DIR }}
+            COMPOSE="docker compose --env-file .env -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml"
+            # Probed from inside the container, never through the tunnel.
+            # Cloudflare Access answers an unauthenticated request with a 302
+            # to its login page, and `curl -f` does not treat a redirect as a
+            # failure — so a public probe would go green against a dead app.
+            for attempt in $(seq 1 30); do
+              if $COMPOSE exec -T app python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready').status == 200 else 1)"; then
+                echo "ready after ${attempt} attempt(s)"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "never became ready; recent logs follow"
+            $COMPOSE logs --tail=60 app
+            exit 1

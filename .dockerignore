@@ -1,0 +1,30 @@
+# The build context is the repo root, so everything not needed in the image is
+# listed here. Without this the context ships the git history and a macOS
+# virtualenv whose binaries would not run in the image anyway.
+.git
+.github
+.venv
+venv
+.context
+.claude
+docs
+tests
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+compose.yaml
+
+# macOS metadata. A `._foo.sql` AppleDouble sidecar next to a migration matches
+# the runner's `*.sql` glob and is not valid UTF-8, so it crashes startup before
+# the first migration applies. Only ever produced by copying the tree off a Mac,
+# but the failure is opaque enough to be worth one line here.
+._*
+.DS_Store

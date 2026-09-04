@@ -29,6 +29,17 @@ overlapping validity periods, and that yearly and monthly partitions coexist on 
 
 Spec: `docs/specs/2026-09-04-database-schema-design.md`. Plan: `docs/plans/2026-09-04-database-schema.md`.
 
+**Infrastructure roots** — secrets from Infisical, a fetch chain with Bright Data as an opt-in
+strategy, an OpenRouter client, a notification channel protocol with a Discord webhook, a status
+service behind a Cloudflare Tunnel, and CI/CD onto the VPS. Roots only: no source adapters, no
+daily job, no alert content. `screener.boot` now applies migrations under an advisory lock and
+pre-creates partitions, which gives `ensure_partitions` its first caller.
+
+Ingest inherits `screener.fetch` and `screener.secrets` rather than inventing its own, and
+`screener.provenance` supplies the `git_sha` and `config_hash` that `scoring_run` requires.
+
+Spec: `docs/specs/2026-09-04-infrastructure-foundation.md`. Plan: `docs/plans/2026-09-04-infrastructure-foundation.md`.
+
 ## Done — sector distribution reconnaissance
 
 Measured against the S&P 1500 with real yfinance labels, 1,501 of 1,506 symbols resolved.
@@ -88,5 +99,6 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 
 ## Status
 
-Schema, CI and contributor docs merged and green on `main`. Sector reconnaissance done. No
-ingest, scoring or alerting code exists yet.
+Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance done. No
+ingest, scoring or alerting code exists yet — `python -m screener.boot selftest` is the only thing that currently exercises the
+infrastructure end to end, and it is worth running after a deploy for exactly that reason.
