@@ -64,7 +64,14 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Rejected: Bright Data (enterprise anti-bot, no bot problem here), Apify (per-result fees
   compound daily). Make a case if you think either earns its place.
 
-## When adding tooling
+## Commands
 
-Record here as it lands: dependency/build commands, full test suite and single-test invocation,
-lint/typecheck, and how to run the screener for one ticker or as a dry run that suppresses Discord.
+- Install: `pip install -e ".[dev]"`
+- Tests: `pytest` — needs `DATABASE_URL_TEST` pointing at a throwaway Postgres 16
+  (the suite drops and recreates the `public` schema on every test).
+- Single test: `pytest tests/test_identity.py::test_overlapping_symbol_periods_for_one_security_are_rejected -v`
+- Apply migrations: `python -c "import psycopg, pathlib; from screener.migrate import apply_migrations; from screener.config import settings; conn = psycopg.connect(settings().database_url, autocommit=True); print(apply_migrations(conn, pathlib.Path('migrations')))"`
+
+Migrations are plain numbered SQL in `migrations/`, applied in filename order and
+recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
+it unrecorded and the fixed file can be re-run.
