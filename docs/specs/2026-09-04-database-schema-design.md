@@ -394,6 +394,13 @@ create index corporate_action_obs_idx on corporate_action (ingest_observation_id
 Yearly partitions on `price_daily` (~756k rows/yr). Momentum computes split and dividend
 adjustment at scoring time from raw prices plus actions — see D6.
 
+**Price partitions must extend backwards, unlike every other partitioned table.** Momentum needs
+at least twelve months of trailing prices, so the first ingest of a 2026 scoring run writes 2025
+and 2024 rows. With no default partition those inserts fail outright — `no partition of relation
+"price_daily" found for row`. Partitions therefore start at 2020 for `price_daily`, while the
+derived daily tables start at the first scoring year, since a derived row cannot predate the run
+that produced it. This asymmetry lives in `PARTITION_START_YEAR` in `screener.partitions`.
+
 `price_daily` carries `ingest_observation_id` like every other fact table. Prices are the one
 input D6 argues cannot be trusted to stay put, so being the only table without a route back to
 the stored payload would be exactly backwards: a provider silently backfilling a wrong close is
@@ -733,5 +740,6 @@ These are parameters, not unresolved design:
 - **Universe composition** — 3,000 tickers must be distributed so sectors have workable peer
   counts. The first-fortnight ~100-ticker run will not exercise this, so thin-sector fallback
   needs a deliberate test rather than waiting for production to reveal it.
-- **Partition pre-creation window** — two months ahead for `metric_daily`, one year for the
-  yearly-partitioned tables.
+- **Partition pre-creation window** — one year ahead for every partitioned table. Partition
+  existence is decided by actual bound coverage read from the catalogue, not by name, so the
+  documented yearly→monthly migration path cannot collide with itself.
