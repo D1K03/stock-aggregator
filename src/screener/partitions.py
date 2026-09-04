@@ -16,6 +16,7 @@ year if any existing partition already overlaps it.
 import re
 
 import psycopg
+from psycopg import sql
 
 _BOUND_DATE_RE = re.compile(r"'(\d{4}-\d{2}-\d{2})'")
 
@@ -49,7 +50,10 @@ def _parent_schema(conn: psycopg.Connection, table: str) -> str:
             """,
             (table,),
         )
-        return cur.fetchone()[0]
+        row = cur.fetchone()
+        if row is None:
+            raise LookupError(f"partitioned table {table!r} not found")
+        return row[0]
 
 
 def _year_covered(conn: psycopg.Connection, table: str, year: int) -> bool:
@@ -103,9 +107,20 @@ def ensure_partitions(
             if _year_covered(conn, table, year):
                 continue
             name = partition_name(table, year)
+            # Composed rather than an f-string: psycopg types the query as
+            # LiteralString to catch SQL assembled at runtime, and composition
+            # is the sanctioned way to build DDL around identifiers. It also
+            # quotes them properly instead of trusting the caller.
             conn.execute(
-                f"create table {schema}.{name} partition of {table} "
-                f"for values from ('{year}-01-01') to ('{year + 1}-01-01')"
+                sql.SQL(
+                    "create table {child} partition of {parent} "
+                    "for values from ({start}) to ({end})"
+                ).format(
+                    child=sql.Identifier(schema, name),
+                    parent=sql.Identifier(table),
+                    start=sql.Literal(f"{year}-01-01"),
+                    end=sql.Literal(f"{year + 1}-01-01"),
+                )
             )
             created.append(name)
     return created

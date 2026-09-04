@@ -10,6 +10,7 @@ project's "never edit an already-applied migration" rule).
 """
 
 from pathlib import Path
+from typing import LiteralString, cast
 
 import psycopg
 
@@ -48,7 +49,11 @@ def apply_migrations(conn: psycopg.Connection, directory: Path) -> list[str]:
             continue
         sql = path.read_text()
         with conn.transaction():
-            conn.execute(sql)
+            # psycopg types the query parameter as LiteralString (PEP 675) to
+            # catch SQL assembled at runtime from untrusted input. A versioned
+            # migration file is trusted repo content, which is the one case the
+            # guardrail is meant to allow through.
+            conn.execute(cast(LiteralString, sql))
             conn.execute(
                 "insert into schema_migration (version) values (%s)", (version,)
             )
