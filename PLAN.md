@@ -29,6 +29,17 @@ overlapping validity periods, and that yearly and monthly partitions coexist on 
 
 Spec: `docs/specs/2026-09-04-database-schema-design.md`. Plan: `docs/plans/2026-09-04-database-schema.md`.
 
+**Infrastructure roots** — secrets from Infisical, a fetch chain with Bright Data as an opt-in
+strategy, an OpenRouter client, a notification channel protocol with a Discord webhook, a status
+service behind a Cloudflare Tunnel, and CI/CD onto the VPS. Roots only: no source adapters, no
+daily job, no alert content. `screener.boot` now applies migrations under an advisory lock and
+pre-creates partitions, which gives `ensure_partitions` its first caller.
+
+Ingest inherits `screener.fetch` and `screener.secrets` rather than inventing its own, and
+`screener.provenance` supplies the `git_sha` and `config_hash` that `scoring_run` requires.
+
+Spec: `docs/specs/2026-09-04-infrastructure-foundation.md`. Plan: `docs/plans/2026-09-04-infrastructure-foundation.md`.
+
 ## Next — sector distribution reconnaissance
 
 Before building ingest, pull nothing but the sector and industry label for the candidate universe
@@ -46,8 +57,9 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 1. **Universe and identity** — populate `security`, `security_symbol`, `security_sector`,
    `sector_node`, `peer_group`. Everything else needs securities to exist, and the sector
    taxonomy and fallback walk get decided here.
-2. **Ingest** — yfinance prices and fundamentals into the bitemporal fact layer, Blob payload
-   writing, content-hash dedup. First real use of `cutoff_offset`.
+2. **Ingest** — yfinance prices and fundamentals into the bitemporal fact layer, payload
+   writing, content-hash dedup. First real use of `cutoff_offset`. Settles where payloads land,
+   which `DESIGN.md` now records as open. Inherits `screener.fetch` and `screener.secrets`.
 3. **Scoring** — metric computation, percentile within peer group, pillar aggregation with the
    coverage gate. The peer-group fallback walk lives here.
 4. **Diff and alerting** — crossing detection against the last comparable snapshot, cooldown,
@@ -72,4 +84,6 @@ Settled against real data, not by design:
 
 ## Status
 
-Schema merged and green on `main`. No ingest, scoring or alerting code exists yet.
+Schema and infrastructure merged and green on `main`. No ingest, scoring or alerting code exists
+yet — `python -m screener.boot selftest` is the only thing that currently exercises the
+infrastructure end to end, and it is worth running after a deploy for exactly that reason.
