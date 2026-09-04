@@ -111,9 +111,15 @@ already held is the restatement detector.
 
 **Facts are bitemporal and append-only.** Every fundamental carries `period_end` (what it
 describes) and `observed_at` (when it was learned); a restatement is an insert, never an update.
-Scoring on date D reads the latest observation with `observed_at <= D`, making the forward log
-point-in-time correct by construction. For the same reason prices are stored raw with a separate
-corporate-actions table: providers rewrite adjusted prices retroactively after every split.
+For the same reason prices are stored raw with a separate corporate-actions table: providers
+rewrite adjusted prices retroactively after every split.
+
+Which observations a scoring date may see is bounded by an **interval offset from that date**,
+stamped on the run — not by a fixed timestamp, which across a multi-day backfill would let an
+old date see knowledge acquired years later. Live and backfill therefore evaluate the identical
+expression, which is the property that makes backtesting the scoring logic mean anything. Note
+that `observed_at` records when *we* learned something, not when it became public, so the log
+lags publication by up to a day and biases backtests pessimistic — the safe direction.
 
 **Scores are versioned, not overwritten.** Pillar scores are stored per scoring run; a fixed
 scoring bug lands as a new run beside the old one. The decisive reason is specific to alerting —

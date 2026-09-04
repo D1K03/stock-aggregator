@@ -106,6 +106,16 @@ Applied throughout, per Postgres best practice:
   value is a constraint change rather than a type migration.
 - Migrations add constraints inside `do $$ ... $$` blocks, since Postgres has no
   `add constraint if not exists`.
+- `btree_gist` is required (available on Azure Flexible Server) for exclusion constraints that
+  combine scalar equality with a range overlap.
+
+**Invariant: nothing holds a foreign key into a partitioned table.** Postgres 12+ permits an FK
+referencing a partitioned table, but only against a unique constraint containing the partition
+key — and none of `metric_daily`, `pillar_score_daily`, `snapshot_daily`, `event_flag_daily` or
+`price_daily` has a surrogate id to point at. An attempt yields "there is no unique constraint
+matching given keys" while a perfectly good primary key is visible, which is a confusing failure
+to debug cold. If a future table genuinely needs the reference, it must use the full composite
+key (e.g. `(as_of, scoring_run_id, security_id)`), not a single column.
 
 Tables below are ordered for reading, not for execution: `peer_group_stat` and the derived
 daily tables reference `scoring_run`, `metric` and `weight_version`, which are defined in
@@ -145,6 +155,9 @@ create table security_symbol (
 create index security_symbol_security_id_idx on security_symbol (security_id);
 create unique index security_symbol_current_uq
   on security_symbol (symbol, mic) where valid_to is null;
+alter table security_symbol add constraint security_symbol_no_overlap
+  exclude using gist (security_id with =,
+                      daterange(valid_from, valid_to, '[)') with &&);
 ```
 
 Symbols are attributes with history, never keys: FB became META, and retired symbols get
@@ -181,10 +194,14 @@ create index security_sector_security_id_idx on security_sector (security_id);
 create index security_sector_node_idx on security_sector (sector_node_id);
 create unique index security_sector_current_uq
   on security_sector (security_id) where valid_to is null;
+alter table security_sector add constraint security_sector_no_overlap
+  exclude using gist (security_id with =,
+                      daterange(valid_from, valid_to, '[)') with &&);
 ```
 
 The taxonomy is a tree rather than a string because the peer-count fallback needs levels to
-walk up.
+walk up. The partial unique indexes enforce "one current row"; the exclusion constraints enforce
+"no two validity periods overlap", which a partial index cannot express.
 
 ```sql
 create table peer_group (
@@ -209,17 +226,24 @@ create table peer_group_stat (
   peer_group_id  bigint not null references peer_group(id),
   metric_id      smallint not null references metric(id),
   member_count   int not null,
-  p25            numeric not null,
-  p50            numeric not null,
-  p75            numeric not null,
-  min_value      numeric not null,
-  max_value      numeric not null,
+  deciles        numeric[] not null
+                   check (array_length(deciles, 1) = 11),  -- p0, p10 … p90, p100
   primary key (as_of, scoring_run_id, peer_group_id, metric_id)
 );
 ```
 
 ~1.5M rows/yr. This is what answers *"did the company move, or did the sector re-rate around
 it?"* without recomputing anything.
+
+Deciles rather than quartiles: three boundaries cannot resolve a move from p82 to p78 into
+"the ticker fell" versus "the p75 boundary rose". Eleven numerics on a 1.5M-row table is cheap
+now and awkward to backfill later. `deciles[1]` and `deciles[11]` are the min and max, so
+separate columns for them would be redundant.
+
+**This table is a cache, not a source of truth.** Every peer's `raw_value` and `percentile` for
+the group and date is already in `metric_daily`, so the exact distribution is always
+recoverable — the summary exists to avoid scanning a 30M-row table for the common question. It
+has the same status as `blended_score`: recompute it and the same numbers must come back.
 
 ---
 
@@ -251,7 +275,7 @@ create table ingest_observation (
   ingest_run_id  bigint not null references ingest_run(id),
   security_id    bigint not null references security(id),
   fetched_at     timestamptz not null,
-  content_hash   bytea not null,                         -- sha256 of the raw response
+  content_hash   bytea not null,                         -- sha256 of canonicalised JSON
   blob_path      text not null,                          -- {source}/{endpoint}/{date}/{security_id}.json.gz
   is_new_payload boolean not null,                       -- false = hash matched, blob not rewritten
   payload_bytes  int
@@ -269,6 +293,12 @@ if it approaches 100M rows.
 
 The blob path includes source and endpoint because one security has a yfinance fundamentals
 payload, a Finnhub news payload and a FINRA short-interest record on the same date.
+
+`content_hash` is taken over **canonicalised JSON** — keys sorted, insignificant whitespace
+removed — not raw bytes. A provider reordering its keys would otherwise present as a
+restatement, which is precisely the signal the hash exists to carry. Canonical hashing serves
+the blob-write skip equally well: if the canonical form is unchanged, the stored payload is
+already equivalent.
 
 ```sql
 create table pillar (
@@ -313,16 +343,22 @@ create index fundamental_fact_pit_idx
 create index fundamental_fact_obs_idx on fundamental_fact (ingest_observation_id);
 ```
 
-Append-only; never updated. The point-in-time read is:
+Append-only; never updated. The point-in-time read for scoring date `as_of` is:
 
 ```sql
 select distinct on (security_id, metric_id, period_end) *
 from fundamental_fact
-where security_id = $1 and observed_at <= $2
+where security_id = $1
+  and observed_at <= ($2::date + $3::interval)   -- as_of + run's cutoff offset
 order by security_id, metric_id, period_end, observed_at desc;
 ```
 
 `fundamental_fact_pit_idx` is exactly that access path. ~430k rows/yr including restatements.
+
+**The cutoff must be an explicit interval, not a bare date.** Comparing `observed_at <= $2`
+against a `date` casts it to midnight at the *start* of that day, silently excluding everything
+learned during it — including the nightly fetch the score is supposed to be based on. See
+"Observation cutoff" in section 7 for the rule.
 
 ```sql
 create table price_daily (
@@ -334,8 +370,10 @@ create table price_daily (
   close       numeric not null,
   volume      bigint not null,
   observed_at timestamptz not null,
+  ingest_observation_id bigint not null references ingest_observation(id),
   primary key (security_id, trade_date)
 ) partition by range (trade_date);
+create index price_daily_obs_idx on price_daily (ingest_observation_id);
 
 create table corporate_action (
   id                    bigint generated always as identity primary key,
@@ -355,6 +393,11 @@ create index corporate_action_obs_idx on corporate_action (ingest_observation_id
 
 Yearly partitions on `price_daily` (~756k rows/yr). Momentum computes split and dividend
 adjustment at scoring time from raw prices plus actions — see D6.
+
+`price_daily` carries `ingest_observation_id` like every other fact table. Prices are the one
+input D6 argues cannot be trusted to stay put, so being the only table without a route back to
+the stored payload would be exactly backwards: a provider silently backfilling a wrong close is
+the case where the payload matters most.
 
 ---
 
@@ -388,12 +431,21 @@ column and an entire index on the largest table in the system.
 `fundamental_fact_id` makes the traceability constraint literal: percentile → observation →
 `observed_at` → `ingest_observation` → the stored response it came from.
 
-**Partitioned from day one**, monthly, despite the usual guidance to partition above 100M rows.
-This table reaches that in about three years, it is append-only time-series with a known growth
-path, and retrofitting partitioning means a full table rewrite. Partitions are pre-created two
-months ahead by the daily job — roughly fifteen lines of SQL rather than a `pg_partman`
-dependency, and it fails loudly at a time someone is watching. There is deliberately **no
-default partition**: attaching a new partition alongside one requires a full scan.
+**Partitioned from day one, but yearly — not monthly.** Partitioning at all is non-negotiable:
+retrofitting it onto an existing table is a full rewrite. The *granularity* is a different
+question, and monthly is wrong at the start — 500 tickers is ~5M rows/yr, so monthly would mean
+a hundred near-empty partitions long before the table justifies one.
+
+Granularity is never "switched". Converting an existing yearly partition into twelve monthly
+ones does move data (detach, create, `insert…select`, drop), but that is avoidable entirely: a
+partitioned parent holds mixed granularity happily, so once the universe passes ~1,000 tickers,
+start creating monthly partitions from the next year boundary and leave earlier years coarse
+forever. Yearly and monthly boundaries align, so nothing has to be rebuilt.
+
+Partitions are pre-created ahead of time by the daily job — roughly fifteen lines of SQL rather
+than a `pg_partman` dependency, and it fails loudly at a time someone is watching. There is
+deliberately **no default partition**: attaching a new partition alongside one requires a full
+scan.
 
 The cross-sectional screening index `(as_of, metric_id, percentile)` is **deferred until the
 web UI exists**. A third index on this table is a real insert-time and storage cost for a query
@@ -414,9 +466,10 @@ create table pillar_score_daily (
 ) partition by range (as_of);
 ```
 
-Narrow rather than six wide columns, because weights live in a table: the blend is
+Narrow rather than five wide columns, because weights live in a table: the blend is
 `sum(score * weight)` joined against `pillar_weight`. With pillars as columns the query would
-have to name them, which fights the decision to keep weights out of code. ~3.8M rows/yr.
+have to name them, which fights the decision to keep weights out of code. ~3.8M rows/yr — five
+*scored* pillars; event risk is a flag layer and never appears here.
 
 ```sql
 create table snapshot_daily (
@@ -424,7 +477,6 @@ create table snapshot_daily (
   scoring_run_id       bigint not null references scoring_run(id),
   security_id          bigint not null references security(id),
   blended_score        numeric not null,
-  weight_version_id    bigint not null references weight_version(id),
   pillar_agreement     smallint not null,                -- pillars top-quartile simultaneously
   min_coverage         numeric not null,                 -- worst pillar coverage
   worst_fallback_level smallint not null,                -- thinnest peer group used
@@ -434,7 +486,12 @@ create table snapshot_daily (
 
 `blended_score` is a **materialised derivation, not ground truth**. It is stored because the
 nightly crossing diff would otherwise join and aggregate 3.8M rows, and it stays honest because
-`weight_version_id` makes it reproducible: recompute it and the same number must come back.
+the run it belongs to carries the weight version: recompute it and the same number must come
+back.
+
+There is deliberately no `weight_version_id` column here. `scoring_run` already carries it, and
+every snapshot row already joins to its run — duplicating it would create a second copy that
+must agree with the first and eventually won't.
 
 ```sql
 create table event_flag_daily (
@@ -486,6 +543,7 @@ create table scoring_logic_version (
 create table scoring_run (
   id                bigint generated always as identity primary key,
   as_of_range       daterange not null,
+  cutoff_offset     interval not null,                     -- see "Observation cutoff" below
   logic_version_id  smallint not null references scoring_logic_version(id),
   weight_version_id bigint not null references weight_version(id),
   status            text not null check (status in ('live','backfill','experiment')),
@@ -505,7 +563,33 @@ create index scoring_run_weight_idx on scoring_run (weight_version_id);
 
 The exclusion constraint is the authoritative-run pointer done properly: **the database refuses
 to hold two overlapping live runs**, so `max(run_id)` can never accidentally become the answer
-and an experiment cannot leak into a production read.
+and an experiment cannot leak into a production read. As written it needs no `btree_gist`, since
+only a range participates — but adding UK as a second market means wanting one live run *per
+market*, which adds a scalar equality column and therefore the extension.
+
+### Observation cutoff
+
+`cutoff_offset` is an interval added to each scoring date to bound which observations that date
+may see:
+
+```
+facts visible when scoring date D  =  observed_at <= D + cutoff_offset
+```
+
+A live run scoring D at 02:00 the next morning needs an offset past that fetch — around
+`'1 day 6 hours'`. The value is stamped on the run and covered by `config_hash`.
+
+**It has to be an offset rather than a timestamp**, because a single cutoff cannot survive a
+multi-day backfill: one timestamp applied across a range would let a 2024 scoring date see 2026
+knowledge, which is precisely the lookahead bias D5 exists to prevent. As an offset, live and
+backfill evaluate the identical expression and produce the identical fact set — which is what
+makes a backtest of the scoring logic mean anything.
+
+**What `observed_at` actually records** is when *we* learned a fact, not when it became public.
+A 10-Q filed at 16:30 on D is typically first seen by the nightly pull hours later, so the log
+lags publication by up to a day. That biases any backtest **pessimistic** — the system is never
+credited with data it did not yet hold — which is the safe direction, and honest in a way that
+inventing publication timestamps from filing metadata would not be.
 
 ### Comparability
 
@@ -584,6 +668,13 @@ join against the correct run version. A few thousand rows a year.
 
 The unique constraint makes the daily job **idempotent**. Given the v1 shortcut of running
 locally, re-running after a partial failure is routine, and without it a re-run double-posts.
+
+It also means a backfill run covering an `as_of` that already has alerts would collide on
+insert. That is the desired outcome — a backfill has `emits_alerts = false` and has no business
+writing alerts — but the constraint is a backstop, not the mechanism: **the alerting step must
+be skipped entirely when `emits_alerts` is false**, rather than attempted and left to fail on a
+unique violation. Postgres cannot express this as a cross-table check, so it is an invariant the
+code owns and a test should cover.
 Order of operations is insert as `pending` → POST to Discord → mark `sent`, so a crash
 mid-flight can at worst duplicate one message, never silently lose one. The partial index on
 undelivered rows is the retry queue.
