@@ -1,0 +1,36 @@
+# Secrets — API keys, Discord webhook URL, Azure connection strings
+.env
+.env.*
+!.env.example
+*.pem
+local.settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data — payload dumps, scratch databases, model files
+*.db
+*.sqlite3
+*.dump
+data/
+models/
+*.onnx
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
