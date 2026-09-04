@@ -99,7 +99,11 @@ nothing outside imports a submodule directly.
 - `screener.fetch` — `fetch(url, strategies)` over a `direct -> isp_proxy -> unlocker` chain.
 - `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
 - `screener.notify` — a `NotificationChannel` protocol and a Discord webhook.
+- `screener.auth` — GitHub sign-in for the status service. Sessions live in
+  their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
+  `/health` and `/ready` stay open because the container healthcheck and the
+  deploy smoke test cannot hold a session; `/status` requires one.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.

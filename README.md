@@ -15,7 +15,7 @@ Early. The database schema is built and tested; nothing ingests data yet.
 | Piece | State |
 |---|---|
 | Database schema | Done — 9 migrations, 44 tests |
-| Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, CI/CD |
+| Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, GitHub sign-in, CI/CD |
 | Universe and identity | Not started |
 | Ingest | Not started |
 | Scoring | Not started |

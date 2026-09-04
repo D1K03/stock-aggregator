@@ -26,6 +26,10 @@ def empty_db(db_url):
     """A connection to an empty public schema. No migrations applied."""
     with psycopg.connect(db_url, autocommit=True) as conn:
         conn.execute("drop schema if exists public cascade")
+        # Migration 010 puts sign-in state in its own schema, which `drop schema
+        # public` does not reach. Without this the auth tables survive between
+        # tests and the migration runner fails re-creating them.
+        conn.execute("drop schema if exists auth cascade")
         conn.execute("create schema public")
         yield conn
 
