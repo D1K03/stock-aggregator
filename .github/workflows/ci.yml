@@ -67,3 +67,16 @@ jobs:
         # The suite drops and recreates the public schema per test, so it needs a
         # throwaway database — which the service container above is.
         run: pytest -v
+
+  # A single stable check for branch protection to require. Requiring the matrix
+  # jobs by name is brittle: change the matrix and the old name never reports
+  # again, leaving PRs waiting forever on a check that will never arrive — with
+  # nothing red to explain why. This name never changes.
+  ci-ok:
+    if: always()
+    needs: [typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
