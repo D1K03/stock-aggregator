@@ -15,6 +15,7 @@ Early. The database schema is built and tested; nothing ingests data yet.
 | Piece | State |
 |---|---|
 | Database schema | Done — 9 migrations, 44 tests |
+| Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, CI/CD |
 | Universe and identity | Not started |
 | Ingest | Not started |
 | Scoring | Not started |
@@ -38,9 +39,9 @@ export DATABASE_URL_TEST="postgresql://postgres:screener@localhost:5432/screener
 pytest
 ```
 
-You should see `44 passed`. If you see `1 passed, 43 skipped`, `DATABASE_URL_TEST` is unset —
-only one test runs without a database. The suite skips rather than fails so it stays usable
-without one, which is convenient locally and would be dangerous in CI, so it fails there instead.
+You should see `101 passed`. If most of them skip, `DATABASE_URL_TEST` is unset —
+the tests needing a database skip. The suite skips rather than fails so it stays usable without
+one, which is convenient locally and would be dangerous in CI, so it fails there instead.
 
 Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 `docker compose up` and adjust the URL to match.
@@ -52,16 +53,18 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 | Tests | `pytest` |
 | One test | `pytest tests/test_identity.py::test_a_retired_symbol_can_be_reissued_to_another_security -v` |
 | Typecheck | `pyright` — must report zero errors |
+| Apply migrations | `python -m screener.boot migrate` |
+| Run the status service | `python -m screener.boot` |
+| Check every integration | `python -m screener.boot selftest` |
 | Stop the database | `docker compose down` |
 
-Apply migrations to a database of your own:
+`screener.boot` takes a Postgres advisory lock before migrating and pre-creates partitions a year
+ahead, so it is safe to run from two places at once — which a container restarting during a
+deploy does routinely.
 
-```bash
-python -c "import psycopg, pathlib; \
-from screener.migrate import apply_migrations; from screener.config import settings; \
-conn = psycopg.connect(settings().database_url, autocommit=True); \
-print(apply_migrations(conn, pathlib.Path('migrations')))"
-```
+`selftest` reports one line per integration: the database and its migration count, the build SHA,
+a direct fetch, a proxied fetch and whether its exit IP actually differs, and an OpenRouter round
+trip with its cost. Anything unconfigured reports `SKIP`. It never posts to Discord.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and recorded in
 `schema_migration`. Each runs in its own transaction, so a failure leaves it unrecorded and the
@@ -92,6 +95,7 @@ Two properties shape most of the schema:
 | `PLAN.md` | Current scope and what is being worked on next. |
 | `docs/specs/` | Dated specifications. |
 | `docs/plans/` | Dated implementation plans. |
+| `deploy/README.md` | Deployment runbook: first-time setup, rolling back, spend limits. |
 | `CLAUDE.md` | Short-form guidance for Claude Code. |
 
 ## Licence
