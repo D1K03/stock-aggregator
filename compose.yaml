@@ -1,0 +1,25 @@
+# Local Postgres for the test suite.
+#
+# Credentials and image tag match .github/workflows/ci.yml deliberately: if
+# local and CI drift, a suite that passes here can fail there for reasons that
+# have nothing to do with the change under test.
+#
+# There is no volume. The suite drops and recreates the `public` schema on every
+# test, so persistence would buy nothing and a stale database is worse than none.
+# `docker compose down` leaves nothing behind. A separate service with a volume
+# will be needed once ingest exists and there is real data worth keeping.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: screener
+      POSTGRES_DB: screener_test
+    ports:
+      # Override with POSTGRES_PORT if 5432 is already taken by a local install.
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
