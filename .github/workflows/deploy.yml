@@ -30,7 +30,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/stock-aggregator
+  # A lowercase literal, not ${{ github.repository_owner }}: the owner is
+  # `D1K03` and registry names must be lowercase, so deriving it fails the build
+  # on a tag the registry will not accept. It is spelled out here to match
+  # deploy/compose.prod.yaml, which pulls the same image and cannot compute a
+  # name at all.
+  IMAGE: ghcr.io/d1k03/stock-aggregator
 
 jobs:
   build:
