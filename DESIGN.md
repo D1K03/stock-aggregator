@@ -79,11 +79,21 @@ be backfilled into a credible backtest. Only the forward log of daily snapshots 
 APIs first. They are legal, stable, and cheaper to maintain. Scrape only where no API exists,
 respect robots.txt and ToS, and treat scrapers as the fragile layer.
 
-- **yfinance** — prices, fundamentals, analyst recommendations (free). Rate-limits hard: eight
-  concurrent workers lost 43% of 1,506 requests inside 45 seconds to `YFRateLimitError` and
-  Yahoo's anti-bot crumb check, while sequential requests at ~0.35s spacing recovered 99.4%.
-  Budget ~0.8s per symbol — 40 minutes for 3,000 — and throttle with backoff rather than
-  parallelising. Classification changes rarely and does not need pulling daily.
+- **Yahoo Finance, called directly** — prices, fundamentals, analyst recommendations (free).
+  Two endpoints with different requirements, both measured:
+  `/v8/finance/chart` (prices) needs no authentication at all, just a User-Agent;
+  `/v10/finance/quoteSummary` (everything else) needs a crumb, obtained by fetching a cookie
+  from `fc.yahoo.com` then a token from `/v1/test/getcrumb` and appending it to the query.
+
+  A single `quoteSummary` call returns profile, all three financial statements, key statistics,
+  financial data, earnings trend and recommendation trend together — 19 KB raw, 5 KB gzipped.
+  A year of daily prices is 28 KB raw, 8 KB gzipped.
+
+  **The rate limiting we first measured was yfinance's, not Yahoo's.** Through the library,
+  eight concurrent workers lost 43% of 1,506 requests and sequential calls took ~0.35s each.
+  Direct, with a persistent client and a cached crumb, 30 sequential requests completed in 3.4s
+  with zero failures — 0.11s each and no throttling observed. Budget minutes for the universe,
+  not tens of minutes, and treat throttling as a safeguard rather than a necessity.
 - **Finnhub** — ratings, news, short interest (free tier, ~60 calls/min)
 - **Alpha Vantage** — news endpoint carries a per-article sentiment score (free tier)
 - **FINRA** — short interest, twice monthly, downloadable
@@ -108,8 +118,14 @@ Both rejections are open to a case being made.
 
 ## Data storage
 
-**Universe:** 500 tickers growing to ~3,000, with 1,000 a better starting floor than 500 — at
-500 the thinnest sector holds exactly 20 names, sitting on the minimum rather than above it.
+**Universe: the S&P 1500 is the v1 ceiling**, not a waypoint to 3,000. The three constituent
+lists are the only free complete source, they stop at 1,500, and everything below the S&P 600's
+~$1bn floor spreads into the thin tail of the sector distribution rather than the fat middle —
+so growth past 1,500 would worsen peer counts per sector at the bottom, not improve them. A
+larger universe is a post-v1 decision that needs a paid constituents source to be worth making.
+
+Within that, start nearer 1,000 than 500: at 500 the thinnest sector holds exactly 20 names,
+sitting on the minimum rather than above it.
 
 Classification comes from yfinance and only yfinance. Its sector labels agree with GICS for just
 92% of the S&P 1500: yfinance "Technology" absorbs payment processors that GICS files under
