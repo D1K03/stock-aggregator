@@ -9,6 +9,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pyright>=1.1.400",
 ]
 
 [build-system]
@@ -20,3 +21,12 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+# Check against the minimum supported interpreter, not whichever one the venv
+# happens to hold, so a 3.12-only construct cannot slip past unnoticed.
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"

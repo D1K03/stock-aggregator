@@ -70,6 +70,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Tests: `pytest` — needs `DATABASE_URL_TEST` pointing at a throwaway Postgres 16
   (the suite drops and recreates the `public` schema on every test).
 - Single test: `pytest tests/test_identity.py::test_overlapping_symbol_periods_for_one_security_are_rejected -v`
+- Typecheck: `pyright` — must report zero errors. psycopg types query parameters as
+  `LiteralString`, so SQL assembled at runtime is rejected by design: build DDL with
+  `psycopg.sql` composition, and reserve `cast(LiteralString, ...)` for trusted file
+  content such as a migration.
 - Apply migrations: `python -c "import psycopg, pathlib; from screener.migrate import apply_migrations; from screener.config import settings; conn = psycopg.connect(settings().database_url, autocommit=True); print(apply_migrations(conn, pathlib.Path('migrations')))"`
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
