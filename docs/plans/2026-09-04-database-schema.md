@@ -879,6 +879,8 @@ spec's reasoning is wrong and the cutoff design needs revisiting before anything
 Create `tests/test_point_in_time.py`:
 
 ```python
+from decimal import Decimal
+
 import pytest
 import psycopg
 
@@ -967,7 +969,7 @@ def test_cutoff_offset_includes_the_overnight_fetch(fresh_db, fact_setup):
     _insert_fact(fresh_db, fact_setup, 0.25, "2026-02-10 02:00+00")
     with fresh_db.cursor() as cur:
         cur.execute(PIT_QUERY, (fact_setup["security"], "2026-02-10", "1 day 6 hours"))
-        assert [row[0] for row in cur.fetchall()] == [0.25]
+        assert [row[0] for row in cur.fetchall()] == [Decimal("0.25")]
 
 
 def test_point_in_time_read_returns_the_latest_observation_at_the_cutoff(fresh_db, fact_setup):
@@ -976,10 +978,10 @@ def test_point_in_time_read_returns_the_latest_observation_at_the_cutoff(fresh_d
 
     with fresh_db.cursor() as cur:
         cur.execute(PIT_QUERY, (fact_setup["security"], "2026-02-10", "1 day 6 hours"))
-        assert [row[0] for row in cur.fetchall()] == [0.25]
+        assert [row[0] for row in cur.fetchall()] == [Decimal("0.25")]
 
         cur.execute(PIT_QUERY, (fact_setup["security"], "2026-03-20", "1 day 6 hours"))
-        assert [row[0] for row in cur.fetchall()] == [0.31]
+        assert [row[0] for row in cur.fetchall()] == [Decimal("0.31")]
 
 
 def test_a_restatement_does_not_overwrite_the_original(fresh_db, fact_setup):
