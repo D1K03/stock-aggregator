@@ -686,7 +686,7 @@ create index peer_group_sector_node_idx on peer_group (sector_node_id);
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_identity.py -v`
-Expected: 7 passed
+Expected: 6 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1796,7 +1796,7 @@ Expected: 4 passed
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest -v`
-Expected: 42 passed
+Expected: 41 passed
 
 - [ ] **Step 6: Record the tooling in CLAUDE.md**
 
