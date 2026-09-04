@@ -118,8 +118,13 @@ filers. This is a hard block, not a courtesy.
 **The Yahoo crumb.** `quoteSummary` returns 401 `Invalid Crumb` unauthenticated. The handshake is
 a cookie from `https://fc.yahoo.com`, then a token from
 `https://query1.finance.yahoo.com/v1/test/getcrumb`, appended as `&crumb=`. Fetched once per run
-and reused; a 401 mid-run refreshes it and retries that symbol once. Prices need no crumb at all,
-which matters for ingest but not here.
+and reused. Prices need no crumb at all, which matters for ingest but not here.
+
+**Crumb expiry is a normal path, not an edge case.** The crumb expires on Yahoo's schedule, not
+ours. A run that fetches one at 22:00 and is still working at 02:00 will meet a 401 in the
+ordinary course of events, so the refresh-and-retry is main-line code with its own test — not a
+defensive branch that only executes when something has gone wrong. A 401 refreshes the crumb and
+retries that symbol once; a second 401 marks it unresolved.
 
 ### The CSV contract
 
@@ -251,8 +256,15 @@ fixture B, assert the transition.
 `refresh-universe` gets thinner tests against saved fixture payloads: the Wikipedia table parser,
 the SEC ticker-to-CIK mapping, the `assetProfile` extraction, the exchange-to-MIC mapping, and
 the split between the main and unresolved files. Network is supplied by `httpx.MockTransport`
-through `fetch()`'s `transport` parameter, so no test reaches Yahoo. One test asserts the crumb
-is fetched once and reused rather than per symbol.
+through `fetch()`'s `transport` parameter, so no test reaches Yahoo.
+
+Two crumb tests, because the crumb is where this breaks in production:
+
+- the crumb is fetched **once** and reused across symbols, not refetched per symbol;
+- a mid-run **401 refreshes the crumb and retries that symbol**, and the retried request carries
+  the new crumb. This is the long-run path — a job holding a crumb for hours will meet expiry
+  routinely — so it is tested as main-line behaviour, and a second consecutive 401 marks the
+  symbol unresolved rather than looping.
 
 ---
 

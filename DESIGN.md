@@ -89,11 +89,29 @@ respect robots.txt and ToS, and treat scrapers as the fragile layer.
   financial data, earnings trend and recommendation trend together — 19 KB raw, 5 KB gzipped.
   A year of daily prices is 28 KB raw, 8 KB gzipped.
 
-  **The rate limiting we first measured was yfinance's, not Yahoo's.** Through the library,
-  eight concurrent workers lost 43% of 1,506 requests and sequential calls took ~0.35s each.
-  Direct, with a persistent client and a cached crumb, 30 sequential requests completed in 3.4s
-  with zero failures — 0.11s each and no throttling observed. Budget minutes for the universe,
-  not tens of minutes, and treat throttling as a safeguard rather than a necessity.
+  **Direct beats the library, but on structural grounds rather than a throughput race.** One
+  request per ticker instead of several, a persistent session, and a crumb fetched once and
+  reused are wins that hold regardless of what any timing run shows. The first comparison drawn
+  here — eight concurrent yfinance workers losing 43% of requests against 30 sequential direct
+  ones losing none — was not evidence for anything: it varied concurrency and request count at
+  the same time.
+
+  **Measured at full universe scale:** 1,506 sequential direct `quoteSummary` requests from one
+  IP completed in 182 seconds, 0.121s each, with 1,505 succeeding. The single failure was a 404
+  on a share-class symbol, not a limit. Mean latency per 300-request block stayed flat at
+  0.119–0.122s from the first block to the last, so nothing throttled or degraded across the run.
+
+  **What that still does not establish**, and should not be quoted as though it does:
+
+  - It ran from a development machine, not the VPS that will run the nightly job. Per-IP limits
+    attach to that IP, not to this code.
+  - A night's work is roughly double this: fundamentals *and* prices for every ticker. Prices
+    need no crumb and may sit in a different bucket, but 3,000 requests is untested.
+  - The run took three minutes, so the crumb never expired and the refresh path never executed.
+    Over a longer job it will, routinely.
+
+  Throttle as a safeguard — the measurements say it is not needed at this scale, and they were
+  taken in conditions the real job will not exactly reproduce.
 - **Finnhub** — ratings, news, short interest (free tier, ~60 calls/min)
 - **Alpha Vantage** — news endpoint carries a per-article sentiment score (free tier)
 - **FINRA** — short interest, twice monthly, downloadable
