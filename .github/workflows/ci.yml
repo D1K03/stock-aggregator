@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded runs on the same ref are pointless; cancel them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repo. Narrower than the repo default, deliberately.
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The declared floor, not the newest available: a 3.12-only construct
+          # must not pass here and then break for someone on 3.11.
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: pyright
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: screener
+          POSTGRES_DB: screener_test
+        ports:
+          - 5432:5432
+        # Steps do not start until pg_isready succeeds, so the suite never races
+        # a database that is still coming up.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL_TEST: postgresql://postgres:screener@localhost:5432/screener_test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: Run tests
+        # The suite drops and recreates the public schema per test, so it needs a
+        # throwaway database — which the service container above is.
+        run: pytest -v
+
+  # A single stable check for branch protection to require. Requiring the matrix
+  # jobs by name is brittle: change the matrix and the old name never reports
+  # again, leaving PRs waiting forever on a check that will never arrive — with
+  # nothing red to explain why. This name never changes.
+  ci-ok:
+    if: always()
+    needs: [typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

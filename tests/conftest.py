@@ -13,6 +13,10 @@ MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
 def db_url() -> str:
     url = os.environ.get("DATABASE_URL_TEST")
     if not url:
+        # Skipping locally is a convenience; skipping in CI is a silent pass of a
+        # suite that ran nothing. Fail loudly there instead.
+        if os.environ.get("CI"):
+            pytest.fail("DATABASE_URL_TEST is not set, but CI is — refusing to skip.")
         pytest.skip("DATABASE_URL_TEST is not set; see docs/plans for setup")
     return url
 
