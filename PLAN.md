@@ -68,7 +68,8 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    securities to exist. The taxonomy is settled (yfinance, two levels, sector groups only for
    v1); what remains is choosing the list and handling the symbols that do not resolve.
 2. **Ingest** — yfinance prices and fundamentals into the bitemporal fact layer, Blob payload
-   writing, content-hash dedup. First real use of `cutoff_offset`.
+   writing, content-hash dedup. First real use of `cutoff_offset`. Settles where payloads land,
+   which `DESIGN.md` now records as open. Inherits `screener.fetch` and `screener.secrets`.
 3. **Scoring** — metric computation, percentile within sector peer group, pillar aggregation
    with the coverage gate. No fallback walk in v1: every sector clears the peer floor, so
    `fallback_level` is recorded as sector throughout and the ladder stays unexercised until an
