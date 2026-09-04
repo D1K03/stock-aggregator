@@ -1,3 +1,14 @@
+"""Applies .sql files under a migrations directory, in filename order.
+
+Hazard: the applied-migrations ledger keys on `path.stem` (the filename minus
+`.sql`), not on file content or a hash. Renaming an already-applied migration
+file therefore makes the runner treat it as a brand-new, unapplied migration
+and re-run it — silently, and possibly destructively, against a database that
+already has it. Never rename a migration file once it has shipped; if a
+migration needs fixing after the fact, add a new one instead (per the
+project's "never edit an already-applied migration" rule).
+"""
+
 from pathlib import Path
 
 import psycopg

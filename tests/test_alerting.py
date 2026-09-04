@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 import psycopg
 
@@ -77,15 +79,34 @@ def test_previous_blended_score_may_be_null_for_non_crossing_rules(fresh_db, ale
         """,
         (alert_setup["rule"], alert_setup["security"], alert_setup["run"]),
     )
+    with fresh_db.cursor() as cur:
+        cur.execute(
+            """
+            select blended_score, previous_blended_score, driver, delivery_status
+            from alert_event
+            where alert_rule_id = %s and security_id = %s and as_of = '2026-02-10'
+            """,
+            (alert_setup["rule"], alert_setup["security"]),
+        )
+        blended_score, previous_blended_score, driver, delivery_status = cur.fetchone()
+        assert blended_score == Decimal(82)
+        assert previous_blended_score is None
+        assert driver == "insider buying appeared"
+        assert delivery_status == "pending"
 
 
 def test_undelivered_alerts_are_findable(fresh_db, alert_setup):
-    _fire(fresh_db, alert_setup)
+    _fire(fresh_db, alert_setup, as_of="2026-02-10")
+    _fire(fresh_db, alert_setup, as_of="2026-02-11")
     with fresh_db.cursor() as cur:
         cur.execute(
-            "select count(*) from alert_event where delivery_status <> 'sent'"
+            "update alert_event set delivery_status = 'sent' where as_of = '2026-02-10'"
         )
-        assert cur.fetchone()[0] == 1
+        cur.execute(
+            "select as_of from alert_event where delivery_status <> 'sent'"
+        )
+        rows = cur.fetchall()
+        assert [r[0].isoformat() for r in rows] == ["2026-02-11"]
 
 
 def test_alert_state_direction_is_constrained(fresh_db, alert_setup):
