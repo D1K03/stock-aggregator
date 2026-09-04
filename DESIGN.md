@@ -49,9 +49,21 @@ went up") produces one signal with ten names and false confidence.
 
 Three consequences that constrain the schema:
 
-- **Percentiles need peers.** With a universe spread thin across sectors, a three-name sector
-  produces noise, not a ranking. Enforce a minimum peer count and fall back to a broader
-  grouping below it.
+- **Percentiles need peers, and v1 scores at sector level only.** Measured against the S&P 1500
+  with real yfinance labels: at 500 tickers, 95% of names sit in an industry group holding fewer
+  than 20 peers; even at 1,500 it is 59%. Sector groups clear 20 members at every universe size.
+  Industry-level scoring is a later refinement, not a v1 feature, and `min_peers = 20` is a
+  safety check rather than a routine mechanism.
+
+  Mixing levels is the trap worth avoiding: "top decile among 8 industry peers" and "top decile
+  among 238 sector peers" produce the same number from very different evidence, and a blended
+  score would compare them as though they were equivalent — a quieter version of the problem the
+  pillar split exists to prevent. The schema already carries `peer_group`, `fallback_level` and
+  `peer_count`, so adding an industry rung later is additive.
+
+  Note also that yfinance offers exactly two levels — 11 sectors and ~140 industries, the latter
+  at GICS *sub-industry* granularity. There is no intermediate rung to fall back through; a
+  middle grouping would have to be built by hand.
 - **A score can move because peers moved.** Persist the raw metric next to its percentile, or
   an alert cannot distinguish "revisions came in" from "the sector re-rated around it".
 - **The blended score is derivable**, from per-pillar scores plus the weight set in effect.
@@ -67,7 +79,11 @@ be backfilled into a credible backtest. Only the forward log of daily snapshots 
 APIs first. They are legal, stable, and cheaper to maintain. Scrape only where no API exists,
 respect robots.txt and ToS, and treat scrapers as the fragile layer.
 
-- **yfinance** — prices, fundamentals, analyst recommendations (free)
+- **yfinance** — prices, fundamentals, analyst recommendations (free). Rate-limits hard: eight
+  concurrent workers lost 43% of 1,506 requests inside 45 seconds to `YFRateLimitError` and
+  Yahoo's anti-bot crumb check, while sequential requests at ~0.35s spacing recovered 99.4%.
+  Budget ~0.8s per symbol — 40 minutes for 3,000 — and throttle with backoff rather than
+  parallelising. Classification changes rarely and does not need pulling daily.
 - **Finnhub** — ratings, news, short interest (free tier, ~60 calls/min)
 - **Alpha Vantage** — news endpoint carries a per-article sentiment score (free tier)
 - **FINRA** — short interest, twice monthly, downloadable
@@ -92,7 +108,14 @@ Both rejections are open to a case being made.
 
 ## Data storage
 
-**Universe:** 500 tickers growing to ~3,000. US-only initially, UK planned — so identity is a
+**Universe:** 500 tickers growing to ~3,000, with 1,000 a better starting floor than 500 — at
+500 the thinnest sector holds exactly 20 names, sitting on the minimum rather than above it.
+
+Classification comes from yfinance and only yfinance. Its sector labels agree with GICS for just
+92% of the S&P 1500: yfinance "Technology" absorbs payment processors that GICS files under
+Financials, and "Consumer Cyclical" takes names GICS puts in Materials and Industrials. A peer
+group built from one taxonomy and scored against metrics grouped by another would disagree with
+itself. US-only initially, UK planned — so identity is a
 synthetic `security_id` with symbol history, and `currency`/`mic` exist from day one even while
 every row says USD. Symbols are attributes, never keys: FB became META, and retired symbols get
 reissued.
