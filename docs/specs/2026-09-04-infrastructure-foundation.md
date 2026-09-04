@@ -115,7 +115,20 @@ arrives later as another `NotificationChannel` and nothing above it changes.
 the Bright Data zone. *Rejected:* a budget/accounting module — it would need its own table, and it
 can be defeated by a bug in itself, whereas a provider-side cap cannot.
 
-**D15. Deploy is called from CI, not triggered by `push`.** A push-triggered deploy races the CI
+**D15. Sign-in state lives in an `auth` schema, not in `public`.** Nothing about a user or a
+session is a fact or a score, no scoring query joins to either, and the two have different
+lifetimes. *Rejected:* `public` alongside the screener's own tables, which would also make the
+test suite's `drop schema public cascade` mean something other than what it says. *Also
+rejected:* a stateless signed cookie with no tables at all, which needs no migration but cannot
+revoke one session without revoking every session.
+
+**D16. `/health` and `/ready` stay unauthenticated.** Both are probed by things that cannot hold
+a session: Docker's healthcheck and the deploy smoke test. They report whether the process is up
+and whether Postgres answers. `/status` requires sign-in, and reports separately when the
+database is unreachable rather than collapsing that into "not signed in", which would send
+someone hunting for an expired cookie during an outage.
+
+**D17. Deploy is called from CI, not triggered by `push`.** A push-triggered deploy races the CI
 run on the same commit and can win; and branch protection checks the pull request head, which is
 not the merge commit that lands on `main`. Running `deploy.yml` as a reusable workflow from
 `ci.yml` after `ci-ok` guarantees the thing deployed is the thing that went green.
@@ -148,6 +161,7 @@ not the merge commit that lands on `main`. Running `deploy.yml` as a reusable wo
 | `screener.notify` | `Alert`, `NotificationChannel`, `DiscordWebhook` | protocol first |
 | `screener.health` | `serve()`, `build_server()` | `/health`, `/ready`, `/status` |
 | `screener.provenance` | `git_sha()`, `require_git_sha()`, `config_hash()` | fills two not-null columns |
+| `screener.auth` | `AuthConfig`, the GitHub exchange, sessions | own `auth` schema |
 | `screener.boot` | `main()`, `prepare_database()` | the container's CMD |
 
 Endpoint split: `/health` touches nothing and is what the container healthcheck hits — a readiness
