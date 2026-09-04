@@ -68,15 +68,46 @@ jobs:
         # throwaway database — which the service container above is.
         run: pytest -v
 
+  # Builds the deployment image without publishing it, so a broken Dockerfile
+  # fails on the pull request rather than after merge, when the only signal is
+  # a red deploy.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # A single stable check for branch protection to require. Requiring the matrix
   # jobs by name is brittle: change the matrix and the old name never reports
   # again, leaving PRs waiting forever on a check that will never arrive — with
   # nothing red to explain why. This name never changes.
   ci-ok:
     if: always()
-    needs: [typecheck, test]
+    needs: [typecheck, test, build]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+
+  # Deploying from here rather than from a `push` trigger in deploy.yml means
+  # the commit that ships is exactly the one ci-ok went green on. A separate
+  # push-triggered workflow would race this one and could win.
+  deploy:
+    needs: [ci-ok]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The workflow-level grant above stays read-only; only this job widens, and
+    # only to what publishing to GHCR needs.
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
