@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This file is the short form. `DESIGN.md` holds the decisions and the reasoning behind them —
 read it before design work. `PLAN.md` holds current scope and the task in flight. Dated specs
 live in `docs/specs/`; the database schema is
-`docs/specs/2026-09-04-database-schema-design.md`.
+`docs/specs/2026-09-04-database-schema-design.md`. `docs/infrastructure.md` says what tooling
+exists and when to reach for it — read it before adding a proxy, a secret or a model call.
 
 ## Status
 
