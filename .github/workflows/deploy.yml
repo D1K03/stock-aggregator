@@ -46,6 +46,21 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          # The status service. Build context is the repository root because it
+          # installs the package and copies migrations/.
+          - name: api
+            image: stock-aggregator
+            context: .
+            file: deploy/Dockerfile
+          # The dashboard. Its own context, since it shares nothing with the
+          # Python image.
+          - name: web
+            image: stock-aggregator-web
+            context: web
+            file: web/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -59,19 +74,19 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
-          file: deploy/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           # Tagged with the commit as well as `latest`, because without an
           # immutable tag there is no rollback other than reverting the commit
           # and waiting for a rebuild.
           tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:latest
+            ghcr.io/d1k03/${{ matrix.image }}:${{ github.sha }}
+            ghcr.io/d1k03/${{ matrix.image }}:latest
           build-args: |
             GIT_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   deploy:
     needs: [build]
@@ -123,7 +138,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: deploy/compose.prod.yaml,deploy/compose.tunnel.yaml
+          source: deploy/compose.prod.yaml,deploy/compose.tunnel.yaml,deploy/caddy/Caddyfile
           target: ${{ secrets.VPS_APP_DIR }}
           overwrite: true
 
@@ -165,12 +180,12 @@ jobs:
             # to its login page, and `curl -f` does not treat a redirect as a
             # failure — so a public probe would go green against a dead app.
             for attempt in $(seq 1 30); do
-              if $COMPOSE exec -T app python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready').status == 200 else 1)"; then
+              if $COMPOSE exec -T api python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready').status == 200 else 1)"; then
                 echo "ready after ${attempt} attempt(s)"
                 exit 0
               fi
               sleep 3
             done
             echo "never became ready; recent logs follow"
-            $COMPOSE logs --tail=60 app
+            $COMPOSE logs --tail=60 api app web
             exit 1

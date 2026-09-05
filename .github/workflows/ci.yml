@@ -77,13 +77,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
+        name: Build the status service image
         with:
           context: .
           file: deploy/Dockerfile
           push: false
           load: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - uses: docker/build-push-action@v6
+        name: Build the dashboard image
+        with:
+          context: web
+          file: web/Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
 
   # A single stable check for branch protection to require. Requiring the matrix
   # jobs by name is brittle: change the matrix and the old name never reports

@@ -50,6 +50,19 @@ export default function Page() {
           </p>
         </motion.header>
 
+        <motion.div
+          className="concept-bar"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+        >
+          <b>Concept</b>
+          <span>
+            Every figure below is illustrative and shaped by the schema. Ingest does not
+            exist yet, so nothing here reads a real snapshot.
+          </span>
+        </motion.div>
+
         <div className="filters">
           <label>Sector</label>
           <select value={sector} onChange={(e) => setSector(e.target.value)}>
