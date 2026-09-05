@@ -27,9 +27,17 @@ const PAGES = [
 const STORAGE_DOCKED = "screener.palette.docked";
 const STORAGE_OPEN = "screener.palette.open";
 
-/* Steven has a page of his own, and on it the palette would be the same
-   conversation in a smaller box floating over the larger one. */
-const OWN_PAGE = "/steven";
+/* Pages the palette does not belong on.
+ *
+ * Steven has a page of his own, where the palette would be the same
+ * conversation in a smaller box floating over the larger one.
+ *
+ * And the sign-in page, which is the one page reachable without a session:
+ * offering "Ask Steven" to anyone on the internet advertises a feature they
+ * cannot use and answers a click with an authorization error. The API refuses
+ * them regardless — that is where the enforcement is — but a control nobody
+ * signed in should see does not belong on the page they land on. */
+const HIDDEN_ON = new Set(["/steven", "/login"]);
 
 export default function Palette() {
   const pathname = usePathname();
@@ -342,7 +350,7 @@ export default function Palette() {
 
   // After the hooks, never before: bailing earlier would change how many run
   // between renders and React would take the whole tree down.
-  if (pathname === OWN_PAGE) return null;
+  if (HIDDEN_ON.has(pathname)) return null;
 
   return (
     <>

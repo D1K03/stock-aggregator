@@ -121,7 +121,9 @@ nothing outside imports a submodule directly.
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
   `/health` and `/ready` stay open because the container healthcheck and the
-  deploy smoke test cannot hold a session; `/status` requires one.
+  deploy smoke test cannot hold a session. Everything else requires one
+  **unconditionally** — never `config.enabled and login is None`, which makes an
+  unconfigured sign-in open the endpoints rather than close them.
 - `screener.bot.budget` — the daily spend cap, per person, from `DAILY_SPEND_CAP_USD`
   (default $0.10). Checked before the model is called, folds Discord onto GitHub through
   `DISCORD_USER_MAP` so it cannot be doubled by switching surface, and **fails open** when the
