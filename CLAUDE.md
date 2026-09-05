@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This file is the short form. `DESIGN.md` holds the decisions and the reasoning behind them —
 read it before design work. `PLAN.md` holds current scope and the task in flight. Dated specs
 live in `docs/specs/`; the database schema is
-`docs/specs/2026-09-04-database-schema-design.md`.
+`docs/specs/2026-09-04-database-schema-design.md`. `docs/infrastructure.md` says what tooling
+exists and when to reach for it — read it before adding a proxy, a secret or a model call.
 
 ## Status
 
@@ -105,11 +106,21 @@ nothing outside imports a submodule directly.
   own container. A command surface, not a delivery channel: `/ping`, and a reply when mentioned.
   The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
   blocking the event loop stalls the gateway heartbeat rather than just one command.
+  Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
+  `collecting()` so a 60-point series never enters the model's context, and the point it marks
+  is computed from the data rather than chosen by the model. A chart is one SVG string built by
+  `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
+  the web container, which rasterises the same string to PNG for Discord. One renderer, so the
+  two surfaces cannot drift — do not add a second way to draw a chart.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
   `/health` and `/ready` stay open because the container healthcheck and the
   deploy smoke test cannot hold a session; `/status` requires one.
+- `screener.concept` — invented, schema-shaped sample data mirroring
+  `web/lib/data.ts`, so the dashboard and the chart tool draw the same line. A
+  test parses the TypeScript and fails when the two drift. Delete it when
+  ingest lands.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.

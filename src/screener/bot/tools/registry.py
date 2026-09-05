@@ -13,9 +13,12 @@ describes itself in a sentence costs more per conversation than the tool saves.
 import inspect
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from screener.audit import record
 
 logger = logging.getLogger(__name__)
 
@@ -95,20 +98,33 @@ def dispatch(name: str, arguments: dict[str, Any]) -> str:
     """
     entry = TOOLS.get(name)
     if entry is None:
+        record(kind="tool", operation=name, outcome="error", detail={"error": "unknown tool"})
         return f"error: no tool named {name}"
 
+    started = time.perf_counter()
     try:
         result = entry.run(**arguments)
     except TypeError as exc:
         # Wrong or missing arguments: the model's mistake, and one it can fix
         # on the next turn if it is told plainly.
+        record(kind="tool", operation=name, outcome="error", detail={"error": "bad arguments"})
         return f"error: bad arguments for {name}: {exc}"
     except Exception as exc:
         logger.warning("tool %s failed: %s", name, exc)
+        record(
+            kind="tool", operation=name, outcome="error",
+            detail={"error": type(exc).__name__},
+        )
         return f"error: {name} failed: {type(exc).__name__}"
 
     text = result if isinstance(result, str) else json.dumps(result, separators=(",", ":"))
     if len(text) > MAX_RESULT:
         text = text[:MAX_RESULT] + "…"
     logger.info("tool %s -> %d chars", name, len(text))
+    record(
+        kind="tool",
+        operation=name,
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        detail={"arguments": arguments, "chars": len(text)},
+    )
     return text

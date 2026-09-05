@@ -1,14 +1,17 @@
 """The gateway client and its lifecycle."""
 
+import asyncio
+import io
 import logging
 
 import discord
 from discord import app_commands
 
-from screener.bot import agent
+from screener.bot import agent, render
 from screener.bot.checks import NotPermitted
 from screener.bot.commands import COMMANDS
 from screener.bot.config import BotConfig
+from screener.audit import record
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,11 @@ class ScreenerBot(discord.Client):
         )
 
     async def on_ready(self) -> None:
+        # The build and model live here rather than on the end of every reply:
+        # always visible, said once, and it costs nothing to keep current.
+        await self.change_presence(
+            activity=discord.CustomActivity(name=agent.presence())
+        )
         who = f"{self.user} ({self.user.id})" if self.user else "unknown"
         logger.info(
             "gateway connected as %s, permitted users: %s",
@@ -89,6 +97,14 @@ class ScreenerBot(discord.Client):
 
         if not self._config.permits(message.author.id):
             logger.warning("refused a mention from discord user %s", message.author.id)
+            await asyncio.to_thread(
+                record,
+                kind="agent",
+                operation=agent.OPERATION,
+                actor=str(message.author.id),
+                actor_kind="discord",
+                outcome="refused",
+            )
             return
 
         # Strip the mention itself so the model sees the question rather than
@@ -96,11 +112,24 @@ class ScreenerBot(discord.Client):
         question = message.content.replace(f"<@{self.user.id}>", "").strip()
 
         async with message.channel.typing():
-            reply = await agent.answer(question)
+            reply = await agent.respond(
+                question,
+                actor=str(message.author.id),
+                actor_kind="discord",
+                surface="discord",
+                # Discord cannot draw, but it can display what the web service
+                # drew, so the chart tool is allowed to produce one.
+                can_draw=True,
+            )
+            # Rasterising is a HTTP call and a few milliseconds of work in
+            # another container, so it goes on a worker thread like everything
+            # else that would otherwise sit on the gateway heartbeat.
+            images = await asyncio.to_thread(render.chart_pngs, reply.charts)
 
-        await message.reply(
-            f"{reply}\n\n-# {agent.build_footer()}", mention_author=False
-        )
+        files = [
+            discord.File(io.BytesIO(png), filename=name) for name, png in images
+        ]
+        await message.reply(reply.text, files=files, mention_author=False)
 
     async def _on_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

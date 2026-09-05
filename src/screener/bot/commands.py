@@ -6,10 +6,12 @@ a `Command` exposes `.name`, `.description` and `.callback`, both the metadata
 and the body are assertable without constructing a `Client` or a tree.
 """
 
+import asyncio
 import time
 
 from discord import Interaction, app_commands
 
+from screener.audit import record
 from screener.bot.checks import permitted
 from screener.provenance import git_sha
 
@@ -34,6 +36,14 @@ async def ping(interaction: Interaction) -> None:
     elapsed_ms = (time.perf_counter() - started) * 1000
     await interaction.edit_original_response(
         content=f"pong · {elapsed_ms:.0f}ms · build `{git_sha()[:12]}`"
+    )
+    await asyncio.to_thread(
+        record,
+        kind="command",
+        operation="ping",
+        actor=str(interaction.user.id),
+        actor_kind="discord",
+        duration_ms=int(elapsed_ms),
     )
 
 

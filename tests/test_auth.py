@@ -251,3 +251,71 @@ def test_a_permitted_login_is_given_a_session(signed_in_server, monkeypatch):
     with conn.cursor() as cur:
         cur.execute("select login, github_id from auth.app_user")
         assert cur.fetchone() == ("D1K03", 7)
+
+
+# -- the local development bypass ------------------------------------------
+
+
+@pytest.fixture
+def local_server(monkeypatch, db_url, fresh_db):
+    """A server with GitHub sign-in deliberately not configured."""
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("SESSION_SECRET", SECRET)
+    for name in ("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("APP_BASE_URL", "http://localhost:8080")
+
+    server = build_server("127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}", fresh_db
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_the_local_bypass_does_not_exist_once_github_is_configured(signed_in_server):
+    # The safety argument in one test. In production the GitHub credentials
+    # come from Infisical, so config.enabled is true and this route is gone.
+    # There is no separate flag that could be set wrongly.
+    url, _ = signed_in_server
+    status, body, _ = _get(url + "/auth/local", redirect=False)
+    assert status == 404
+    assert json.loads(body)["error"] == "not found"
+
+
+def test_the_local_bypass_issues_a_real_session(local_server):
+    # A genuine session row rather than only a cookie, so local behaves the way
+    # production does: /status reports a login and signing out works.
+    url, conn = local_server
+    status, _, headers = _get(url + "/auth/local", redirect=False)
+    assert status == 302
+    assert headers["Location"] == "/"
+
+    cookie = headers["Set-Cookie"]
+    assert auth.SESSION_COOKIE in cookie
+
+    token = cookie.split("=", 1)[1].split(";", 1)[0]
+    assert auth.resolve_session(conn, token, SECRET) == "local-dev"
+
+
+def test_the_local_user_cannot_collide_with_a_real_github_account(local_server):
+    # id 0 and a name that is not a GitHub username, so anyone reading
+    # auth.app_user can see at a glance that it was not a sign-in.
+    url, conn = local_server
+    _get(url + "/auth/local", redirect=False)
+    with conn.cursor() as cur:
+        cur.execute("select github_id, login from auth.app_user")
+        assert cur.fetchone() == (0, "local-dev")
+
+
+def test_the_local_bypass_refuses_without_a_session_secret(local_server, monkeypatch):
+    # Without it there is nothing to sign the session with, and a cookie that
+    # never resolves would look like the bypass silently not working.
+    url, _ = local_server
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    status, body, _ = _get(url + "/auth/local", redirect=False)
+    assert status == 503
+    assert "SESSION_SECRET" in json.loads(body)["error"]

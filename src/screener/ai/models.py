@@ -26,19 +26,19 @@ SOLAR = "upstage/solar-pro4"
 MODELS: dict[str, ModelInfo] = {
     FLASH: ModelInfo(
         label="DeepSeek V4 Flash",
-        note="Cheapest. Enough for summarising one filing section.",
-        input_per_m=0.14,
-        output_per_m=0.28,
+        note="Enough for summarising one filing section.",
+        input_per_m=0.086,
+        output_per_m=0.171,
     ),
     PRO: ModelInfo(
         label="DeepSeek V4 Pro",
-        note="Roughly 3x the cost. Worth it for a whole transcript.",
-        input_per_m=0.435,
-        output_per_m=0.87,
+        note="Roughly 10x Flash. Worth it for a whole transcript.",
+        input_per_m=0.921,
+        output_per_m=1.842,
     ),
     SOLAR: ModelInfo(
         label="Solar Pro 4",
-        note="Cheaper than Flash, with a 524k context. What the bot answers on.",
+        note="Cheapest here, 524k context. What the bot answers on.",
         input_per_m=0.03,
         output_per_m=0.12,
     ),

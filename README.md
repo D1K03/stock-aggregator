@@ -95,6 +95,7 @@ Two properties shape most of the schema:
 | `PLAN.md` | Current scope and what is being worked on next. |
 | `docs/specs/` | Dated specifications. |
 | `docs/plans/` | Dated implementation plans. |
+| `docs/infrastructure.md` | What tooling exists and when to reach for it. |
 | `deploy/README.md` | Deployment runbook: first-time setup, rolling back, spend limits. |
 | `CLAUDE.md` | Short-form guidance for Claude Code. |
 

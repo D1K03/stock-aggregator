@@ -1,5 +1,6 @@
 """The HTTP server itself."""
 
+import asyncio
 import json
 import logging
 import signal
@@ -12,7 +13,7 @@ from typing import Any
 
 import psycopg
 
-from screener import auth
+from screener import audit, auth
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
 from screener.config import settings
@@ -29,6 +30,18 @@ _STARTED_AT = datetime.now(UTC)
 # session: Docker's healthcheck and the deploy's smoke test. They report whether
 # the process is up and whether Postgres answers, which is not worth protecting.
 PUBLIC_PATHS = frozenset({"/health", "/ready"})
+
+# The login recorded for a local development session. Not a GitHub username,
+# and paired with id 0, so it cannot collide with a real account.
+LOCAL_LOGIN = "local-dev"
+
+# A dashboard question is a sentence, not an essay. Bounded here so a runaway
+# query string cannot become a bill.
+MAX_QUESTION = 500
+
+# What the screen description may contribute. Enough for a row and its
+# filters, short of anything that could bloat every request.
+MAX_CONTEXT = 400
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -130,6 +143,9 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/auth/callback":
             self._callback(config, query)
 
+        elif route == "/auth/local":
+            self._local_login(config)
+
         elif route == "/auth/logout":
             token = self._session_token()
             if token and config.session_secret is not None:
@@ -147,6 +163,15 @@ class Handler(BaseHTTPRequestHandler):
                 "/login",
                 [auth.clear_cookie(auth.SESSION_COOKIE, secure=self._secure(config))],
             )
+
+        elif route == "/api/ask":
+            self._ask(config, query)
+
+        elif route == "/api/handoff":
+            self._handoff(config, query)
+
+        elif route == "/api/audit":
+            self._audit(config, query)
 
         elif route == "/status":
             try:
@@ -181,6 +206,215 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
+    def _ask(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """Ask Steven a question from the dashboard.
+
+        A GET with the question in the query string, because this server has no
+        POST handler and adding one for a single short string would mean
+        reading a body, minding Content-Length and keeping a keep-alive
+        connection in step. Questions are a few hundred characters at most.
+
+        The same agent the Discord bot uses, so there is one set of rules about
+        what it may claim rather than two that drift.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if config.enabled and login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        question = (query.get("q") or [""])[0].strip()
+        if not question:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no question"})
+            return
+        if len(question) > MAX_QUESTION:
+            # Bounded before it reaches the model, because the caller pays for
+            # every token of a question nobody meant to send.
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                {"error": f"question longer than {MAX_QUESTION} characters"},
+            )
+            return
+
+        # Bounded like the question: it is assembled by the browser and paid
+        # for on every message.
+        context = (query.get("context") or [""])[0].strip()[:MAX_CONTEXT]
+
+        from screener.bot import agent
+
+        try:
+            reply = asyncio.run(
+                agent.respond(
+                    question,
+                    actor=login or "local",
+                    # A dashboard user signed in through GitHub, so that is the
+                    # kind of identity; `surface` records that they were here
+                    # rather than in Discord.
+                    actor_kind="github",
+                    surface="web",
+                    context=context,
+                    # The dashboard can render a chart, so the chart tool is
+                    # allowed to draw one. Discord gets the same agent with
+                    # this off.
+                    can_draw=True,
+                )
+            )
+        except Exception as exc:
+            logger.warning("ask failed: %s", exc)
+            self._respond(HTTPStatus.BAD_GATEWAY, {"error": "could not reach the model"})
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "reply": reply.text,
+                "model": agent.agent_model(),
+                "tools": [{"name": t.name, "ms": t.ms} for t in reply.tools],
+                # Drawn by a tool and passed straight through. None of this was
+                # in the conversation, so none of it was paid for per round.
+                "charts": [c.payload() for c in reply.charts],
+            },
+        )
+
+    def _handoff(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """Carry the conversation over to Discord.
+
+        Sends the signed-in user a direct message so the thread continues
+        somewhere they already get notifications. Which Discord account belongs
+        to which login comes from `DISCORD_USER_MAP`, so no account id is in
+        the repository.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if config.enabled and login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        from screener.bot.config import BotConfig
+        from screener.bot.handoff import HandoffError, send_dm
+
+        who = login or LOCAL_LOGIN
+        seeing = (query.get("context") or [""])[0].strip()[:MAX_CONTEXT]
+
+        # A fixed message rather than a generated one. It is one line, it is
+        # the same every time, and paying a model to write it would be silly.
+        text = (
+            "Carrying on from the dashboard. Ask me here and I will pick it up."
+        )
+        if seeing:
+            text += f"\n-# You were looking at {seeing}"
+
+        try:
+            user_id = send_dm(login=who, text=text, config=BotConfig.from_env())
+        except HandoffError as exc:
+            logger.warning("handoff failed for %s: %s", who, exc)
+            self._respond(HTTPStatus.BAD_GATEWAY, {"error": str(exc)})
+            return
+
+        audit.record(
+            kind="agent",
+            operation="steven.handoff",
+            actor=who,
+            actor_kind="github",
+            detail={"surface": "web", "discord_user_id": str(user_id)},
+        )
+        self._respond(HTTPStatus.OK, {"sent": True})
+
+    def _audit(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """The audit trail, paged and filtered.
+
+        Behind the session for the same reason /status is: it carries spend
+        figures and the ids of people who used the bot.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if config.enabled and login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        kind = (query.get("kind") or [""])[0] or None
+        operation = (query.get("operation") or [""])[0] or None
+        try:
+            page_number = max(1, int((query.get("page") or ["1"])[0]))
+        except ValueError:
+            page_number = 1
+
+        try:
+            with psycopg.connect(settings().database_url, connect_timeout=3) as conn:
+                events, total = audit.page(
+                    conn,
+                    kind=kind,
+                    operation=operation,
+                    offset=(page_number - 1) * audit.PAGE_SIZE,
+                )
+                totals = audit.spend(conn)
+                available = audit.operations(conn)
+        except Exception as exc:
+            logger.warning("could not read the audit trail: %s", exc)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot read the audit trail", "database": type(exc).__name__},
+            )
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "events": [
+                    {
+                        "id": e.id,
+                        "occurred_at": e.occurred_at.isoformat(),
+                        "kind": e.kind,
+                        "operation": e.operation,
+                        "actor": e.actor,
+                        "actor_kind": e.actor_kind,
+                        "outcome": e.outcome,
+                        "model": e.model,
+                        "tokens": e.total_tokens,
+                        # A float, not a Decimal: JSON has no decimal type, and
+                        # these are displayed rather than summed again.
+                        "cost_usd": float(e.cost_usd),
+                        "duration_ms": e.duration_ms,
+                        "detail": e.detail,
+                    }
+                    for e in events
+                ],
+                "page": page_number,
+                "page_size": audit.PAGE_SIZE,
+                "total": total,
+                "pages": max(1, -(-total // audit.PAGE_SIZE)),
+                "spend": {
+                    "events": totals.events,
+                    "total_cost_usd": float(totals.total_cost),
+                    "total_tokens": totals.total_tokens,
+                    "events_24h": totals.events_24h,
+                    "cost_24h_usd": float(totals.cost_24h),
+                    "tokens_24h": totals.tokens_24h,
+                },
+                "operations": [
+                    {"kind": k, "operation": o, "count": c} for k, o, c in available
+                ],
+            },
+        )
+
     def _secure(self, config: AuthConfig) -> bool:
         """Whether cookies may carry the Secure flag.
 
@@ -201,6 +435,63 @@ class Handler(BaseHTTPRequestHandler):
         self._redirect(
             auth.authorize_url(config.client_id, state, config.redirect_uri),
             [state_cookie(state, secure=self._secure(config))],
+        )
+
+    def _local_login(self, config: AuthConfig) -> None:
+        """Sign in without GitHub. Local development only.
+
+        The gate is that GitHub sign-in is *not* configured, and that is the
+        whole safety argument: in production `GITHUB_CLIENT_ID`,
+        `GITHUB_CLIENT_SECRET` and `SESSION_SECRET` all arrive from Infisical,
+        so `config.enabled` is true and this route refuses. There is no
+        separate flag to set wrongly, and no way to have both a working real
+        sign-in and a working bypass at the same time.
+
+        It issues a genuine session row rather than only setting a cookie, so
+        local behaves the way production does: `/status` reports a login, the
+        audit page is reached the same way, and signing out works.
+        """
+        if config.enabled:
+            # Not 403. In production this route does not exist, and saying so
+            # is one less thing worth probing.
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+
+        if config.session_secret is None:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "SESSION_SECRET is not set; see deploy/local.env.example"},
+            )
+            return
+
+        try:
+            with psycopg.connect(settings().database_url, connect_timeout=5) as conn:
+                session = auth.create_session(
+                    conn,
+                    # Zero and a name nobody could hold: a real GitHub account
+                    # can never collide with this row, and anyone reading
+                    # auth.app_user can see at a glance it was not a sign-in.
+                    github_id=0,
+                    login=LOCAL_LOGIN,
+                    secret=config.session_secret,
+                    days=config.session_days,
+                    user_agent=self.headers.get("User-Agent"),
+                )
+        except Exception as exc:
+            logger.error("could not record the local session: %s", exc)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "cannot record the session"}
+            )
+            return
+
+        logger.warning("issued a local development session; GitHub sign-in is off")
+        self._redirect(
+            "/",
+            [
+                auth.session_cookie(
+                    session, days=config.session_days, secure=self._secure(config)
+                )
+            ],
         )
 
     def _callback(self, config: AuthConfig, query: dict[str, list[str]]) -> None:

@@ -10,6 +10,11 @@ const AUTH_LOGIN = process.env.NEXT_PUBLIC_API_BASE
   ? `${process.env.NEXT_PUBLIC_API_BASE}/auth/login`
   : "/auth/login";
 
+/* Compiled in only by a local build. The status service refuses /auth/local
+   whenever GitHub sign-in is configured, so this is the second of two locks
+   rather than the only one. */
+const LOCAL_LOGIN = process.env.NEXT_PUBLIC_LOCAL_LOGIN === "1";
+
 function GithubMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -47,6 +52,19 @@ export default function Login() {
           Access is limited to named GitHub accounts. Nothing else can sign in,
           and no scopes are requested — the only question asked is who you are.
         </p>
+
+        {LOCAL_LOGIN && (
+          <motion.a
+            className="local-login"
+            href="/auth/local"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.4 }}
+          >
+            Continue without GitHub
+            <span>local development only</span>
+          </motion.a>
+        )}
         <div className="login-foot">
           run <span className="mono">66371b6</span> · sessions live in their own
           schema · rotate the secret to sign everyone out

@@ -105,6 +105,31 @@ Nothing in the infrastructure layer has a consumer yet — ingest, scoring and
 alerting are all unwritten — so this command is the only thing that would
 notice a root going quietly broken.
 
+## Running it locally
+
+```bash
+cp deploy/local.env.example deploy/local.env
+docker compose --env-file deploy/local.env \
+  -f deploy/compose.prod.yaml -f deploy/compose.local.yaml up -d --build
+```
+
+Then <http://localhost:8080>. Same Caddy routes and service names as the VPS,
+because it is the production compose file with an override rather than a
+separate one that could drift.
+
+With the Infisical trio unset the app reads `local.env` as-is, which switches
+GitHub sign-in off. `/login` then offers **Continue without GitHub**, which
+issues a real session for a `local-dev` user so the rest of the site behaves
+exactly as it does in production.
+
+That shortcut cannot leak into a deployment. The status service refuses
+`/auth/local` whenever GitHub sign-in is configured, which it always is on the
+VPS because those credentials come from Infisical, and the button itself is a
+build argument that only `compose.local.yaml` sets, so it is not compiled into
+the image CI builds. Neither lock depends on remembering a flag.
+
+`docker compose ... down -v` removes the containers and the local volume.
+
 ## Hardening still to do
 
 `sshd` on the VPS listens on `0.0.0.0:22`, so the box accepts SSH from the

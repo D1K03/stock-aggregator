@@ -30,6 +30,7 @@ def empty_db(db_url):
         # public` does not reach. Without this the auth tables survive between
         # tests and the migration runner fails re-creating them.
         conn.execute("drop schema if exists auth cascade")
+        conn.execute("drop schema if exists audit cascade")
         conn.execute("create schema public")
         yield conn
 
