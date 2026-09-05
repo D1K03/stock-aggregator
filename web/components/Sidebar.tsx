@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { avatarUrl, initials, useSession } from "@/lib/session";
 
 const LOGOUT = process.env.NEXT_PUBLIC_API_BASE
   ? `${process.env.NEXT_PUBLIC_API_BASE}/auth/logout`
@@ -62,6 +63,11 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [phone, setPhone] = useState(false);
+  // github.com serves a picture for any login without an API call, but not for
+  // one that does not exist — `local-dev` among them — so a failed load falls
+  // back to initials rather than leaving a broken image in the rail.
+  const [pictureFailed, setPictureFailed] = useState(false);
+  const { login, gitSha, loaded } = useSession();
   const menuRef = useRef<HTMLDivElement>(null);
 
   /* Read once on mount rather than during render: the server has no
@@ -143,6 +149,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
   }, [menuOpen]);
 
   const shown = shut ? COLLAPSED_WIDTH : width;
+  const picture = pictureFailed ? null : avatarUrl(login);
 
   return (
     <>
@@ -205,10 +212,26 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
         </nav>
 
         <div className="rail-foot" ref={menuRef}>
-          {!shut && <span className="sha" title="scoring_run.git_sha">66371b6</span>}
+          {/* Nothing until it is known. A placeholder commit here is what made
+              the rail disagree with the build the bot reports. */}
+          {!shut && gitSha && (
+            <span className="sha" title={`Running ${gitSha}`}>{gitSha.slice(0, 7)}</span>
+          )}
           <button className="rail-user" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
-            <span className="avatar">eh</span>
-            {!shut && <span className="rail-label">ehewes</span>}
+            {picture ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="avatar as-picture"
+                src={picture}
+                alt=""
+                width={26}
+                height={26}
+                onError={() => setPictureFailed(true)}
+              />
+            ) : (
+              <span className="avatar">{initials(login)}</span>
+            )}
+            {!shut && <span className="rail-label">{login ?? (loaded ? "signed out" : "…")}</span>}
           </button>
           {menuOpen && (
             <motion.div
@@ -217,7 +240,9 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16 }}
             >
-              <div className="menu-head">Signed in as <b>ehewes</b></div>
+              <div className="menu-head">
+                Signed in as <b>{login ?? "nobody"}</b>
+              </div>
               <a className="menu-item danger" href={LOGOUT}>Sign out</a>
             </motion.div>
           )}
