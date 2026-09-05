@@ -1,7 +1,8 @@
 """The OpenRouter client."""
 
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -21,6 +22,15 @@ class AiError(RuntimeError):
     """The call could not be made, or came back unusable."""
 
 
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """A tool the model asked to run, and the arguments it chose."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
 @dataclass(slots=True)
 class Completion:
     """One model response, with what it cost."""
@@ -31,6 +41,12 @@ class Completion:
     completion_tokens: int
     cost_usd: float
     finish_reason: str
+    tool_calls: tuple[ToolCall, ...] = ()
+    # The assistant turn exactly as the model sent it. A tool-calling loop has
+    # to echo this back verbatim on the next request, so it is kept rather than
+    # rebuilt: a reconstructed message loses provider-specific fields and the
+    # follow-up is rejected for a reason that reads as nonsense.
+    raw_message: dict[str, Any] = field(default_factory=dict)
 
     @property
     def truncated(self) -> bool:
@@ -55,6 +71,34 @@ def complete(
 ) -> Completion:
     """Send one prompt and return the response with its real cost.
 
+    The single-turn case, which is most of them. Anything needing tools or more
+    than one turn calls `converse` directly.
+    """
+    return converse(
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        timeout=timeout,
+        transport=transport,
+    )
+
+
+def converse(
+    *,
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    max_tokens: int = 900,
+    temperature: float = 0.4,
+    timeout: float = DEFAULT_TIMEOUT,
+    transport: httpx.BaseTransport | None = None,
+) -> Completion:
+    """Send a conversation, optionally offering tools, and return the reply.
+
     `transport` exists so tests can pass `httpx.MockTransport` and exercise
     this code without a key or a network. Production never passes it.
     """
@@ -65,10 +109,7 @@ def complete(
     chosen = resolve_model(model or config.model)
     payload: dict[str, Any] = {
         "model": chosen,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
         # Ask OpenRouter to report what it charged. Without this the only way
@@ -76,6 +117,8 @@ def complete(
         # time a provider changes a rate and silently wrong thereafter.
         "usage": {"include": True},
     }
+    if tools:
+        payload["tools"] = tools
 
     try:
         with httpx.Client(timeout=timeout, transport=transport) as client:
@@ -107,13 +150,33 @@ def complete(
         raise AiError("OpenRouter returned no choices")
 
     usage = body.get("usage") or {}
+    message = choices[0].get("message") or {}
+
+    calls: list[ToolCall] = []
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        try:
+            # Arguments arrive as a JSON *string*, and a model can emit one
+            # that does not parse. Dropping the call is better than crashing
+            # the reply: the loop simply has one fewer result to work with.
+            arguments = json.loads(function.get("arguments") or "{}")
+        except ValueError:
+            logger.warning("discarding tool call with unparseable arguments")
+            continue
+        if isinstance(arguments, dict):
+            calls.append(
+                ToolCall(id=str(call.get("id") or ""), name=str(function.get("name") or ""), arguments=arguments)
+            )
+
     completion = Completion(
-        text=choices[0].get("message", {}).get("content") or "",
+        text=message.get("content") or "",
         model=body.get("model") or chosen,
         prompt_tokens=int(usage.get("prompt_tokens") or 0),
         completion_tokens=int(usage.get("completion_tokens") or 0),
         cost_usd=float(usage.get("cost") or 0.0),
         finish_reason=choices[0].get("finish_reason") or "",
+        tool_calls=tuple(calls),
+        raw_message=message,
     )
     logger.info(
         "openrouter %s: %d+%d tokens, $%.5f",

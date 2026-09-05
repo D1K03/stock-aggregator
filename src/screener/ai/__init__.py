@@ -8,7 +8,7 @@ for a score will produce a confident one with nothing behind it.
 
 from screener.ai.config import RouterConfig
 from screener.ai.models import DEFAULT_MODEL, MODELS, ModelInfo, resolve_model
-from screener.ai.openrouter import AiError, Completion, complete
+from screener.ai.openrouter import AiError, Completion, ToolCall, complete, converse
 
 __all__ = [
     "AiError",
@@ -17,6 +17,8 @@ __all__ = [
     "MODELS",
     "RouterConfig",
     "ModelInfo",
+    "ToolCall",
     "complete",
+    "converse",
     "resolve_model",
 ]

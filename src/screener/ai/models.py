@@ -21,6 +21,7 @@ class ModelInfo:
 
 FLASH = "deepseek/deepseek-v4-flash"
 PRO = "deepseek/deepseek-v4-pro"
+SOLAR = "upstage/solar-pro4"
 
 MODELS: dict[str, ModelInfo] = {
     FLASH: ModelInfo(
@@ -34,6 +35,12 @@ MODELS: dict[str, ModelInfo] = {
         note="Roughly 3x the cost. Worth it for a whole transcript.",
         input_per_m=0.435,
         output_per_m=0.87,
+    ),
+    SOLAR: ModelInfo(
+        label="Solar Pro 4",
+        note="Cheaper than Flash, with a 524k context. What the bot answers on.",
+        input_per_m=0.03,
+        output_per_m=0.12,
     ),
 }
 
