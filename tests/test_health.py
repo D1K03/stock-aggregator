@@ -58,6 +58,11 @@ def test_status_is_not_served_without_a_database(server_url, monkeypatch):
     stops asking who you are.
     """
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    # Set explicitly, not inherited. Without a session secret the server cannot
+    # verify a cookie at all and answers 401 without reaching the database — a
+    # real behaviour, but not the one under test, and leaving it to the ambient
+    # environment is how this passed locally and failed in CI.
+    monkeypatch.setenv("SESSION_SECRET", "a-secret-for-this-test")
 
     # No cookie: refused before the database is ever consulted, so a stranger
     # gets the same answer whether Postgres is up or not.
