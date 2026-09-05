@@ -118,3 +118,84 @@ def test_bars_come_back_in_date_order():
     )
     bars, _ = parse(payload)
     assert [b.trade_date for b in bars] == sorted(b.trade_date for b in bars)
+
+
+def test_a_quote_value_that_is_not_numeric_is_dropped_not_raised():
+    # Non-numeric strings (empty string, invalid formats) in quote arrays
+    # should not crash the entire payload. The bar containing them is dropped;
+    # others survive.
+    payload = chart(
+        [1758585600, 1758672000],
+        {
+            "open": [100.0, ""],
+            "high": [101.0, 101.0],
+            "low": [99.0, 99.0],
+            "close": [100.0, 100.0],
+            "volume": [10, 10],
+        },
+    )
+    bars, _ = parse(payload)
+    assert len(bars) == 1
+    assert bars[0].trade_date == date(2025, 9, 23)
+
+
+def test_an_out_of_range_timestamp_is_dropped_not_raised():
+    # An epoch that is out of range for datetime should drop that bar, not
+    # raise an exception.
+    payload = chart(
+        [1758585600, 999999999999999],
+        {
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.0, 100.0],
+            "close": [100.0, 101.0],
+            "volume": [10, 10],
+        },
+    )
+    bars, _ = parse(payload)
+    assert len(bars) == 1
+    assert bars[0].trade_date == date(2025, 9, 23)
+
+
+def test_a_split_entry_missing_date_is_dropped_not_raised():
+    # A malformed split entry without a date should be dropped without
+    # raising, and bars should still be returned.
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+        events={
+            "splits": {
+                "bad_entry": {
+                    "numerator": 2,
+                    "denominator": 1,
+                    # Missing "date" key
+                }
+            }
+        },
+    )
+    bars, actions = parse(payload)
+    assert len(bars) == 1
+    assert actions == []
+
+
+def test_a_split_entry_that_is_not_a_dict_is_dropped_not_raised():
+    # If a split entry is not a dict (e.g., null or a list), it should be
+    # dropped without raising an exception.
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+        events={
+            "splits": {
+                "bad_entry": None,
+                "good_entry": {
+                    "date": 1758585600,
+                    "numerator": 2,
+                    "denominator": 1,
+                },
+            }
+        },
+    )
+    bars, actions = parse(payload)
+    assert len(bars) == 1
+    assert len(actions) == 1
+    assert actions[0].action_type == "split"

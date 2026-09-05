@@ -10,7 +10,7 @@ an events block that is simply absent — are tested without a socket.
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 
 @dataclass(frozen=True)
@@ -63,55 +63,91 @@ def parse(payload: bytes) -> tuple[list[Bar], list[Action]]:
 
     bars: list[Bar] = []
     for index, stamp in enumerate(stamps):
-        open_val = _decimal(_at(quote, "open", index))
-        high_val = _decimal(_at(quote, "high", index))
-        low_val = _decimal(_at(quote, "low", index))
-        close_val = _decimal(_at(quote, "close", index))
-        volume_val = _at(quote, "volume", index)
-        # A null anywhere drops the bar. The columns are `not null`, and a
-        # zero-filled bar reads downstream as a real -100% move.
-        if (
-            open_val is None
-            or high_val is None
-            or low_val is None
-            or close_val is None
-            or volume_val is None
-        ):
-            continue
-        bars.append(
-            Bar(
-                trade_date=_day(stamp),
-                open=open_val,
-                high=high_val,
-                low=low_val,
-                close=close_val,
-                volume=int(volume_val),  # type: ignore
+        try:
+            open_val = _decimal(_at(quote, "open", index))
+            high_val = _decimal(_at(quote, "high", index))
+            low_val = _decimal(_at(quote, "low", index))
+            close_val = _decimal(_at(quote, "close", index))
+            volume_val = _at(quote, "volume", index)
+            # A null anywhere drops the bar. The columns are `not null`, and a
+            # zero-filled bar reads downstream as a real -100% move.
+            if (
+                open_val is None
+                or high_val is None
+                or low_val is None
+                or close_val is None
+                or volume_val is None
+            ):
+                continue
+            bars.append(
+                Bar(
+                    trade_date=_day(stamp),
+                    open=open_val,
+                    high=high_val,
+                    low=low_val,
+                    close=close_val,
+                    volume=int(volume_val),  # type: ignore[arg-type]
+                )
             )
-        )
+        except (InvalidOperation, TypeError, ValueError, OverflowError, OSError):
+            # A malformed bar (non-numeric value, out-of-range timestamp, etc.)
+            # is dropped; the rest of the payload is processed normally.
+            continue
+
     bars.sort(key=lambda bar: bar.trade_date)
 
     events = block.get("events") or {}
     actions: list[Action] = []
     for raw in (events.get("splits") or {}).values():
-        numerator = _decimal(raw.get("numerator"))
-        denominator = _decimal(raw.get("denominator")) or Decimal(1)
-        actions.append(
-            Action(
-                effective_date=_day(raw["date"]),
-                action_type="split",
-                ratio=(numerator / denominator) if numerator else None,
-                amount=None,
+        try:
+            numerator = _decimal(raw.get("numerator"))
+            # Decimal("0") is falsy, so this guards a malformed zero denominator
+            # as well as an absent one.
+            denominator = _decimal(raw.get("denominator")) or Decimal(1)
+            actions.append(
+                Action(
+                    effective_date=_day(raw["date"]),
+                    action_type="split",
+                    ratio=(numerator / denominator) if numerator else None,
+                    amount=None,
+                )
             )
-        )
+        except (
+            InvalidOperation,
+            TypeError,
+            ValueError,
+            OverflowError,
+            OSError,
+            AttributeError,
+            KeyError,
+        ):
+            # A malformed split entry (missing date, not a dict, non-numeric
+            # numerator, etc.) is dropped; processing continues.
+            continue
+
     for raw in (events.get("dividends") or {}).values():
-        actions.append(
-            Action(
-                effective_date=_day(raw["date"]),
-                action_type="dividend",
-                ratio=None,
-                amount=_decimal(raw.get("amount")),
+        try:
+            actions.append(
+                Action(
+                    effective_date=_day(raw["date"]),
+                    action_type="dividend",
+                    ratio=None,
+                    amount=_decimal(raw.get("amount")),
+                )
             )
-        )
+        except (
+            InvalidOperation,
+            TypeError,
+            ValueError,
+            OverflowError,
+            OSError,
+            AttributeError,
+            KeyError,
+        ):
+            # A malformed dividend entry (missing date, not a dict, etc.) is
+            # dropped; processing continues.
+            continue
+
     actions.sort(key=lambda action: (action.effective_date, action.action_type))
     return bars, actions
 
