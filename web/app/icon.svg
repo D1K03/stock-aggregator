@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    Steven, as a favicon.
+
+    The orb in the interface is four blurred colour fields rotating inside a
+    clipped circle at periods that share no common multiple, so it never
+    visibly loops. None of that survives at sixteen pixels, and none of it
+    should: this is one frame of it, with the same gradients at the same
+    offsets, so the tab and the assistant are recognisably the same thing.
+
+    SVG rather than a PNG because it stays crisp at every size a browser asks
+    for, and because the colours are the ones in globals.css rather than a
+    screenshot of them.
+  -->
+  <defs>
+    <radialGradient id="base" cx="34%" cy="28%" r="72%">
+      <stop offset="0%" stop-color="#3a3330"/>
+      <stop offset="100%" stop-color="#1a1817"/>
+    </radialGradient>
+    <radialGradient id="a" cx="32%" cy="30%" r="58%">
+      <stop offset="0%" stop-color="#e75532"/>
+      <stop offset="100%" stop-color="#e75532" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b" cx="70%" cy="38%" r="55%">
+      <stop offset="0%" stop-color="#f99c00"/>
+      <stop offset="100%" stop-color="#f99c00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="c" cx="45%" cy="72%" r="60%">
+      <stop offset="0%" stop-color="#b75000"/>
+      <stop offset="100%" stop-color="#b75000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="d" cx="62%" cy="62%" r="48%">
+      <stop offset="0%" stop-color="#fee685"/>
+      <stop offset="100%" stop-color="#fee685" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glint" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="ball"><circle cx="32" cy="32" r="32"/></clipPath>
+    <!-- The blur that melts four discs into one surface. -->
+    <filter id="melt" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#ball)">
+    <circle cx="32" cy="32" r="32" fill="url(#base)"/>
+    <g filter="url(#melt)">
+      <rect width="64" height="64" fill="url(#a)"/>
+      <rect width="64" height="64" fill="url(#b)"/>
+      <rect width="64" height="64" fill="url(#c)"/>
+      <rect width="64" height="64" fill="url(#d)" opacity="0.7"/>
+    </g>
+    <!-- Above the blur, so it stays a crisp glint rather than dissolving. -->
+    <ellipse cx="19" cy="15" rx="9" ry="8" fill="url(#glint)"/>
+    <!-- The shaded underside, which is what makes it read as a sphere. -->
+    <circle cx="32" cy="32" r="32" fill="none" stroke="#000000" stroke-opacity="0.3"
+            stroke-width="3" transform="translate(0,-1.5)"/>
+  </g>
+  <circle cx="32" cy="32" r="31.5" fill="none" stroke="#ffffff" stroke-opacity="0.22"/>
+</svg>
