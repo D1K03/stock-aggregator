@@ -267,6 +267,13 @@ was the decision; the test is where it is written down.
   that hands one to Steven — he works the controls and that is all. The store
   and the API are shaped so a reading tool could be added beside the three
   control ones without touching either.
+
+  This is enforced in two places rather than one, because Steven has a second
+  way to reach a table. His `sql` tool runs as the `playground` Postgres role,
+  and the whole `skybird` schema is on that role's deny list in
+  `tests/test_playground.py` — so "he cannot read a transcript" holds for the
+  route through his tools *and* the route through arbitrary SQL. Granting it
+  there later would undo this decision without touching this package.
 - **No speaker labels and no word-level timings.** WhisperX was rejected for
   needing torch and that has not changed.
 - **English only.** The model is `base.en` and `language="en"` is hard-coded.

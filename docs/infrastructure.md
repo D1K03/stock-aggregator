@@ -67,12 +67,18 @@ of a run. A pool hands them out round-robin, so a long job leaves by every
 address the zone holds instead of piling onto one. `park(seconds)` takes a lane
 out of rotation after a 429 and `acquire()` skips it until it frees.
 
-Three things it deliberately is not. It is **not a strategy** — it does not
-appear in the table above and `fetch()` cannot reach it. It is **not
-concurrency**: a lane changes which address a request leaves by, never how many
-are in flight, and callers stay sequential. And it is **not a rate limiter** —
-the pool never sleeps and never retries, so the waiting and the numbers stay
-with the caller, which is where D6 puts them.
+Two things it deliberately is not. It is **not a strategy** — it does not appear
+in the table above and `fetch()` cannot reach it. And it is **not a rate
+limiter**: the pool never sleeps and never retries, so the waiting and the
+numbers stay with the caller, which is where D6 puts them.
+
+`pool.across(items, work)` is the one place concurrency lives, and it runs
+**one worker per lane and has no argument to run more**. The claim it rests on
+is not "concurrency is fine" but the narrower "one request in flight per exit
+address": four workers over four addresses is not four over one. Measured before
+it was allowed — the whole S&P 500, 1,006 requests, 44s against 138s sequential,
+every one a 200. `acquire()` is still the sequential path and still does not
+change how many requests are in flight.
 
 Yahoo is the only caller today, through `screener.universe.sources.yahoo`.
 
@@ -105,6 +111,38 @@ how that is switched off.
 The Web Unlocker is a separate product billed per successful request and should
 be treated as spending money every time it runs. It cannot be a lane: it POSTs
 each URL as an independent call, so there is no jar to keep.
+
+---
+
+## The payload store
+
+`screener.blobs` — two verbs against one bucket.
+
+```python
+from screener.blobs import blob_path, store
+
+path = blob_path("yahoo", "chart", date.today(), security_id)
+store().put(path, gzip.compress(payload))
+```
+
+`BLOB_BACKEND=local` is a directory and what the test suite uses. `BLOB_BACKEND=s3`
+is Cloudflare R2, whose free tier covers this comfortably — prices are about
+1 GB a year across roughly 45,000 writes a month.
+
+SigV4 is hand-rolled in `blobs/sigv4.py` rather than pulled from `boto3`, which
+would add five packages and a third HTTP stack for two verbs. That is tractable
+only because the case is narrow: static credentials, one bucket, no session
+tokens, no presigning, no multipart. It is verified against AWS's published
+conformance vector.
+
+**Nothing here prunes, expires or deletes.** `ingest_observation.blob_path` is
+`not null` and every score has to trace back to a stored response, so a pruning
+job would make that a promise the database cannot keep. This is evidence, not
+cache.
+
+**Do not** reach for the `s3` backend in tests. `local` is the default and keeps
+the suite offline. R2 wants `auto` as its region, and clock skew on the box
+presents as a 403 rather than as a clock problem.
 
 ---
 
@@ -147,6 +185,80 @@ clip was rather than what was in it. The question does reach the trail on the
 reply row, exactly as a typed question does, because that is where Steven's
 memory lives, and a spoken question is a question. The `voice` flag on that row
 is what tells a transcription error from a typo when reading it back.
+
+---
+
+## Social ingest
+
+`screener.reddit` — posts and comments from **Arctic Shift**, a public Reddit
+mirror, on a six-hourly loop in a container of its own.
+
+**Reddit's own API is not used, and that was checked rather than assumed.**
+`reddit.com/r/stocks/new.json` answers 403 with an HTML body whatever
+User-Agent is sent, and `robots.txt` is `Disallow: /` for every agent — so
+scraping it is ruled out by this project's own rule. The official OAuth route
+needs a manually approved client and caps listings at about a thousand items,
+which does not reach a week of r/wallstreetbets in any case.
+
+Measured, per week: 788 posts and 132,052 comments on r/wallstreetbets, 270 and
+14,944 on r/stocks. Comments are 99% of it. Reddit's envelope is dropped and the
+fields that carry meaning are kept, which is roughly a third of the size.
+
+| | |
+|---|---|
+| Cost | bandwidth only. No key, no per-request price, ~2.7 GB/year of rows |
+| Cadence | `REDDIT_REFRESH_HOURS`, backfilling `REDDIT_BACKFILL_DAYS` the first time it sees a subreddit |
+| Switch | an empty `REDDIT_SUBREDDITS`; the container logs it and exits cleanly |
+
+**Do not** point the Bright Data lanes at it to go faster. The mirror does
+refuse about one page in six on the busiest subreddit, and the retry recovers
+every time — so there is no block that needs routing around, and Arctic Shift is
+run by volunteers, which makes rotating four exit addresses at a service whose
+error message asks for less traffic a different act from spreading load across a
+commercial API. `REDDIT_DELAY_MS` is the knob if they ever ask for less.
+
+**Do not** add per-item audit rows. One `ingest_run` per subreddit and kind, and
+one `audit.event` for the pass: `record()` opens a connection per call and the
+same table backs Steven's memory.
+
+---
+
+## The playground
+
+`screener.playground` — read-only SQL over the tables a second Postgres role is
+allowed to see. One engine behind two callers: the `/playground` page and
+Steven's `sql` tool.
+
+**The role is the enforcement.** The application connects as `screener`, which
+on this deployment is the cluster superuser: `pg_read_file` returns on it, and
+`COPY FROM PROGRAM` is remote code execution. So the console connects as
+`playground` instead, which holds `select` on the tables named in migration 013
+and nothing else. A role that was never granted `auth.session` cannot read it
+however the query is spelled — through a view, a CTE, a function, or a cast
+nobody thought of.
+
+**`skybird` is denied too, and that one is a feature rather than a precaution.**
+Steven's `sql` tool runs on this role, and he is deliberately built to start and
+stop captures without being able to read one back; a grant here would hand him
+that through the side door. `tests/test_playground.py` holds the deny list with
+the reason for each entry, so a future migration's tables have to be argued
+about before the suite is green again.
+
+| | |
+|---|---|
+| Switch | `PLAYGROUND_DB_PASSWORD`. Unset means the role has no password, cannot log in, and the page reports itself off. |
+| Bounds | 10s statement timeout, 2s lock timeout, 500 rows, 4,000 characters of SQL, a per-cell and per-response character budget. |
+| Errors | Postgres's own message, with a caret. The only place this service shows a database message rather than an exception type. |
+
+**Do not** add an application-level SQL allowlist, regex or parser beside it.
+That is the thing the role replaces, and having both means the weaker one gets
+trusted. **Do not** point `PLAYGROUND_DATABASE_URL` at the application's own
+connection; the engine checks and refuses, and the self-test reports it.
+
+Exposing a new table costs a line in migration 013 and a line in
+`tests/test_playground.py`, which is deliberate: a test asserts every table is
+either granted or explicitly denied, so a future migration cannot quietly add
+one to a SQL console.
 
 ---
 
@@ -338,10 +450,10 @@ with the commit SHA and `latest`, join the tailnet, copy the compose files, pull
 and restart, then smoke-test from inside the container.
 
 - Images: `ghcr.io/d1k03/stock-aggregator`, `…-web`, `…-transcribe`, `…-skybird`
-- The bot runs from the **same image** as the status service, different command.
-  The other two have their own because their dependencies are their own: PyAV
-  and ctranslate2 for one, ffmpeg and yt-dlp for the other, and neither the
-  status service nor the bot has any use for either set.
+- The bot and the Reddit ingest run from the **same image** as the status
+  service, different commands. The other two have their own because their
+  dependencies are their own: PyAV and ctranslate2 for one, ffmpeg and yt-dlp
+  for the other, and nothing else in the stack has any use for either set.
 
 **Rolling back** is the Deploy workflow run manually with `image_tag` set to an
 older SHA. No rebuild; it points the box at an image that already exists.
@@ -385,7 +497,9 @@ docker compose --env-file .env -f deploy/compose.prod.yaml \
 One line per integration: database and migration count, build SHA, a direct
 fetch, a proxied fetch **and whether its exit IP actually differs**, the
 configured lanes **and whether they differ from each other**, OpenRouter, the
-Discord webhook, and the bot token. Anything unconfigured reports `SKIP`,
+Discord webhook, the bot token, the social mirror **and how far behind it
+is**, and the playground role **and that it is not a privileged one** — freshness rather than reachability, because a mirror that has quietly
+stopped keeping up still answers. Anything unconfigured reports `SKIP`,
 because switched-off is the expected state for most of it.
 
 It posts nothing. Nothing in this project has a consumer yet, so this command is

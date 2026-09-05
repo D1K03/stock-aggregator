@@ -362,6 +362,8 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         # checked only by a test of its own would be one list away from being
         # the route nobody checked.
         ("/api/transcribe", b"not audio"),
+        ("/api/playground", None),
+        ("/api/playground/query", b'{"sql":"select 1"}'),
         # Skybird, for the same reason. `test_skybird_api` checks these too;
         # this is the list that would catch a route added without one.
         ("/api/skybird", None),

@@ -14,7 +14,7 @@ draws it so the tables and packages below have somewhere to land.
 
 ## What runs, and what talks to what
 
-Eight containers in one compose project, sharing a VPS with four other stacks.
+Nine containers in one compose project, sharing a VPS with four other stacks.
 Four facts do most of the work in this picture:
 
 - **Nothing publishes a host port in production.** Caddy reaches the services
@@ -22,9 +22,9 @@ Four facts do most of the work in this picture:
   collide with the neighbouring stacks and the database has no public surface.
 - **`cloudflared` dials outward.** The Cloudflare edge never dials in. That is
   the whole ingress story, and it is why there is no firewall rule to maintain.
-- **`api` and `bot` are the same image** with different commands. One dependency
-  set, one build; the cost is that the api image carries `discord.py` without
-  importing it.
+- **`api`, `bot` and `reddit` are the same image** with different commands. One
+  dependency set, one build; the cost is that the api image carries `discord.py`
+  without importing it.
 - **`transcribe` and `skybird` are not**, and that is the rule the pair above is
   the exception to. A separate image is what a separate dependency set earns:
   ctranslate2, onnxruntime and PyAV for one, ffmpeg and yt-dlp for the other,
@@ -43,6 +43,7 @@ flowchart LR
         bot["bot<br/>same image as api<br/>python -m screener.bot"]
         tr["transcribe<br/>ghcr.io/d1k03/stock-aggregator-transcribe<br/>faster-whisper, expose 8081"]
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
+        rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
         pg[("postgres:16<br/>named volume pg_data")]
     end
 
@@ -52,6 +53,7 @@ flowchart LR
     dgw["Discord gateway"]
     drest["Discord REST v10"]
     streams["YouTube / Twitch"]
+    arctic["Arctic Shift"]
 
     internet --> edge
     cfd -->|"dials outward, never in"| edge
@@ -63,9 +65,11 @@ flowchart LR
     bot -->|"POST /transcribe"| tr
     sky -->|"POST /transcribe"| tr
     sky -->|"audio only, via yt-dlp"| streams
+    rdt -->|"posts + comments"| arctic
     api --> pg
     bot --> pg
     sky --> pg
+    rdt --> pg
     api --> infisical
     api --> ghoauth
     api --> router
@@ -73,6 +77,7 @@ flowchart LR
     bot --> infisical
     bot --> router
     bot --> dgw
+    rdt --> infisical
 ```
 
 Two edges are the ones people get wrong.
@@ -207,6 +212,8 @@ flowchart TD
     bot["bot.agent + bot.client"]
     tools["bot.tools"]
     universe["universe"]
+    blobs["blobs<br/>local + s3, hand-rolled SigV4"]
+    ingest["ingest<br/>prices + sweep"]
     skybird["skybird<br/>store + platforms only"]
 
     boot --> settings
@@ -243,6 +250,13 @@ flowchart TD
 
     universe --> settings
     universe --> fetch
+
+    env --> blobs
+    ingest --> settings
+    ingest --> secrets
+    ingest --> fetch
+    ingest --> blobs
+
     audit --> settings
     health -.->|"lazy, inside a request handler"| skybird
     skybird --> settings
@@ -593,8 +607,8 @@ year boundary without colliding with a same-named yearly one.
 ## The v1 pipeline
 
 The spine, and the only diagram here that draws things which do not exist.
-Ingest, scoring, the snapshot diff and alerting are all unwritten; universe and
-identity are built and loaded.
+Universe, identity and daily **price** ingest are built; fundamentals ingest is
+cycle two, and scoring, the snapshot diff and alerting are all unwritten.
 
 ```mermaid
 flowchart LR
@@ -602,8 +616,9 @@ flowchart LR
 
     csv["data/universe.csv"]
     ident["universe load<br/>security, security_symbol,<br/>security_sector, peer_group"]
-    ing["«not built» ingest<br/>yfinance prices + fundamentals<br/>content-hash dedup"]
-    facts[("ingest_observation<br/>fundamental_fact<br/>price_daily")]
+    ing["ingest prices<br/>Yahoo /v8/finance/chart, raw bars only<br/>content-hash dedup, payload to R2"]
+    ingf["«not built» ingest fundamentals<br/>the crumbed quoteSummary path<br/>cycle two"]
+    facts[("ingest_observation<br/>price_daily<br/>«not built» fundamental_fact")]
     sc["«not built» scoring<br/>percentile within sector peer group,<br/>then average within pillar"]
     derived[("metric_daily<br/>pillar_score_daily<br/>snapshot_daily<br/>event_flag_daily")]
     diff["«not built» diff<br/>today vs the last comparable snapshot"]
@@ -614,7 +629,9 @@ flowchart LR
 
     csv --> ident
     ident --> ing
+    ident --> ingf
     ing --> facts
+    ingf --> facts
     facts --> sc
     sc --> derived
     derived --> diff
@@ -623,7 +640,7 @@ flowchart LR
     gate -->|true| cool
     cool --> post
 
-    class ing,facts,sc,derived,diff,gate,skip,cool,post unbuilt
+    class ingf,sc,derived,diff,gate,skip,cool,post unbuilt
 ```
 
 The `emits_alerts` gate is drawn because it is the invariant most likely to be

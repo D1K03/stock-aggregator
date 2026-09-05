@@ -991,6 +991,119 @@ footer.site .prov {
 .mic-dot.working { animation-duration: 1.8s; }
 @keyframes mic-pulse { 50% { opacity: 0.25; } }
 
+/* A result set in a chat message. Narrower than the playground's own table and
+   with the query above it, because in a conversation the question is half of
+   what the answer means. */
+.crows {
+  margin: 8px 0 2px; max-width: 620px; width: 100%;
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  background: var(--card);
+}
+.crows-sql {
+  padding: 8px 12px; background: var(--sand); border-bottom: 1px solid var(--line);
+  font-family: var(--font-geist-mono), monospace; font-size: 0.74rem;
+  color: var(--ink-muted); white-space: pre-wrap;
+}
+.crows table { font-size: 0.8rem; }
+.crows tbody tr { cursor: default; }
+.crows figcaption {
+  padding: 6px 12px; font-size: 0.72rem; color: var(--ink-muted);
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+/* ---- playground -----------------------------------------------------------
+   The same two-pane geometry as Steven's page: a fixed tree on the left, a
+   panel on the right split into the editor and what it returned. The tree is
+   one schema deep, which looks like too much for a single `public` node and is
+   not: it is the shape a second schema needs, and re-nesting a flat list later
+   is worse than a node that is briefly lonely. */
+.pg {
+  display: flex; gap: calc(var(--sp) * 3);
+  height: 100dvh; padding: calc(var(--sp) * 3) calc(var(--sp) * 4) calc(var(--sp) * 4);
+}
+.pg-tree {
+  flex: 0 0 260px; display: flex; flex-direction: column; overflow: hidden;
+  background: color-mix(in srgb, var(--paper) 35%, white);
+  border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.pg-tree-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sp) * 4) calc(var(--sp) * 4) calc(var(--sp) * 2);
+  font-size: 0.75rem; font-weight: 600; color: var(--ink-muted);
+}
+.pg-tree-filter {
+  margin: 0 calc(var(--sp) * 3) calc(var(--sp) * 2);
+  padding: 6px 9px; font: inherit; font-size: 0.8rem;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card);
+}
+.pg-tree-list { flex: 1; overflow-y: auto; padding: 0 calc(var(--sp) * 2) calc(var(--sp) * 4); }
+.pg-schema > summary, .pg-table > summary {
+  cursor: pointer; list-style: none; padding: 5px 8px; border-radius: var(--r-md);
+  font-size: 0.8rem;
+}
+.pg-schema > summary { font-weight: 600; color: var(--ink-muted); font-size: 0.72rem;
+  letter-spacing: 0.05em; text-transform: uppercase; }
+.pg-table > summary:hover { background: var(--card); color: var(--copper); }
+.pg-table { margin-left: 6px; }
+.pg-col {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 3px 8px 3px 20px; font-size: 0.74rem; color: var(--ink-muted);
+  cursor: pointer; border-radius: var(--r-md);
+}
+.pg-col:hover { background: var(--card); color: var(--ink); }
+.pg-col em { font-style: normal; opacity: 0.6; font-size: 0.68rem; }
+
+.pg-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(var(--sp) * 3);
+  overflow: hidden;
+}
+.pg-editor {
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.pg-sql {
+  border: 0; resize: vertical; outline: none; background: none; color: var(--ink);
+  font-family: var(--font-geist-mono), monospace; font-size: 0.84rem; line-height: 1.6;
+  padding: calc(var(--sp) * 4); min-height: 132px;
+}
+.pg-bar {
+  display: flex; align-items: center; gap: calc(var(--sp) * 3);
+  padding: 0 calc(var(--sp) * 4) calc(var(--sp) * 3);
+  font-size: 0.75rem; color: var(--ink-muted);
+}
+.pg-run {
+  margin-left: auto; padding: 7px 14px; border-radius: 9999px; cursor: pointer;
+  border: 1px solid var(--copper); background: var(--copper); color: #fff;
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+}
+.pg-run:disabled { opacity: 0.5; cursor: default; }
+
+.pg-out { flex: 1; overflow: auto; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-2xl); }
+/* `globals.css` makes every table row a pointer for the clickable screener
+   table. Nothing here is clickable. */
+.pg-out tbody tr { cursor: default; }
+.pg-out tbody tr:hover { background: color-mix(in srgb, var(--cream) 35%, white); }
+.pg-null { color: var(--ink-muted); font-style: italic; opacity: 0.7; }
+.pg-err {
+  margin: calc(var(--sp) * 4); padding: calc(var(--sp) * 3) calc(var(--sp) * 4);
+  border-left: 3px solid var(--copper); background: var(--cream);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  font-family: var(--font-geist-mono), monospace; font-size: 0.8rem;
+  white-space: pre-wrap; color: var(--copper-deep);
+}
+.pg-err b { display: block; font-weight: 600; margin-bottom: 4px; }
+.pg-err small { display: block; margin-top: 6px; opacity: 0.8; font-family: inherit; }
+.pg-off, .pg-empty {
+  padding: calc(var(--sp) * 10); text-align: center; color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .pg { padding: calc(var(--sp) * 2); }
+  .pg-tree { display: none; }
+}
+
 /* The chats column is the first thing to go: on a narrow screen the
    conversation is the page, and history is still reachable from the palette. */
 @media (max-width: 900px) {

@@ -80,6 +80,12 @@ services:
       INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      # The read-only role the playground connects as. One variable is the whole
+      # switch: `:+` expands to nothing when the password is unset, and the app
+      # already treats an empty variable as absent, so leaving it out means the
+      # role has no password, cannot log in, and the page says it is off.
+      PLAYGROUND_DB_PASSWORD: ${PLAYGROUND_DB_PASSWORD:-}
+      PLAYGROUND_DATABASE_URL: ${PLAYGROUND_DB_PASSWORD:+postgresql://playground:${PLAYGROUND_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-screener}}
 
     healthcheck:
       # /health, not /ready: a readiness probe here would restart a perfectly
@@ -175,6 +181,42 @@ services:
         limits:
           cpus: "2.0"
           memory: 1g
+
+  # Social ingest: posts and comments for the Sentiment pillar, backfilled once
+  # and then kept up every few hours.
+  #
+  # The `bot` arrangement rather than the `transcribe` one: this needs httpx and
+  # psycopg and nothing else, so it is the api image with a different command.
+  # No second Dockerfile, no fourth CI build, no extra image to pull on deploy.
+  #
+  # No ports and no Caddy route, and no healthcheck for the reason the bot has
+  # none: a check cannot tell "sleeping until the next pass" from "wedged", and
+  # restarting a worker that was fine is worse than not noticing for six hours.
+  reddit:
+    image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "screener.reddit"]
+
+    depends_on:
+      # On `api`, not on `postgres`, because a healthy database is not the same
+      # as a migrated one. This needs `social_item` and the `data_source` row to
+      # exist, and `api` is what applies migrations before it starts answering.
+      # Without this the first pass fails on a missing table and waits for the
+      # next tick, which is a poor first impression for something that runs
+      # four times a day.
+      api:
+        condition: service_healthy
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
   # Live stream capture. Its own image, because ffmpeg and yt-dlp belong to
   # nothing else in this stack.

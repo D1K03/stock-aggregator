@@ -60,6 +60,15 @@ services:
       - path: local.env
         required: false
 
+  # Same image as `api`, so it has to be told to use the one just built rather
+  # than pulling the published one — which is how a local run silently tests
+  # last week's code.
+  reddit:
+    image: stock-aggregator:local
+    env_file:
+      - path: local.env
+        required: false
+
   transcribe:
     build:
       context: ..

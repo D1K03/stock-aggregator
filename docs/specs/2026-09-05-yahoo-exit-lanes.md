@@ -147,3 +147,61 @@ four lanes on four distinct exits, twelve of twelve symbols resolved, and
 `crumb_fetches` of exactly 4. What that rehearsal could not cover is the crumb
 refresh path, because the run was too short to expire one. Expect the first real
 overnight job to be the first time that code executes.
+
+---
+
+## Refined: one request in flight per exit
+
+*Added 2026-09-05, after the lanes were deployed and measured under real load.*
+
+The plan above says "rotation is not concurrency" and that the pool must never
+grow a `map()`. It now has one, called `across`, and this is the record of why.
+
+**The decision it reverses rested on a withdrawn figure.**
+`2026-09-05-universe-and-identity.md` says "No concurrency", and the evidence
+given is that eight yfinance workers lost 43% of 1,506 requests. `DESIGN.md`
+withdrew that figure for varying concurrency and request count at the same time.
+So the recorded reason for the rule no longer stands on anything, which is not
+the same as the rule being wrong, but does mean it has to be re-argued rather
+than inherited.
+
+**What was measured**, on the VPS, against the live Yahoo endpoints:
+
+| | requests | wall clock | per request | outcome |
+|---|---|---|---|---|
+| Sequential, 4 lanes round-robin | 1,006 | 138s | 136ms | 1,006 × 200 |
+| One worker per lane, prototype | 1,006 | 35.2s | 35ms | 1,006 × 200 |
+| One worker per lane, `across` as shipped | 1,006 | **43.8s** | 44ms | 1,006 × 200 |
+
+The shipped figure is the one to quote. It is slower than the prototype that
+argued for this, and the difference is not explained: it may be the cold
+container it ran in, or run-to-run variance against a third party, and one run
+each is not enough to tell those apart. **3.2x, not 3.9x**, is what has actually
+been demonstrated.
+
+Median per-request latency was 127ms under load against 136ms sequential, so
+nothing degraded. A separate isolating run showed where the ceiling is not:
+
+| | per request | gain |
+|---|---|---|
+| direct, 1 worker | 111ms | — |
+| direct, 4 workers, one address | 30ms | 3.7x |
+| lanes, 4 workers, four addresses | 36ms | 3.1x |
+
+Neither Yahoo nor Bright Data was the bottleneck. Doing one request at a time
+was. The lanes are marginally slower than direct, which is the same ~7% proxy
+overhead the original measurement found.
+
+**The claim being made is narrower than "concurrency is fine".** It is *one
+request in flight per exit address*. Four workers over four addresses is not
+four workers over one, and that distinction is the entire argument. So `across`
+takes no worker count: concurrency is `len(pool)` and there is no way to ask for
+more. A knob would let the distinction be lost by someone in a hurry, and the
+property is worth more as a fact about the type than as a note in a docstring.
+
+**What this does not establish.** It was one 35-second burst, not a nightly job
+run for a month, and Yahoo's tolerance is undocumented and can change without
+telling anyone. The first sign of it changing will be a 429, which parks a lane
+and is already handled. If they arrive in numbers, the fix is to go back to
+`acquire` and lose 100 seconds a night, which is a price a job with no deadline
+can pay.

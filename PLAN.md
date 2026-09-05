@@ -175,6 +175,11 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    path holds one session for the run — `screener.universe.sources.yahoo` already does this and
    the ingest client should extend that shape rather than start again.
 
+   The price half is implemented — see `docs/specs/2026-09-05-price-ingest.md` and
+   `docs/plans/2026-09-05-price-ingest.md`. Fundamentals remain, per that spec's own
+   "Out of scope" section, along with scoring and the dashboard/bot swap off
+   `screener.concept`.
+
    **Not yfinance.** The library emits parsed DataFrames, so a stored payload would be its
    reshaping rather than the response — which breaks the content-hash restatement detector and
    leaves "did the API lie or did our parser?" unanswerable. Direct also returns profile,
@@ -255,6 +260,8 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 
 ## Status
 
-Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance done. No
-ingest, scoring or alerting code exists yet — `python -m screener.boot selftest` is the only thing that currently exercises the
-infrastructure end to end, and it is worth running after a deploy for exactly that reason.
+Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance
+done. Daily **price** ingest is built and the universe is committed; fundamentals are the next
+ingest cycle, and no scoring or alerting code exists yet. `python -m screener.boot selftest` is
+what exercises the infrastructure end to end, and it is worth running after a deploy for exactly
+that reason.

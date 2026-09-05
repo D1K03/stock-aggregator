@@ -16,8 +16,13 @@ Yahoo's crumb scheme is undocumented and has changed before, and because an
 `httpx.Client` owns its jar already — sharing one across four clients would mean
 copying cookies by hand.
 
-**Rotation is not concurrency.** A lane changes which address a request leaves
-by, never how many are in flight. Callers stay sequential.
+**Rotation is not concurrency, and `across` is the only concurrency there is.**
+A lane changes which address a request leaves by; `acquire` never changes how
+many are in flight, and a caller using it stays sequential. `across` runs one
+worker per lane and has no argument to run more, so "one request in flight per
+exit address" is a property of the type rather than of remembering. See
+`docs/specs/2026-09-05-yahoo-exit-lanes.md` for why that reversed a recorded
+decision and what was measured before it did.
 
 **This is not a rate limiter.** D6 in the infrastructure spec keeps throttling
 out of the fetch layer and puts it with ingest, where a source's published limit
@@ -36,8 +41,10 @@ to prove two lanes do not share a jar passes a different transport to each.
 """
 
 import logging
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypeVar
 
 import httpx
 
@@ -49,6 +56,9 @@ from screener.fetch.strategies import BROWSER_HEADERS, redact
 logger = logging.getLogger(__name__)
 
 DIRECT_LANE = "direct"
+
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 class Lane:
@@ -248,6 +258,68 @@ class LanePool:
             soonest.parked_for,
         )
         return soonest
+
+    def across(self, items: Sequence[T], work: Callable[[Lane, T], R]) -> list[R]:
+        """Run `work(lane, item)` over every lane at once, one worker per lane.
+
+        The whole point is the bound. Concurrency is `len(self)` and there is no
+        argument to raise it, because the safe claim here is not "concurrency is
+        fine" but the much narrower "one request in flight per exit address" —
+        four workers across four addresses is not four workers on one. A knob
+        would let that distinction be lost by someone in a hurry, so there is no
+        knob.
+
+        This reverses "No concurrency" in the universe spec. That decision rested
+        on eight yfinance workers losing 43% of their requests, a figure
+        `DESIGN.md` later withdrew for varying concurrency and request count at
+        once, so it rested on nothing. Measured on the VPS before reversing it:
+        1,006 requests for the whole S&P 500 in 43.8s against 138s sequential,
+        every one a 200, and median latency under load no worse than sequential.
+        Nothing throttled.
+
+        Each worker owns its lane outright for the duration, which is what makes
+        it safe: a `Lane` holds one client and one cookie jar, and two threads
+        sharing either would be a race. Results come back in the order the items
+        were given.
+
+        No rebalancing. A worker that meets a 429 should park its own lane and
+        back off inside `work`, because how long to wait for a source is the
+        source's business and this layer still does not sleep.
+        """
+        if not items:
+            return []
+        results: list[Any] = [None] * len(items)
+        failures: list[BaseException] = []
+        lock = threading.Lock()
+
+        def run(lane: Lane, mine: list[int]) -> None:
+            for index in mine:
+                try:
+                    results[index] = work(lane, items[index])
+                except BaseException as exc:
+                    with lock:
+                        failures.append(exc)
+                    return
+
+        # Striped rather than blocked, so an ordering that happens to group the
+        # slow symbols cannot leave one lane working alone at the end.
+        count = len(self._lanes)
+        threads = [
+            threading.Thread(
+                target=run, args=(lane, list(range(offset, len(items), count)))
+            )
+            for offset, lane in enumerate(self._lanes)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        if failures:
+            # Raised rather than swallowed, and only after every thread is
+            # joined, so a failure cannot leave workers running behind it.
+            raise failures[0]
+        return results
 
     def close(self) -> None:
         for lane in self._lanes:

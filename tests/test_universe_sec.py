@@ -1,8 +1,9 @@
 import json
 
 import httpx
+import pytest
 
-from screener.universe.sources.sec import cik_by_symbol
+from screener.universe.sources.sec import cik_by_symbol, user_agent
 
 PAYLOAD = json.dumps(
     {
@@ -38,8 +39,35 @@ def test_symbols_are_normalised():
     assert "BRK-B" in cik_by_symbol(transport=transport)
 
 
-def test_a_user_agent_is_declared_because_sec_returns_403_without_one():
+@pytest.fixture(autouse=True)
+def contact(monkeypatch):
+    """SEC refuses a request that names nobody, so every call needs this set."""
+    monkeypatch.setenv("SEC_CONTACT_EMAIL", "contact@example.com")
+
+
+def test_the_user_agent_carries_the_contact_address_sec_demands():
+    # The previous version of this test asserted only that the header said
+    # "screener", which it did while every real request came back 403.
     transport, seen = recording_transport(PAYLOAD)
     cik_by_symbol(transport=transport)
-    agent = seen[0].headers.get("user-agent", "")
-    assert agent and "screener" in agent.lower()
+    assert "contact@example.com" in seen[0].headers.get("user-agent", "")
+
+
+def test_the_user_agent_never_names_github_because_sec_refuses_it():
+    transport, seen = recording_transport(PAYLOAD)
+    cik_by_symbol(transport=transport)
+    assert "github.com" not in seen[0].headers.get("user-agent", "").lower()
+
+
+def test_an_unset_contact_address_fails_by_name_rather_than_as_a_403(monkeypatch):
+    # Defaulting to a placeholder would be answered with a 403 that reads as a
+    # network fault, which is exactly how this went unnoticed before.
+    monkeypatch.delenv("SEC_CONTACT_EMAIL", raising=False)
+    with pytest.raises(RuntimeError, match="SEC_CONTACT_EMAIL is not set"):
+        user_agent()
+
+
+def test_a_github_contact_address_is_refused_locally(monkeypatch):
+    monkeypatch.setenv("SEC_CONTACT_EMAIL", "someone@github.com")
+    with pytest.raises(RuntimeError, match="must not contain"):
+        user_agent()
