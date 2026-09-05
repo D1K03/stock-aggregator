@@ -127,9 +127,16 @@ def run_prices(
         # run over what is almost certainly a per-symbol rate limit rather
         # than a systemic outage — so it goes through the same per-security
         # failure path as `None`.
-        if payload is None or len(payload) == 0:
+        if payload is None:
             report.failed += 1
             logger.warning("no chart for %s; next run widens its window", symbol)
+            continue
+        if len(payload) == 0:
+            report.failed += 1
+            logger.warning(
+                "empty body for %s (likely rate-limited); next run widens its window",
+                symbol,
+            )
             continue
 
         content_hash = hashlib.sha256(payload).digest()

@@ -77,6 +77,35 @@ def test_one_securitys_failure_does_not_end_the_run(
     assert report.requested == 2
 
 
+def test_an_empty_body_fails_that_security_without_ending_the_run(
+    fresh_db, two_securities, tmp_path, FakeClient, chart_bytes
+):
+    # R10: a 200 with an empty body is a known Yahoo rate-limit tell, not real
+    # data. It must be counted as a failure like `None`, must not write an
+    # observation or a blob, and must not stop the other security's run.
+    (good, good_symbol), (bad, bad_symbol) = two_securities
+    client = FakeClient(
+        {good_symbol: chart_bytes(date(2026, 9, 4)), bad_symbol: b""}
+    )
+    blobs = LocalStore(tmp_path)
+    report = run_prices(
+        fresh_db,
+        client=client,
+        blobs=blobs,
+        today=TODAY,
+        securities=[(good, good_symbol), (bad, bad_symbol)],
+    )
+    assert report.ok == 1 and report.failed == 1
+    assert report.requested == 2
+    assert fresh_db.execute(
+        "select count(*) from ingest_observation where security_id=%s", (bad,)
+    ).fetchone()[0] == 0
+    from screener.blobs import BlobWriteFailed, blob_path
+
+    with pytest.raises(BlobWriteFailed):
+        blobs.get(blob_path("yahoo", "chart", TODAY, bad))
+
+
 def test_a_blob_failure_aborts_the_run_and_writes_no_observation(
     fresh_db, two_securities, tmp_path, FakeClient, chart_bytes
 ):
