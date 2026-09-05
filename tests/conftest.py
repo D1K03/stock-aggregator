@@ -42,40 +42,47 @@ def fresh_db(empty_db):
     return empty_db
 
 
-def an_observation(conn, security_id):
-    """An ingest_observation to hang facts off.
+@pytest.fixture
+def an_observation(fresh_db):
+    """Make an ingest_observation for a security, and return its id.
 
     `price_daily.ingest_observation_id` and `corporate_action.ingest_observation_id`
     are both not-null foreign keys, so nothing can be inserted without one.
+    A fixture returning a callable rather than a plain function, because a test
+    module cannot import from conftest without relying on pytest's import mode.
     """
-    source_id = conn.execute(
-        "insert into data_source (code, name) values ('yahoo', 'Yahoo') "
-        "on conflict (code) do update set name = excluded.name returning id"
-    ).fetchone()[0]
-    run_id = conn.execute(
-        "insert into ingest_run (source_id, endpoint, started_at, status) "
-        "values (%s, 'chart', now(), 'running') returning id",
-        (source_id,),
-    ).fetchone()[0]
-    return conn.execute(
-        """insert into ingest_observation
-           (ingest_run_id, security_id, fetched_at, content_hash, blob_path,
-            is_new_payload, payload_bytes)
-           values (%s, %s, now(), %s, 'yahoo/chart/2026-09-05/1.json.gz', true, 1)
-           returning id""",
-        (run_id, security_id, b"\x00" * 32),
-    ).fetchone()[0]
+
+    def make(security_id: int) -> int:
+        source_id = fresh_db.execute(
+            "insert into data_source (code, name) values ('yahoo', 'Yahoo') "
+            "on conflict (code) do update set name = excluded.name returning id"
+        ).fetchone()[0]
+        run_id = fresh_db.execute(
+            "insert into ingest_run (source_id, endpoint, started_at, status) "
+            "values (%s, 'chart', now(), 'running') returning id",
+            (source_id,),
+        ).fetchone()[0]
+        return fresh_db.execute(
+            """insert into ingest_observation
+               (ingest_run_id, security_id, fetched_at, content_hash, blob_path,
+                is_new_payload, payload_bytes)
+               values (%s, %s, now(), %s, 'yahoo/chart/2026-09-05/1.json.gz', true, 1)
+               returning id""",
+            (run_id, security_id, b"\x00" * 32),
+        ).fetchone()[0]
+
+    return make
 
 
 @pytest.fixture
-def ingest_ctx(fresh_db):
+def ingest_ctx(fresh_db, an_observation):
     """One security and an observation, as (security_id, observation_id)."""
     security_id = fresh_db.execute(
         """insert into security
            (name, mic, currency, country, primary_symbol, first_seen)
            values ('Test', 'XNAS', 'USD', 'US', 'AAA', '2020-01-01') returning id"""
     ).fetchone()[0]
-    return security_id, an_observation(fresh_db, security_id)
+    return security_id, an_observation(security_id)
 
 
 @pytest.fixture
