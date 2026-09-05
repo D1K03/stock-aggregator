@@ -12,9 +12,11 @@ import json
 import re
 from pathlib import Path
 
+import httpx
 import pytest
 
 from screener import concept
+from screener.bot import render
 from screener.bot.tools import TOOLS, dispatch
 from screener.bot.tools.charts import MARKS, collecting
 
@@ -162,8 +164,9 @@ def test_every_result_says_the_data_is_illustrative():
 
 
 def test_a_surface_that_cannot_draw_is_not_told_a_chart_is_shown():
-    # Discord renders text. Claiming a chart there points the reader at
-    # something that does not exist.
+    # Every surface can show one today — Discord gets a rasterised PNG — but
+    # the mechanism has to keep working, because claiming a chart where none is
+    # rendered points the reader at something that does not exist.
     with collecting(False) as drawn:
         result = dispatch("chart", {"ticker": "NVDA", "mark": "peak"})
     assert drawn == []
@@ -191,3 +194,73 @@ def test_the_payload_is_json_and_keeps_the_marks():
     assert body["marks"][0]["kind"] == "point"
     # Rounded for transport: a hundredth of a point is far under one pixel.
     assert all(round(v, 2) == v for v in body["series"])
+
+
+# -- rasterising for Discord -----------------------------------------------
+
+
+def test_a_chart_is_posted_to_the_renderer_as_its_own_payload():
+    # The same JSON the browser receives, so the PNG cannot be drawn from a
+    # different shape than the one on screen.
+    sent: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n" + b"0" * 40)
+
+    with collecting() as drawn:
+        dispatch("chart", {"ticker": "NVDA", "mark": "surge"})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        png = render.chart_png(drawn[0], client=client)
+
+    assert png is not None and png.startswith(b"\x89PNG")
+    assert sent["ticker"] == "NVDA"
+    assert len(sent["series"]) == concept.SPAN  # pyright: ignore[reportArgumentType]
+    assert sent["marks"]
+
+
+def test_a_renderer_that_fails_costs_the_picture_not_the_answer():
+    # The reply is already composed by this point. Losing an image is a smaller
+    # loss than losing the words, so nothing here raises.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="nope")
+
+    with collecting() as drawn:
+        dispatch("chart", {"ticker": "AMD"})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert render.chart_png(drawn[0], client=client) is None
+
+
+def test_something_that_is_not_a_png_is_refused():
+    # A 200 carrying the login page would otherwise be attached to a Discord
+    # message as an image and fail there instead, further from the cause.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, html="<!doctype html><title>Sign in</title>")
+
+    with collecting() as drawn:
+        dispatch("chart", {"ticker": "AMD"})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert render.chart_png(drawn[0], client=client) is None
+
+
+def test_no_more_than_three_charts_are_attached_to_one_reply():
+    # A model that asked for a chart every round would otherwise turn one
+    # mention into a round trip and an upload per round.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n")
+
+    with collecting() as drawn:
+        for symbol in ("NVDA", "AMD", "MU", "JPM", "CAT"):
+            dispatch("chart", {"ticker": symbol})
+    assert len(drawn) == 5
+
+    original = httpx.Client
+    try:
+        httpx.Client = lambda **kw: original(transport=httpx.MockTransport(handler))  # type: ignore[assignment]
+        drawn_files = render.chart_pngs(tuple(drawn))
+    finally:
+        httpx.Client = original  # type: ignore[assignment]
+
+    assert len(drawn_files) == render.MAX_CHARTS
+    # Named for the ticker, so a saved image says what it is.
+    assert drawn_files[0][0] == "nvda.png"

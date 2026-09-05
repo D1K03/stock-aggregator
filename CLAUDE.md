@@ -108,7 +108,10 @@ nothing outside imports a submodule directly.
   blocking the event loop stalls the gateway heartbeat rather than just one command.
   Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
   `collecting()` so a 60-point series never enters the model's context, and the point it marks
-  is computed from the data rather than chosen by the model.
+  is computed from the data rather than chosen by the model. A chart is one SVG string built by
+  `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
+  the web container, which rasterises the same string to PNG for Discord. One renderer, so the
+  two surfaces cannot drift — do not add a second way to draw a chart.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.

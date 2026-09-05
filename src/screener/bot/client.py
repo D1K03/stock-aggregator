@@ -1,13 +1,13 @@
 """The gateway client and its lifecycle."""
 
-import logging
-
 import asyncio
+import io
+import logging
 
 import discord
 from discord import app_commands
 
-from screener.bot import agent
+from screener.bot import agent, render
 from screener.bot.checks import NotPermitted
 from screener.bot.commands import COMMANDS
 from screener.bot.config import BotConfig
@@ -112,11 +112,24 @@ class ScreenerBot(discord.Client):
         question = message.content.replace(f"<@{self.user.id}>", "").strip()
 
         async with message.channel.typing():
-            reply = await agent.answer(
-                question, actor=str(message.author.id), actor_kind="discord"
+            reply = await agent.respond(
+                question,
+                actor=str(message.author.id),
+                actor_kind="discord",
+                surface="discord",
+                # Discord cannot draw, but it can display what the web service
+                # drew, so the chart tool is allowed to produce one.
+                can_draw=True,
             )
+            # Rasterising is a HTTP call and a few milliseconds of work in
+            # another container, so it goes on a worker thread like everything
+            # else that would otherwise sit on the gateway heartbeat.
+            images = await asyncio.to_thread(render.chart_pngs, reply.charts)
 
-        await message.reply(reply, mention_author=False)
+        files = [
+            discord.File(io.BytesIO(png), filename=name) for name, png in images
+        ]
+        await message.reply(reply.text, files=files, mention_author=False)
 
     async def _on_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

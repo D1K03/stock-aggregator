@@ -20,6 +20,16 @@ const COLLAPSED_WIDTH = 64;
 const STORAGE_WIDTH = "screener.sidebar.width";
 const STORAGE_COLLAPSED = "screener.sidebar.collapsed";
 
+/* Below this the rail cannot be expanded: a 200px sidebar on a phone leaves no
+   room for what it navigates to. It is the same number as the CSS breakpoint
+   and has to be, because the CSS pins the width while this decides what goes
+   inside it — the two disagreeing is how "Screener" ended up spilling out of a
+   64px rail. */
+const NARROW = "(max-width: 860px)";
+/* And below this it is not a rail at all: it moves to the bottom of the screen
+   as a tab bar, so the content gets the full width. */
+const PHONE = "(max-width: 760px)";
+
 type Item = { label: string; href: string; icon: React.ReactNode };
 
 function Icon({ d }: { d: string }) {
@@ -46,6 +56,8 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
   const [dragging, setDragging] = useState(false);
   const [ready, setReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  const [phone, setPhone] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   /* Read once on mount rather than during render: the server has no
@@ -59,9 +71,34 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
     setReady(true);
   }, []);
 
+  /* Watched rather than measured once: a tablet rotating crosses both of these
+     without reloading, and a rail that only checked at mount would keep the
+     shape of the orientation it was born in. */
+  useEffect(() => {
+    const queries = [
+      [window.matchMedia(NARROW), setNarrow] as const,
+      [window.matchMedia(PHONE), setPhone] as const,
+    ];
+    const stops = queries.map(([query, set]) => {
+      const sync = () => set(query.matches);
+      sync();
+      query.addEventListener("change", sync);
+      return () => query.removeEventListener("change", sync);
+    });
+    return () => stops.forEach((stop) => stop());
+  }, []);
+
+  // Narrow means collapsed whatever the stored preference says, so the labels
+  // and the wordmark match the width the stylesheet is pinning.
+  const shut = collapsed || narrow;
+  // Labels are dropped when the rail is a 64px column, but a bottom bar has
+  // room for a small one under each icon — and a row of bare icons is a
+  // guessing game.
+  const labelled = !shut || phone;
+
   const startDrag = useCallback(
     (event: React.PointerEvent) => {
-      if (collapsed) return;
+      if (shut) return;
       event.preventDefault();
       setDragging(true);
       const onMove = (e: PointerEvent) => {
@@ -78,7 +115,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [collapsed]
+    [shut]
   );
 
   const toggle = () => {
@@ -101,20 +138,26 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
     };
   }, [menuOpen]);
 
-  const shown = collapsed ? COLLAPSED_WIDTH : width;
+  const shown = shut ? COLLAPSED_WIDTH : width;
 
   return (
     <>
       {/* The rail is fixed, so a spacer keeps the content column off it. Both
           read the same width, so they cannot drift apart mid-drag. */}
-      <div className="rail-spacer" style={{ width: shown }} aria-hidden="true" />
+      {/* On a phone the rail is a bar along the bottom, so it takes no width
+          and the spacer would only push the content sideways. */}
+      <div
+        className="rail-spacer"
+        style={{ width: phone ? 0 : shown }}
+        aria-hidden="true"
+      />
 
       <aside
-        className={`rail${collapsed ? " collapsed" : ""}${dragging ? " dragging" : ""}`}
-        style={{ width: shown, transition: ready && !dragging ? undefined : "none" }}
+        className={`rail${shut ? " collapsed" : ""}${phone ? " bar" : ""}${dragging ? " dragging" : ""}`}
+        style={{ width: phone ? undefined : shown, transition: ready && !dragging ? undefined : "none" }}
       >
         <div className="rail-head">
-          <span className="wordmark">{collapsed ? "S" : "Screener"}</span>
+          <span className="wordmark">{shut ? "S" : "Screener"}</span>
           <button
             className="rail-toggle"
             onClick={toggle}
@@ -136,19 +179,20 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
               key={item.label}
               href={item.href}
               className={item.label === active ? "on" : undefined}
-              title={collapsed ? item.label : undefined}
+              title={shut ? item.label : undefined}
+              aria-label={item.label}
             >
               <span className="rail-icon">{item.icon}</span>
-              {!collapsed && <span className="rail-label">{item.label}</span>}
+              {labelled && <span className="rail-label">{item.label}</span>}
             </Link>
           ))}
         </nav>
 
         <div className="rail-foot" ref={menuRef}>
-          {!collapsed && <span className="sha" title="scoring_run.git_sha">66371b6</span>}
+          {!shut && <span className="sha" title="scoring_run.git_sha">66371b6</span>}
           <button className="rail-user" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
             <span className="avatar">eh</span>
-            {!collapsed && <span className="rail-label">ehewes</span>}
+            {!shut && <span className="rail-label">ehewes</span>}
           </button>
           {menuOpen && (
             <motion.div
@@ -165,7 +209,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
 
         {/* Hit area is wider than the visible line, because a 1px target is a
             fiddly thing to grab. */}
-        {!collapsed && (
+        {!shut && (
           <div
             className="rail-grip"
             onPointerDown={startDrag}
