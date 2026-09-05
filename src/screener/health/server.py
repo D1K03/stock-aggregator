@@ -182,15 +182,18 @@ class Handler(BaseHTTPRequestHandler):
                     {"error": "cannot check the session", "database": str(exc)},
                 )
                 return
-            if config.enabled and login is None:
+            if login is None:
                 self._respond(
                     HTTPStatus.UNAUTHORIZED,
                     {"error": "sign in at /auth/login"},
                 )
                 return
-            # Process facts only, no queries. /status has to stay answerable
-            # when the database is down, or the one endpoint that can tell you
-            # which build is running goes dark exactly when you need it.
+            # Process facts only, no queries — but a session had to be
+            # checked to get here, and that does query. So /status is
+            # unreachable while Postgres is: /health still proves the process
+            # is alive and /ready still names the database as the fault, which
+            # is a better trade than an endpoint that stops asking who you are
+            # whenever its configuration goes missing.
             self._respond(
                 HTTPStatus.OK,
                 {
@@ -209,6 +212,15 @@ class Handler(BaseHTTPRequestHandler):
     def _ask(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
         """Ask Steven a question from the dashboard.
 
+        A session is required unconditionally. This used to read
+        `config.enabled and login is None`, which meant that if GitHub sign-in
+        were ever unconfigured — one missing variable, a rotated secret, a
+        typo in Infisical — every endpoint behind it opened to the internet
+        rather than closing. An authorization check that weakens when its
+        configuration goes missing is not one. Local development still works,
+        because `/auth/local` issues a real session; if nothing can issue one,
+        nobody gets in, which is the right way round.
+
         A GET with the question in the query string, because this server has no
         POST handler and adding one for a single short string would mean
         reading a body, minding Content-Length and keeping a keep-alive
@@ -225,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "cannot check the session", "database": str(exc)},
             )
             return
-        if config.enabled and login is None:
+        if login is None:
             self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
             return
 
@@ -298,7 +310,7 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "cannot check the session", "database": str(exc)},
             )
             return
-        if config.enabled and login is None:
+        if login is None:
             self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
             return
 
@@ -355,7 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "cannot check the session", "database": str(exc)},
             )
             return
-        if config.enabled and login is None:
+        if login is None:
             self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
             return
 

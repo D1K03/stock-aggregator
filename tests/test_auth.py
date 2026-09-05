@@ -319,3 +319,54 @@ def test_the_local_bypass_refuses_without_a_session_secret(local_server, monkeyp
     status, body, _ = _get(url + "/auth/local", redirect=False)
     assert status == 503
     assert "SESSION_SECRET" in json.loads(body)["error"]
+
+
+# -- authorization does not weaken when its configuration goes missing ------
+
+
+@pytest.fixture()
+def unconfigured_server(monkeypatch, db_url, fresh_db):
+    """The server with GitHub sign-in not configured.
+
+    A rotated secret, a typo in Infisical, or a variable that failed to load
+    all land here. What must not happen is that the endpoints behind sign-in
+    open to the internet because the thing guarding them went missing.
+    """
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.delenv("GITHUB_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GITHUB_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("SESSION_SECRET", SECRET)
+    monkeypatch.setenv("APP_BASE_URL", "http://localhost:8080")
+
+    server = build_server("127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}", fresh_db
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("path", ["/status", "/api/ask?q=hi", "/api/audit", "/api/handoff"])
+def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path):
+    # This is the regression that matters. The check used to read
+    # `config.enabled and login is None`, so unconfigured sign-in did not
+    # refuse anyone — it stopped asking. One missing variable would have put
+    # the agent, the spend figures and the Discord ids of everyone who used the
+    # bot on the public internet.
+    url, _ = unconfigured_server
+    status, body, _ = _get(url + path)
+    assert status == 401
+    assert "sign in" in json.loads(body)["error"]
+
+
+def test_a_session_still_works_without_github(unconfigured_server):
+    # Local development signs in through /auth/local, so closing the hole must
+    # not close the door: a real session is still a real session.
+    url, conn = unconfigured_server
+    token = auth.create_session(conn, github_id=1, login="local-dev", secret=SECRET)
+    status, body, _ = _get(url + "/status", cookie=f"{auth.SESSION_COOKIE}={token}")
+    assert status == 200
+    assert json.loads(body)["login"] == "local-dev"
