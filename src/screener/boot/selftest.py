@@ -14,6 +14,7 @@ outward-facing action and a self-test should not make one.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -179,6 +180,42 @@ def _discord() -> Check:
     return Check("discord", OK, "webhook configured (not sent)")
 
 
+
+def _reddit() -> Check:
+    """Whether the social mirror is answering, and how far behind it is.
+
+    Freshness rather than reachability, because "it answered" is the failure
+    that would not be noticed: Arctic Shift silently falling a day behind looks
+    exactly like a quiet weekend on r/stocks, and the ingest would keep running
+    and storing nothing.
+    """
+    from screener.reddit import RedditConfig
+    from screener.reddit import source as arctic
+
+    config = RedditConfig.from_env()
+    if not config.enabled:
+        return Check("reddit", SKIP, "REDDIT_SUBREDDITS is empty")
+
+    subreddit = config.subreddits[0]
+    now = datetime.now(UTC)
+    newest = next(
+        arctic.items(
+            "post", subreddit,
+            after=now - timedelta(days=2), before=now,
+            host=config.host, delay=0.0, sleep=lambda _s: None,
+        ),
+        None,
+    )
+    if newest is None:
+        return Check("reddit", FAIL, f"nothing from r/{subreddit} in two days")
+    lag = now - newest.created_utc
+    hours = lag.total_seconds() / 3600
+    detail = f"{len(config.subreddits)} subreddit(s), newest r/{subreddit} post {hours:.1f}h old"
+    # A mirror that has stopped keeping up is the thing worth catching, and a
+    # day behind is well past any plausible quiet spell on these subreddits.
+    return Check("reddit", FAIL if hours > 24 else OK, detail)
+
+
 def _safe(name: str, check: Callable[[], Check]) -> Check:
     """Run one check, turning any unexpected exception into a FAIL.
 
@@ -252,6 +289,7 @@ def run() -> bool:
         _safe("openrouter", _openrouter),
         _safe("discord", _discord),
         _safe("discord bot", _bot),
+        _safe("reddit", _reddit),
     ]
 
     width = max(len(c.name) for c in results)

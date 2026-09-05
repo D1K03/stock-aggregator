@@ -159,6 +159,12 @@ delay is a safeguard rather than a necessity. Sequential with a small delay, exp
 on 429 or 401, and the run reports any symbol it gave up on. No concurrency: the one measurement
 we have of concurrent access is that it failed badly, even if the cause was the library.
 
+*Refined 2026-09-05:* still true of `refresh`, which is what this spec covers, and the
+measurement quoted here was later withdrawn in `DESIGN.md` for varying concurrency and request
+count at once. `screener.fetch.LanePool.across` now permits one worker per Bright Data exit
+address, which is a narrower claim than concurrency and rests on a full-scale measurement
+rather than on the withdrawn figure. See `docs/specs/2026-09-05-yahoo-exit-lanes.md`.
+
 ---
 
 ## 5. `load-universe`
