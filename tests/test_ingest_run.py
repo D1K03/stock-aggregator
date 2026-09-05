@@ -174,3 +174,127 @@ def test_an_unchanged_payload_still_writes_an_observation(
     ).fetchone()
     assert observations[0] == 2      # always recorded
     assert observations[1] == 1      # blob written once
+
+
+class _RaisingClient:
+    """A ChartClient-shaped stub where a named symbol raises instead of returning.
+
+    `FakeClient` from conftest only ever returns bodies from a dict, with no way
+    to raise, so the failure boundary gets its own stub rather than a change to
+    the shared fixture.
+    """
+
+    def __init__(self, bodies, raises=None):
+        self.bodies = bodies
+        self.raises = raises or {}
+
+    def fetch(self, symbol, start, end):
+        if symbol in self.raises:
+            raise self.raises[symbol]
+        return self.bodies.get(symbol)
+
+
+def test_a_transport_error_that_is_not_an_httperror_fails_only_that_security(
+    fresh_db, two_securities, tmp_path, chart_bytes
+):
+    # `httpx.InvalidURL` descends from `Exception`, not from `httpx.HTTPError`,
+    # so `ChartClient._request` does not convert it to None and it reaches
+    # `run_prices`. `active_securities` orders by symbol, so without a boundary
+    # here a symbol that fails deterministically would block every
+    # alphabetically later security on every subsequent night.
+    import httpx
+
+    (bad, bad_symbol), (good, good_symbol) = two_securities
+    client = _RaisingClient(
+        {good_symbol: chart_bytes(date(2026, 9, 4))},
+        raises={bad_symbol: httpx.InvalidURL("not a url")},
+    )
+    report = run_prices(
+        fresh_db,
+        client=client,
+        blobs=LocalStore(tmp_path),
+        today=TODAY,
+        securities=[(bad, bad_symbol), (good, good_symbol)],
+    )
+    assert report.failed == 1 and report.ok == 1
+    assert fresh_db.execute(
+        "select count(*) from price_daily where security_id=%s", (good,)
+    ).fetchone()[0] == 1
+    assert fresh_db.execute(
+        "select count(*) from ingest_observation where security_id=%s", (bad,)
+    ).fetchone()[0] == 0
+
+
+def test_a_database_error_mid_security_rolls_that_one_back_and_the_run_continues(
+    fresh_db, two_securities, tmp_path, monkeypatch, FakeClient, chart_bytes
+):
+    # Spec section 7: "database error mid-security -> that security's
+    # transaction rolls back whole; run continues".
+    import psycopg
+
+    import screener.ingest.run as run_module
+
+    (bad, bad_symbol), (good, good_symbol) = two_securities
+    real = run_module.insert_settled_bars
+
+    def flaky(cur, security_id, observation_id, bars, cutoff):
+        if security_id == bad:
+            raise psycopg.errors.DeadlockDetected("deadlock detected")
+        return real(cur, security_id, observation_id, bars, cutoff)
+
+    monkeypatch.setattr(run_module, "insert_settled_bars", flaky)
+
+    client = FakeClient(
+        {
+            bad_symbol: chart_bytes(date(2026, 1, 5)),
+            good_symbol: chart_bytes(date(2026, 1, 5)),
+        }
+    )
+    report = run_prices(
+        fresh_db,
+        client=client,
+        blobs=LocalStore(tmp_path),
+        today=TODAY,
+        securities=[(bad, bad_symbol), (good, good_symbol)],
+    )
+    assert report.failed == 1 and report.ok == 1
+    # Rolled back whole: the observation went in first, and it is gone too.
+    assert fresh_db.execute(
+        "select count(*) from ingest_observation where security_id=%s", (bad,)
+    ).fetchone()[0] == 0
+    assert fresh_db.execute(
+        "select count(*) from price_daily where security_id=%s", (good,)
+    ).fetchone()[0] == 1
+
+
+def test_an_unchanged_payload_across_a_date_boundary_points_at_a_blob_that_exists(
+    fresh_db, two_securities, tmp_path, FakeClient, chart_bytes
+):
+    # `blob_path` is not null so that "every score traces back to the stored
+    # response" is a claim the database enforces. A blob is only written when
+    # the hash changes, so a today-dated path on an unchanged payload would name
+    # an object nobody ever wrote.
+    (sid, symbol), _ = two_securities
+    blobs = LocalStore(tmp_path)
+    body = chart_bytes(date(2026, 9, 4))
+    for day in (TODAY, date(2026, 9, 6)):
+        run_prices(
+            fresh_db,
+            client=FakeClient({symbol: body}),
+            blobs=blobs,
+            today=day,
+            securities=[(sid, symbol)],
+        )
+
+    paths = [
+        row[0]
+        for row in fresh_db.execute(
+            "select blob_path from ingest_observation where security_id=%s "
+            "order by fetched_at",
+            (sid,),
+        ).fetchall()
+    ]
+    assert len(paths) == 2
+    assert paths[1] == paths[0]          # reused, not re-dated
+    assert "2026-09-05" in paths[1]
+    assert gzip.decompress(blobs.get(paths[1])) == body

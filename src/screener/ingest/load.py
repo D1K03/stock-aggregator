@@ -34,13 +34,20 @@ class Change:
     new: Any
 
 
-def previous_hash(cur: psycopg.Cursor, security_id: int) -> bytes | None:
-    """The last content hash seen for this security on the chart endpoint.
+def previous_hash(cur: psycopg.Cursor, security_id: int) -> tuple[bytes, str] | None:
+    """The last `(content_hash, blob_path)` seen for this security on `chart`.
+
+    The path comes back with the hash because the two are only meaningful
+    together: when tonight's hash matches, no object is written, so the
+    observation must name the object that *was* written rather than a
+    today-dated path with nothing behind it. `blob_path` is `not null`
+    precisely so that "every score traces back to the stored response" is a
+    claim the database enforces.
 
     `endpoint` lives on `ingest_run`, not on the observation, so this joins.
     """
     cur.execute(
-        """select o.content_hash
+        """select o.content_hash, o.blob_path
              from ingest_observation o
              join ingest_run r on r.id = o.ingest_run_id
             where o.security_id = %s and r.endpoint = 'chart'
@@ -49,7 +56,7 @@ def previous_hash(cur: psycopg.Cursor, security_id: int) -> bytes | None:
         (security_id,),
     )
     row = cur.fetchone()
-    return bytes(row[0]) if row else None
+    return (bytes(row[0]), row[1]) if row else None
 
 
 def record_observation(

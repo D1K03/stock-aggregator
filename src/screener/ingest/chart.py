@@ -9,7 +9,8 @@ moment the promotion earns itself.
 
 import time
 from collections.abc import Callable
-from datetime import date, datetime, time as clock, timezone
+from datetime import date, datetime, time as clock, timedelta, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -76,8 +77,20 @@ class ChartClient:
         None means "this security failed tonight" and never ends the run — D4 of
         the spec widens its window tomorrow.
         """
+        # `period2` is the day *after* `end`, not `end` itself. `_epoch` is
+        # midnight UTC and a US daily bar carries its session-open timestamp
+        # (13:30/14:30 UTC), so an exclusive bound at `end 00:00Z` drops the
+        # session that just closed — a run at 22:00 UTC would miss today while
+        # the same run at 02:00 UTC would catch it. Coverage must not depend on
+        # the hour cron fires.
+        #
+        # The symbol is escaped because it lands in the URL *path*: BRK.B is
+        # harmless but a symbol carrying a space or a slash builds a URL httpx
+        # rejects with `InvalidURL`, which is not an `HTTPError` and so would
+        # escape `_request` and end the night.
         url = (
-            f"{BASE}/{symbol}?period1={_epoch(start)}&period2={_epoch(end)}"
+            f"{BASE}/{quote(symbol, safe='')}"
+            f"?period1={_epoch(start)}&period2={_epoch(end + timedelta(days=1))}"
             "&interval=1d&events=div,split"
         )
         backoff = self._backoff

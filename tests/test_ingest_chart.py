@@ -71,3 +71,33 @@ def test_an_unconfigured_environment_gives_one_direct_lane(monkeypatch):
     transport, _ = responder(httpx.Response(200, text="{}"))
     with ChartClient(transport=transport) as client:
         assert len(client.lanes) == 1
+
+
+def test_period2_is_after_the_end_date_so_todays_session_is_included():
+    # `_epoch` is midnight UTC and a US daily bar carries its session-open
+    # timestamp (13:30/14:30 UTC), so `period2 = end 00:00Z` always excludes the
+    # session that closed today. Coverage must not depend on the hour cron fires.
+    from datetime import datetime, time as clock, timezone
+    from urllib.parse import parse_qs, urlparse
+
+    transport, seen = responder(httpx.Response(200, text='{"chart":{}}'))
+    end = date(2026, 9, 5)
+    ChartClient(lanes=pool(transport)).fetch("AAPL", date(2026, 9, 1), end)
+
+    period2 = int(parse_qs(urlparse(str(seen[0].url)).query)["period2"][0])
+    end_midnight = int(
+        datetime.combine(end, clock.min, tzinfo=timezone.utc).timestamp()
+    )
+    assert period2 > end_midnight
+
+
+def test_a_symbol_is_escaped_into_the_url_path():
+    # An unescaped symbol is the concrete route to `httpx.InvalidURL`, which is
+    # not an `httpx.HTTPError` and so would escape `_request` and end the night.
+    transport, seen = responder(httpx.Response(200, text='{"chart":{}}'))
+    client = ChartClient(lanes=pool(transport))
+    client.fetch("A B/C", date(2026, 9, 1), date(2026, 9, 5))
+    assert "A%20B%2FC" in str(seen[0].url)
+    # A perfectly ordinary symbol is left alone.
+    client.fetch("BRK-B", date(2026, 9, 1), date(2026, 9, 5))
+    assert str(seen[1].url).count("BRK-B") == 1
