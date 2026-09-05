@@ -55,7 +55,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 
 ## Stack decisions
 
-- Python. Data: yfinance, Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
+- Python. Data: Yahoo Finance **called directly, never yfinance** — a payload stored from the
+  library is its DataFrame reshaping rather than the response, which breaks the content-hash
+  restatement detector. Then Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
 - Sentiment: VADER for a cheap baseline, FinBERT (ONNX via `onnxruntime`) for the real score.
   CPU only — no GPU, no CUDA. Never use an LLM to emit a sentiment number.
 - LLMs do narrative extraction (transcript summaries, guidance changes, risk-section flags) and

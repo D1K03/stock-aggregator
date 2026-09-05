@@ -109,9 +109,18 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    `security_symbol`, `security_sector`, `sector_node`, `peer_group`. Everything else needs
    securities to exist. The taxonomy is settled (yfinance, two levels, sector groups only for
    v1); what remains is choosing the list and handling the symbols that do not resolve.
-2. **Ingest** — yfinance prices and fundamentals into the bitemporal fact layer, Blob payload
-   writing, content-hash dedup. First real use of `cutoff_offset`. Settles where payloads land,
-   which `DESIGN.md` now records as open. Inherits `screener.fetch` and `screener.secrets`.
+2. **Ingest** — prices and fundamentals into the bitemporal fact layer, payload writing,
+   content-hash dedup. First real use of `cutoff_offset`. Settles where payloads land, which
+   `DESIGN.md` now records as open. Inherits `screener.secrets`, and `screener.fetch` for every
+   source but Yahoo: the crumb is only valid alongside the cookie issued with it, so the Yahoo
+   path holds one session for the run — `screener.universe.sources.yahoo` already does this and
+   the ingest client should extend that shape rather than start again.
+
+   **Not yfinance.** The library emits parsed DataFrames, so a stored payload would be its
+   reshaping rather than the response — which breaks the content-hash restatement detector and
+   leaves "did the API lie or did our parser?" unanswerable. Direct also returns profile,
+   statements, key statistics, earnings trend and recommendation trend in one `quoteSummary`
+   call. Reasoning in `DESIGN.md`.
 3. **Scoring** — metric computation, percentile within sector peer group, pillar aggregation
    with the coverage gate. No fallback walk in v1: every sector clears the peer floor, so
    `fallback_level` is recorded as sector throughout and the ladder stays unexercised until an
@@ -128,8 +137,18 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 - **Share-class symbols are lossy.** Wikipedia's `CWEN.A` becomes `CWEN-A`, which 404s at Yahoo.
   A handful of names will not resolve; handle it in the identity work rather than discovering it
   mid-ingest.
-- **Rate limiting must be designed in, not retrofitted.** Eight concurrent yfinance workers lost
-  43% of requests in 45 seconds. Sequential with backoff is the shape; budget ~0.8s per symbol.
+- **Rate limiting is a safeguard, not a known requirement.** The earlier figure here — eight
+  concurrent yfinance workers losing 43% of requests — was withdrawn in `DESIGN.md`: it varied
+  concurrency and request count at once and so was evidence for neither. What replaced it: 1,506
+  sequential direct `quoteSummary` requests completed in 182s, 0.121s each, 1,505 succeeding,
+  with per-block latency flat from first to last. Sequential with backoff is still the shape, and
+  a throttle is still worth building — but as a safeguard against conditions the measurement did
+  not cover, not against a limit anyone has hit.
+- **Three things that measurement does not establish**, and the ingest spec should settle: it ran
+  from a development machine rather than the VPS whose IP the nightly job will use; a night is
+  roughly double it, since prices need fetching too and 3,000 requests is untested; and at three
+  minutes the crumb never expired, so the refresh path never ran. Worth measuring from the box
+  before ingest is designed around the numbers above.
 
 ## Open parameters
 
