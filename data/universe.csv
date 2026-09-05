@@ -1,0 +1,1505 @@
+symbol,name,index_name,mic,currency,cik,yf_sector,yf_industry,gics_sector
+A,Agilent Technologies,sp500,XNYS,USD,0001090872,Healthcare,Diagnostics & Research,Health Care
+AA,Alcoa,sp400,XNYS,USD,0001675149,Basic Materials,Aluminum,Materials
+AAL,American Airlines Group,sp400,XNAS,USD,0000006201,Industrials,Airlines,Industrials
+AAMI,Acadian Asset Management Inc.,sp600,XNYS,USD,0001748824,Financial Services,Asset Management,Financials
+AAON,AAON,sp400,XNAS,USD,0000824142,Industrials,Building Products & Equipment,Industrials
+AAP,"Advance Auto Parts, Inc.",sp600,XNYS,USD,0001158449,Consumer Cyclical,Auto Parts,Consumer Discretionary
+AAPL,Apple Inc.,sp500,XNAS,USD,0000320193,Technology,Consumer Electronics,Information Technology
+AAT,American Assets Trust,sp600,XNYS,USD,0001500217,Real Estate,REIT - Diversified,Real Estate
+ABBV,AbbVie,sp500,XNYS,USD,0001551152,Healthcare,Drug Manufacturers - General,Health Care
+ABCB,Ameris Bancorp,sp600,XNYS,USD,0000351569,Financial Services,Banks - Regional,Financials
+ABG,Asbury Automotive Group,sp600,XNYS,USD,0001144980,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+ABM,"ABM Industries, Inc.",sp600,XNYS,USD,0000771497,Industrials,Specialty Business Services,Industrials
+ABNB,Airbnb,sp500,XNAS,USD,0001559720,Consumer Cyclical,Travel Services,Consumer Discretionary
+ABR,Arbor Realty Trust,sp600,XNYS,USD,0001253986,Real Estate,REIT - Mortgage,Financials
+ABT,Abbott Laboratories,sp500,XNYS,USD,0000001800,Healthcare,Medical Devices,Health Care
+ACA,"Arcosa, Inc.",sp600,XNYS,USD,0001739445,Industrials,Engineering & Construction,Industrials
+ACAD,Acadia Pharmaceuticals,sp600,XNAS,USD,0001070494,Healthcare,Biotechnology,Health Care
+ACGL,Arch Capital Group,sp500,XNAS,USD,0000947484,Financial Services,Insurance - Diversified,Financials
+ACHC,Acadia Healthcare,sp600,XNAS,USD,0001520697,Healthcare,Medical Care Facilities,Health Care
+ACI,Albertsons,sp400,XNYS,USD,0001646972,Consumer Defensive,Grocery Stores,Consumer Staples
+ACIW,ACI Worldwide,sp600,XNAS,USD,0000935036,Technology,Software - Infrastructure,Information Technology
+ACLS,"Axcelis Technologies, Inc.",sp600,XNAS,USD,0001113232,Technology,Semiconductor Equipment & Materials,Information Technology
+ACM,AECOM,sp400,XNYS,USD,0000868857,Industrials,Engineering & Construction,Industrials
+ACMR,"ACM Research, Inc.",sp600,XNAS,USD,0001680062,Technology,Semiconductor Equipment & Materials,Information Technology
+ACN,Accenture,sp500,XNYS,USD,0001467373,Technology,Information Technology Services,Information Technology
+ACT,"Enact Holdings, Inc.",sp600,XNAS,USD,0001823529,Financial Services,Insurance - Specialty,Financials
+ADAM,"Adamas Trust, Inc.",sp600,XNAS,USD,0001273685,Real Estate,REIT - Mortgage,Real Estate
+ADBE,Adobe Inc.,sp500,XNAS,USD,0000796343,Technology,Software - Application,Information Technology
+ADC,Agree Realty,sp400,XNYS,USD,0000917251,Real Estate,REIT - Retail,Real Estate
+ADEA,"Adeia, Inc.",sp600,XNAS,USD,0001803696,Technology,Software - Application,Information Technology
+ADI,Analog Devices,sp500,XNAS,USD,0000006281,Technology,Semiconductors,Information Technology
+ADIG,ADI Global Distribution,sp600,XNYS,USD,0002105139,Technology,Computer Hardware,Information Technology
+ADM,Archer Daniels Midland,sp500,XNYS,USD,0000007084,Consumer Defensive,Farm Products,Consumer Staples
+ADMA,"ADMA Biologics, Inc.",sp600,XNAS,USD,0001368514,Healthcare,Biotechnology,Health Care
+ADNT,Adient,sp600,XNYS,USD,0001670541,Consumer Cyclical,Auto Parts,Consumer Discretionary
+ADP,Automatic Data Processing,sp500,XNAS,USD,0000008670,Technology,Software - Application,Industrials
+ADSK,Autodesk,sp500,XNAS,USD,0000769397,Technology,Software - Application,Information Technology
+ADT,ADT Inc.,sp600,XNYS,USD,0001703056,Industrials,Security & Protection Services,Consumer Discretionary
+ADUS,Addus HomeCare Corp.,sp600,XNAS,USD,0001468328,Healthcare,Medical Care Facilities,Health Care
+AEE,Ameren,sp500,XNYS,USD,0001002910,Utilities,Utilities - Regulated Electric,Utilities
+AEIS,Advanced Energy,sp400,XNAS,USD,0000927003,Industrials,Electrical Equipment & Parts,Information Technology
+AEO,American Eagle Outfitters,sp600,XNYS,USD,0000919012,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+AEP,American Electric Power,sp500,XNAS,USD,0000004904,Utilities,Utilities - Regulated Electric,Utilities
+AES,AES Corporation,sp500,XNYS,USD,0000874761,Utilities,Utilities - Diversified,Utilities
+AESI,"Atlas Energy Solutions, Inc.",sp600,XNYS,USD,0001984060,Energy,Oil & Gas Equipment & Services,Energy
+AFG,American Financial Group,sp400,XNYS,USD,0001042046,Financial Services,Insurance - Property & Casualty,Financials
+AFL,Aflac,sp500,XNYS,USD,0000004977,Financial Services,Insurance - Life,Financials
+AGCO,AGCO,sp400,XNYS,USD,0000880266,Industrials,Farm & Heavy Construction Machinery,Industrials
+AGNT,"eXp World Holdings, Inc.",sp600,XNAS,USD,0001495932,Real Estate,Real Estate Services,Real Estate
+AGO,Assured Guaranty Ltd.,sp600,XNYS,USD,0001273813,Financial Services,Insurance - Specialty,Financials
+AGX,"Argan, Inc.",sp600,XNYS,USD,0000100591,Industrials,Engineering & Construction,Industrials
+AGYS,"Agilysys, Inc.",sp600,XNAS,USD,0000078749,Technology,Software - Application,Information Technology
+AHCO,AdaptHealth Corp.,sp600,XNAS,USD,0001725255,Healthcare,Medical Devices,Health Care
+AHR,American Healthcare REIT,sp400,XNYS,USD,0001632970,Real Estate,REIT - Healthcare Facilities,Real Estate
+AIG,American International Group,sp500,XNYS,USD,0000005272,Financial Services,Insurance - Diversified,Financials
+AIN,Albany International Corp.,sp600,XNYS,USD,0000819793,Consumer Cyclical,Textile Manufacturing,Industrials
+AIR,AAR Corp.,sp600,XNYS,USD,0000001750,Industrials,Aerospace & Defense,Industrials
+AIT,Applied Industrial Technologies,sp400,XNYS,USD,0000109563,Industrials,Industrial Distribution,Industrials
+AIZ,Assurant,sp500,XNYS,USD,0001267238,Financial Services,Insurance - Property & Casualty,Financials
+AJG,Arthur J. Gallagher & Co.,sp500,XNYS,USD,0000354190,Financial Services,Insurance Brokers,Financials
+AKAM,Akamai Technologies,sp500,XNAS,USD,0001086222,Technology,Software - Infrastructure,Information Technology
+AKR,Acadia Realty Trust,sp600,XNYS,USD,0000899629,Real Estate,REIT - Retail,Real Estate
+ALB,Albemarle Corporation,sp500,XNYS,USD,0000915913,Basic Materials,Specialty Chemicals,Materials
+ALG,Alamo Group,sp600,XNYS,USD,0000897077,Industrials,Farm & Heavy Construction Machinery,Industrials
+ALGM,Allegro MicroSystems,sp400,XNAS,USD,0000866291,Technology,Semiconductors,Information Technology
+ALGN,Align Technology,sp500,XNAS,USD,0001097149,Healthcare,Medical Instruments & Supplies,Health Care
+ALGT,Allegiant Travel Company,sp600,XNAS,USD,0001362468,Industrials,Airlines,Industrials
+ALHC,"Alignment Healthcare, Inc.",sp600,XNAS,USD,0001832466,Healthcare,Healthcare Plans,Health Care
+ALK,Alaska Air Group,sp400,XNYS,USD,0000766421,Industrials,Airlines,Industrials
+ALKS,Alkermes plc,sp600,XNAS,USD,0001520262,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+ALL,Allstate,sp500,XNYS,USD,0000899051,Financial Services,Insurance - Property & Casualty,Financials
+ALLE,Allegion,sp500,XNYS,USD,0001579241,Industrials,Security & Protection Services,Industrials
+ALLY,Ally Financial,sp400,XNYS,USD,0000040729,Financial Services,Credit Services,Financials
+ALRM,"Alarm.Com, Inc.",sp600,XNAS,USD,0001459200,Technology,Software - Application,Financials
+ALSN,Allison Transmission,sp400,XNYS,USD,0001411207,Consumer Cyclical,Auto Parts,Industrials
+ALV,Autoliv,sp400,XNYS,USD,0001034670,Consumer Cyclical,Auto Parts,Consumer Discretionary
+AM,Antero Midstream,sp400,XNYS,USD,0001623925,Energy,Oil & Gas Midstream,Energy
+AMAT,Applied Materials,sp500,XNAS,USD,0000006951,Technology,Semiconductor Equipment & Materials,Information Technology
+AMCR,Amcor,sp500,XNYS,USD,0001748790,Consumer Cyclical,Packaging & Containers,Materials
+AMD,Advanced Micro Devices,sp500,XNAS,USD,0000002488,Technology,Semiconductors,Information Technology
+AME,Ametek,sp500,XNYS,USD,0001037868,Industrials,Specialty Industrial Machinery,Industrials
+AMG,Affiliated Managers Group,sp400,XNYS,USD,0001004434,Financial Services,Asset Management,Financials
+AMGN,Amgen,sp500,XNAS,USD,0000318154,Healthcare,Drug Manufacturers - General,Health Care
+AMH,American Homes 4 Rent,sp400,XNYS,USD,0001562401,Real Estate,REIT - Residential,Real Estate
+AMKR,Amkor Technology,sp400,XNAS,USD,0001047127,Technology,Semiconductor Equipment & Materials,Information Technology
+AMN,"Amn Healthcare Services, Inc.",sp600,XNYS,USD,0001142750,Healthcare,Medical Care Facilities,Health Care
+AMP,Ameriprise Financial,sp500,XNYS,USD,0000820027,Financial Services,Asset Management,Financials
+AMPH,"Amphstar Pharmaceuticals, Inc.",sp600,XNAS,USD,0001297184,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+AMR,"Alpha Metallurgical Resources, Inc.",sp600,XNYS,USD,0001704715,Basic Materials,Coking Coal,Materials
+AMRX,Amneal Pharmaceuticals,sp600,XNAS,USD,0001723128,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+AMSF,"Amerisafe, Inc.",sp600,XNAS,USD,0001018979,Financial Services,Insurance - Specialty,Financials
+AMT,American Tower,sp500,XNYS,USD,0001053507,Real Estate,REIT - Specialty,Real Estate
+AMTM,Amentum,sp600,XNYS,USD,0002011286,Industrials,Specialty Business Services,Industrials
+AMZN,Amazon,sp500,XNAS,USD,0001018724,Consumer Cyclical,Internet Retail,Consumer Discretionary
+AN,AutoNation,sp400,XNYS,USD,0000350698,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+ANDE,"The Andersons, Inc.",sp600,XNAS,USD,0000821026,Consumer Defensive,Food Distribution,Consumer Staples
+ANET,Arista Networks,sp500,XNYS,USD,0001596532,Technology,Computer Hardware,Information Technology
+ANF,Abercrombie & Fitch,sp400,XNYS,USD,0001018840,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+ANIP,"ANI Pharmaceuticals, Inc.",sp600,XNAS,USD,0001023024,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+AON,Aon plc,sp500,XNYS,USD,0000315293,Financial Services,Insurance Brokers,Financials
+AORT,Artivion,sp600,XNYS,USD,0000784199,Healthcare,Medical Devices,Health Care
+AOS,A. O. Smith,sp500,XNYS,USD,0000091142,Industrials,Specialty Industrial Machinery,Industrials
+AOSL,"Alpha and Omega Semiconductor, Ltd.",sp600,XNAS,USD,0001387467,Technology,Semiconductors,Information Technology
+APA,APA Corporation,sp500,XNAS,USD,0001841666,Energy,Oil & Gas E&P,Energy
+APAM,"Artisan Partners Asset Management, Inc.",sp600,XNYS,USD,0001517302,Financial Services,Asset Management,Financials
+APD,Air Products,sp500,XNYS,USD,0000002969,Basic Materials,Specialty Chemicals,Materials
+APG,APi Group,sp400,XNYS,USD,0001796209,Industrials,Engineering & Construction,Industrials
+APH,Amphenol,sp500,XNYS,USD,0000820313,Technology,Electronic Components,Information Technology
+APLE,"Apple Hospitality REIT, Inc.",sp600,XNYS,USD,0001418121,Real Estate,REIT - Hotel & Motel,Real Estate
+APO,Apollo Global Management,sp500,XNYS,USD,0001858681,Financial Services,Asset Management,Financials
+APOG,"Apogee Enterprises, Inc.",sp600,XNAS,USD,0000006845,Industrials,Building Products & Equipment,Industrials
+APP,AppLovin,sp500,XNAS,USD,0001751008,Communication Services,Advertising Agencies,Communication Services
+APPF,AppFolio,sp400,XNAS,USD,0001433195,Technology,Software - Application,Information Technology
+APTV,Aptiv,sp500,XNYS,USD,0001521332,Consumer Cyclical,Auto Parts,Consumer Discretionary
+AR,Antero Resources,sp400,XNYS,USD,0001433270,Energy,Oil & Gas E&P,Energy
+ARCB,ArcBest Corp.,sp600,XNAS,USD,0000894405,Industrials,Trucking,Industrials
+ARE,Alexandria Real Estate Equities,sp500,XNYS,USD,0001035443,Real Estate,REIT - Office,Real Estate
+ARES,Ares Management,sp500,XNYS,USD,0001176948,Financial Services,Asset Management,Financials
+ARLO,Arlo Technologies,sp600,XNYS,USD,0001736946,Industrials,Building Products & Equipment,Information Technology
+ARMK,Aramark,sp400,XNYS,USD,0001584509,Industrials,Specialty Business Services,Consumer Discretionary
+AROC,"Archrock, Inc.",sp600,XNYS,USD,0001389050,Energy,Oil & Gas Equipment & Services,Energy
+ARR,Armour Residential REIT,sp600,XNYS,USD,0001428205,Real Estate,REIT - Mortgage,Real Estate
+ARW,Arrow Electronics,sp400,XNYS,USD,0000007536,Technology,Electronics & Computer Distribution,Information Technology
+ARWR,Arrowhead Pharmaceuticals,sp400,XNAS,USD,0000879407,Healthcare,Biotechnology,Health Care
+ASB,Associated Bank,sp400,XNYS,USD,0000007789,Financial Services,Banks - Regional,Financials
+ASH,Ashland Global,sp400,XNYS,USD,0001674862,Basic Materials,Specialty Chemicals,Materials
+ASO,Academy Sports + Outdoors,sp600,XNAS,USD,0001817358,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+ASTE,"Astec Industries, Inc.",sp600,XNAS,USD,0000792987,Industrials,Farm & Heavy Construction Machinery,Industrials
+ASTH,"Astrana Health, Inc.",sp600,XNAS,USD,0001083446,Healthcare,Medical Care Facilities,Health Care
+ATEN,"A10 Networks, Inc.",sp600,XNYS,USD,0001580808,Technology,Software - Infrastructure,Information Technology
+ATI,ATI Inc.,sp400,XNYS,USD,0001018963,Industrials,Metal Fabrication,Industrials
+ATMU,Atmus Filtration Technologies Inc.,sp600,XNYS,USD,0001921963,Consumer Cyclical,Auto Parts,Industrials
+ATO,Atmos Energy,sp500,XNYS,USD,0000731802,Utilities,Utilities - Regulated Gas,Utilities
+ATR,AptarGroup,sp400,XNYS,USD,0000896622,Healthcare,Medical Instruments & Supplies,Materials
+AUB,"Atlantic Union Bankshares, Corp.",sp600,XNYS,USD,0000883948,Financial Services,Banks - Regional,Financials
+AVA,Avista Corporation,sp600,XNYS,USD,0000104918,Utilities,Utilities - Diversified,Utilities
+AVAV,AeroVironment,sp400,XNAS,USD,0001368622,Industrials,Aerospace & Defense,Industrials
+AVGO,Broadcom,sp500,XNAS,USD,0001730168,Technology,Semiconductors,Information Technology
+AVNT,Avient,sp400,XNYS,USD,0001122976,Basic Materials,Specialty Chemicals,Materials
+AVT,Avnet,sp400,XNAS,USD,0000008858,Technology,Electronics & Computer Distribution,Information Technology
+AVTR,Avantor,sp400,XNYS,USD,0001722482,Healthcare,Medical Instruments & Supplies,Health Care
+AVY,Avery Dennison,sp500,XNYS,USD,0000008818,Consumer Cyclical,Packaging & Containers,Materials
+AWI,"Armstrong World Industries, Inc.",sp600,XNYS,USD,0000007431,Industrials,Building Products & Equipment,Industrials
+AWK,American Water Works,sp500,XNYS,USD,0001410636,Utilities,Utilities - Regulated Water,Utilities
+AWR,American States Water Company,sp600,XNYS,USD,0001056903,Utilities,Utilities - Regulated Water,Utilities
+AX,"Axos Financial, Inc.",sp600,XNYS,USD,0001299709,Financial Services,Banks - Regional,Financials
+AXON,Axon Enterprise,sp500,XNAS,USD,0001069183,Industrials,Aerospace & Defense,Industrials
+AXP,American Express,sp500,XNYS,USD,0000004962,Financial Services,Credit Services,Financials
+AXTA,Axalta,sp400,XNYS,USD,0001616862,Basic Materials,Specialty Chemicals,Materials
+AYI,Acuity Brands,sp400,XNYS,USD,0001144215,Industrials,Electrical Equipment & Parts,Industrials
+AZO,AutoZone,sp500,XNYS,USD,0000866787,Consumer Cyclical,Auto Parts,Consumer Discretionary
+AZTA,"Azenta, Inc.",sp600,XNAS,USD,0000933974,Healthcare,Medical Instruments & Supplies,Health Care
+AZZ,"AZZ, Inc.",sp600,XNYS,USD,0000008947,Industrials,Specialty Business Services,Industrials
+BA,Boeing,sp500,XNYS,USD,0000012927,Industrials,Aerospace & Defense,Industrials
+BAC,Bank of America,sp500,XNYS,USD,0000070858,Financial Services,Banks - Diversified,Financials
+BAH,Booz Allen Hamilton,sp400,XNYS,USD,0001443646,Industrials,Consulting Services,Industrials
+BALL,Ball Corporation,sp500,XNYS,USD,0000009389,Consumer Cyclical,Packaging & Containers,Materials
+BANC,"Banc Of California, Inc.",sp600,XNYS,USD,0001169770,Financial Services,Banks - Regional,Financials
+BANF,Bancfirst Corp,sp600,XNAS,USD,0000760498,Financial Services,Banks - Regional,Financials
+BANR,Banner Corporation,sp600,XNAS,USD,0000946673,Financial Services,Banks - Regional,Financials
+BAX,Baxter International,sp500,XNYS,USD,0000010456,Healthcare,Medical Instruments & Supplies,Health Care
+BBT,Beacon Financial Corp.,sp600,XNYS,USD,0001108134,Financial Services,Banks - Regional,Financials
+BBWI,"Bath & Body Works, Inc.",sp400,XNYS,USD,0000701985,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+BBY,Best Buy,sp500,XNYS,USD,0000764478,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+BC,Brunswick,sp400,XNYS,USD,0000014930,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+BCC,Boise Cascade,sp600,XNYS,USD,0001328581,Basic Materials,Lumber & Wood Production,Industrials
+BCO,Brink's,sp400,XNYS,USD,0000078890,Industrials,Security & Protection Services,Industrials
+BCPC,Balchem Corporation,sp600,XNAS,USD,0000009326,Basic Materials,Specialty Chemicals,Materials
+BDC,Belden Inc.,sp400,XNYS,USD,0000913142,Technology,Communication Equipment,Information Technology
+BDX,Becton Dickinson,sp500,XNYS,USD,0000010795,Healthcare,Medical Instruments & Supplies,Health Care
+BEN,Franklin Resources,sp500,XNYS,USD,0000038777,Financial Services,Asset Management,Financials
+BF-B,Brown–Forman,sp500,XNYS,USD,0000014693,Consumer Defensive,Beverages - Wineries & Distilleries,Consumer Staples
+BFAM,Bright Horizons Family Solutions Inc.,sp600,XNYS,USD,0001437578,Consumer Cyclical,Personal Services,Consumer Discretionary
+BFH,"Bread Financial Holdings, Inc.",sp600,XNYS,USD,0001101215,Financial Services,Credit Services,Financials
+BFS,"Saul Centers, Inc.",sp600,XNYS,USD,0000907254,Real Estate,REIT - Retail,Real Estate
+BG,Bunge Global,sp500,XNYS,USD,0001996862,Consumer Defensive,Farm Products,Consumer Staples
+BGC,"BGC Group, Inc.",sp600,XNAS,USD,0001094831,Financial Services,Capital Markets,Financials
+BHE,"Benchmark Electronics, Inc.",sp600,XNYS,USD,0000863436,Technology,Electronic Components,Information Technology
+BHF,Brighthouse Financial,sp400,XNAS,USD,0001685040,Financial Services,Insurance - Life,Financials
+BIIB,Biogen,sp500,XNAS,USD,0000875045,Healthcare,Drug Manufacturers - General,Health Care
+BILL,Bill Holdings,sp400,XNYS,USD,0001786352,Technology,Software - Application,Information Technology
+BIO,Bio-Rad Laboratories,sp400,XNYS,USD,0000012208,Healthcare,Medical Devices,Health Care
+BJ,BJ's Wholesale Club,sp400,XNYS,USD,0001531152,Consumer Defensive,Discount Stores,Consumer Staples
+BJRI,"BJ's Restaurants, Inc.",sp600,XNAS,USD,0001013488,Consumer Cyclical,Restaurants,Consumer Discretionary
+BKE,"The Buckle, Inc.",sp600,XNYS,USD,0000885245,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+BKH,Black Hills Corporation,sp400,XNYS,USD,0001130464,Utilities,Utilities - Regulated Gas,Utilities
+BKNG,Booking Holdings,sp500,XNAS,USD,0001075531,Consumer Cyclical,Travel Services,Consumer Discretionary
+BKR,Baker Hughes,sp500,XNAS,USD,0001701605,Energy,Oil & Gas Equipment & Services,Energy
+BKU,"BankUnited, Inc.",sp600,XNYS,USD,0001504008,Financial Services,Banks - Regional,Financials
+BL,"BlackLine Systems, Inc.",sp600,XNAS,USD,0001666134,Technology,Software - Application,Information Technology
+BLDR,Builders FirstSource,sp500,XNYS,USD,0001316835,Industrials,Building Products & Equipment,Industrials
+BLFS,"BioLife Solutions, Inc.",sp600,XNAS,USD,0000834365,Healthcare,Medical Instruments & Supplies,Health Care
+BLK,BlackRock,sp500,XNYS,USD,0002012383,Financial Services,Asset Management,Financials
+BLKB,Blackbaud,sp600,XNAS,USD,0001280058,Technology,Software - Application,Information Technology
+BMI,"Badger Meter, Inc.",sp600,XNYS,USD,0000009092,Technology,Scientific & Technical Instruments,Information Technology
+BMRN,BioMarin Pharmaceutical,sp400,XNAS,USD,0001048477,Healthcare,Biotechnology,Health Care
+BMY,Bristol Myers Squibb,sp500,XNYS,USD,0000014272,Healthcare,Drug Manufacturers - General,Health Care
+BNL,"Broadstone Net Lease, Inc.",sp600,XNYS,USD,0001424182,Real Estate,REIT - Diversified,Real Estate
+BNY,BNY Mellon,sp500,XNYS,USD,0001390777,Financial Services,Banks - Diversified,Financials
+BOH,Bank of Hawaii,sp600,XNYS,USD,0000046195,Financial Services,Banks - Regional,Financials
+BOOT,"Boot Barn Holdings, Inc.",sp600,XNYS,USD,0001610250,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+BOX,"Box, Inc.",sp600,XNYS,USD,0001372612,Technology,Software - Infrastructure,Information Technology
+BR,Broadridge Financial Solutions,sp500,XNYS,USD,0001383312,Technology,Information Technology Services,Industrials
+BRC,Brady Corporation,sp600,XNYS,USD,0000746598,Industrials,Security & Protection Services,Industrials
+BRK-B,Berkshire Hathaway,sp500,XNYS,USD,0001067983,Financial Services,Insurance - Diversified,Financials
+BRKR,Bruker,sp400,XNAS,USD,0001109354,Healthcare,Medical Devices,Health Care
+BRO,Brown & Brown,sp500,XNYS,USD,0000079282,Financial Services,Insurance Brokers,Financials
+BROS,Dutch Bros Inc.,sp400,XNYS,USD,0001866581,Consumer Cyclical,Restaurants,Consumer Discretionary
+BRX,Brixmor Property Group,sp400,XNYS,USD,0001581068,Real Estate,REIT - Retail,Real Estate
+BSX,Boston Scientific,sp500,XNYS,USD,0000885725,Healthcare,Medical Devices,Health Care
+BSY,Bentley Systems,sp400,XNAS,USD,0001031308,Technology,Software - Application,Information Technology
+BTSG,BrightSpring Health Services,sp400,XNAS,USD,0001865782,Healthcare,Health Information Services,Health Care
+BTU,"Peabody Energy, Inc.",sp600,XNYS,USD,0001064728,Energy,Thermal Coal,Energy
+BURL,Burlington Stores,sp400,XNYS,USD,0001579298,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+BWA,BorgWarner,sp400,XNYS,USD,0000908255,Consumer Cyclical,Auto Parts,Consumer Discretionary
+BWXT,BWX Technologies,sp400,XNYS,USD,0001486957,Industrials,Aerospace & Defense,Industrials
+BX,Blackstone Inc.,sp500,XNYS,USD,0001393818,Financial Services,Asset Management,Financials
+BXMT,"Blackstone Mortgage Trust, Inc.",sp600,XNYS,USD,0001061630,Real Estate,REIT - Mortgage,Financials
+BXP,"BXP, Inc.",sp500,XNYS,USD,0001037540,Real Estate,REIT - Office,Real Estate
+BYD,Boyd Gaming,sp400,XNYS,USD,0000906553,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+C,Citigroup,sp500,XNYS,USD,0000831001,Financial Services,Banks - Diversified,Financials
+CACC,Credit Acceptance,sp600,XNAS,USD,0000885550,Financial Services,Credit Services,Financials
+CACI,CACI International,sp400,XNYS,USD,0000016058,Technology,Information Technology Services,Industrials
+CAG,Conagra Brands,sp600,XNYS,USD,0000023217,Consumer Defensive,Packaged Foods,Consumer Staples
+CAH,Cardinal Health,sp500,XNYS,USD,0000721371,Healthcare,Medical Distribution,Health Care
+CAKE,"The Cheesecake Factory, Inc.",sp600,XNAS,USD,0000887596,Consumer Cyclical,Restaurants,Consumer Discretionary
+CALM,"Cal-Maine Foods, Inc.",sp600,XNAS,USD,0000016160,Consumer Defensive,Farm Products,Consumer Staples
+CALX,Calix,sp600,XNYS,USD,0001406666,Technology,Software - Infrastructure,Information Technology
+CALY,Callaway Golf Company,sp600,XNYS,USD,0000837465,Consumer Cyclical,Leisure,Consumer Discretionary
+CAR,Avis Budget Group,sp400,XNAS,USD,0000723612,Industrials,Rental & Leasing Services,Industrials
+CARG,CarGurus,sp600,XNAS,USD,0001494259,Communication Services,Internet Content & Information,Communication Services
+CARR,Carrier Global,sp500,XNYS,USD,0001783180,Industrials,Building Products & Equipment,Industrials
+CART,Maplebear Inc.,sp400,XNAS,USD,0001579091,Consumer Cyclical,Internet Retail,Consumer Staples
+CASH,"Pathward Financial, Inc.",sp600,XNAS,USD,0000907471,Financial Services,Banks - Regional,Financials
+CASY,Casey's,sp500,XNAS,USD,0000726958,Consumer Cyclical,Specialty Retail,Consumer Staples
+CAT,Caterpillar Inc.,sp500,XNYS,USD,0000018230,Industrials,Farm & Heavy Construction Machinery,Industrials
+CATY,Cathay General Bancorp,sp600,XNAS,USD,0000861842,Financial Services,Banks - Regional,Financials
+CAVA,Cava Group,sp400,XNYS,USD,0001639438,Consumer Cyclical,Restaurants,Consumer Discretionary
+CB,Chubb Limited,sp500,XNYS,USD,0000896159,Financial Services,Insurance - Property & Casualty,Financials
+CBOE,Cboe Global Markets,sp500,BATS,USD,0001374310,Financial Services,Financial Data & Stock Exchanges,Financials
+CBRE,CBRE Group,sp500,XNYS,USD,0001138118,Real Estate,Real Estate Services,Real Estate
+CBRL,Cracker Barrel,sp600,XNAS,USD,0001067294,Consumer Cyclical,Restaurants,Consumer Discretionary
+CBSH,Commerce Bancshares,sp400,XNAS,USD,0000022356,Financial Services,Banks - Regional,Financials
+CBT,Cabot Corp,sp400,XNYS,USD,0000016040,Basic Materials,Specialty Chemicals,Materials
+CBU,"Community Bank System, Inc.",sp600,XNYS,USD,0000723188,Financial Services,Banks - Regional,Financials
+CC,Chemours,sp600,XNYS,USD,0001627223,Basic Materials,Specialty Chemicals,Materials
+CCI,Crown Castle,sp500,XNYS,USD,0001051470,Real Estate,REIT - Specialty,Real Estate
+CCK,Crown Holdings,sp400,XNYS,USD,0001219601,Consumer Cyclical,Packaging & Containers,Materials
+CCL,Carnival Corporation,sp500,XNYS,USD,0000815097,Consumer Cyclical,Travel Services,Consumer Discretionary
+CCOI,"Cogent Communications Holdings, Inc.",sp600,XNAS,USD,0001158324,Communication Services,Telecom Services,Communication Services
+CCS,"Century Communities, Inc.",sp600,XNYS,USD,0001576940,Real Estate,Real Estate - Development,Consumer Discretionary
+CDE,Coeur Mining,sp400,XNYS,USD,0000215466,Basic Materials,Gold,Materials
+CDNS,Cadence Design Systems,sp500,XNAS,USD,0000813672,Technology,Software - Application,Information Technology
+CDP,COPT Defense Properties,sp400,XNYS,USD,0000860546,Real Estate,REIT - Office,Real Estate
+CDW,CDW Corporation,sp500,XNAS,USD,0001402057,Technology,Information Technology Services,Information Technology
+CE,Celanese,sp600,XNYS,USD,0001306830,Basic Materials,Chemicals,Materials
+CEG,Constellation Energy,sp500,XNAS,USD,0001868275,Utilities,Utilities - Independent Power Producers,Utilities
+CELH,Celsius Holdings,sp400,XNAS,USD,0001341766,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+CENT,Central Garden & Pet Company,sp600,XNAS,USD,0000887733,Consumer Defensive,Packaged Foods,Consumer Staples
+CENTA,Central Garden & Pet Company (Class A),sp600,XNAS,USD,0000887733,Consumer Defensive,Packaged Foods,Consumer Staples
+CENX,Century Aluminum Company,sp600,XNAS,USD,0000949157,Basic Materials,Aluminum,Materials
+CERT,"Certara, Inc.",sp600,XNAS,USD,0001827090,Healthcare,Health Information Services,Health Care
+CF,CF Industries,sp500,XNYS,USD,0001324404,Basic Materials,Agricultural Inputs,Materials
+CFFN,Capitol Federal Savings Bank,sp600,XNAS,USD,0001490906,Financial Services,Banks - Regional,Financials
+CFG,Citizens Financial Group,sp500,XNYS,USD,0000759944,Financial Services,Banks - Regional,Financials
+CFR,Frost Bank,sp400,XNYS,USD,0000039263,Financial Services,Banks - Regional,Financials
+CG,Carlyle Group (The),sp400,XNAS,USD,0001527166,Financial Services,Asset Management,Financials
+CGNX,Cognex,sp400,XNAS,USD,0000851205,Technology,Scientific & Technical Instruments,Information Technology
+CHCO,City Holding Company,sp600,XNAS,USD,0000726854,Financial Services,Banks - Regional,Financials
+CHD,Church & Dwight,sp500,XNYS,USD,0000313927,Consumer Defensive,Household & Personal Products,Consumer Staples
+CHDN,Churchill Downs Inc.,sp400,XNAS,USD,0000020212,Consumer Cyclical,Gambling,Consumer Discretionary
+CHE,Chemed Corp.,sp400,XNYS,USD,0000019584,Healthcare,Medical Care Facilities,Health Care
+CHEF,"Chefs' Warehouse, Inc.",sp600,XNAS,USD,0001517175,Consumer Defensive,Food Distribution,Consumer Staples
+CHH,Choice Hotels,sp400,XNYS,USD,0001046311,Consumer Cyclical,Lodging,Consumer Discretionary
+CHRD,Chord Energy,sp400,XNAS,USD,0001486159,Energy,Oil & Gas E&P,Energy
+CHRW,C.H. Robinson,sp500,XNAS,USD,0001043277,Industrials,Integrated Freight & Logistics,Industrials
+CHTR,Charter Communications,sp500,XNAS,USD,0001091667,Communication Services,Telecom Services,Communication Services
+CHWY,Chewy,sp400,XNYS,USD,0001766502,Consumer Cyclical,Internet Retail,Consumer Discretionary
+CI,Cigna,sp500,XNYS,USD,0001739940,Healthcare,Healthcare Plans,Health Care
+CIEN,Ciena,sp500,XNYS,USD,0000936395,Technology,Communication Equipment,Information Technology
+CINF,Cincinnati Financial,sp500,XNAS,USD,0000020286,Financial Services,Insurance - Property & Casualty,Financials
+CL,Colgate-Palmolive,sp500,XNYS,USD,0000021665,Consumer Defensive,Household & Personal Products,Consumer Staples
+CLF,Cleveland-Cliffs,sp400,XNYS,USD,0000764065,Basic Materials,Steel,Materials
+CLH,Clean Harbors,sp400,XNYS,USD,0000822818,Industrials,Waste Management,Industrials
+CLSK,"CleanSpark, Inc.",sp600,XNAS,USD,0000827876,Financial Services,Capital Markets,Information Technology
+CLX,Clorox,sp500,XNYS,USD,0000021076,Consumer Defensive,Household & Personal Products,Consumer Staples
+CMC,Commercial Metals,sp400,XNYS,USD,0000022444,Industrials,Metal Fabrication,Materials
+CMCSA,Comcast,sp500,XNAS,USD,0001166691,Communication Services,Telecom Services,Communication Services
+CME,CME Group,sp500,XNAS,USD,0001156375,Financial Services,Financial Data & Stock Exchanges,Financials
+CMG,Chipotle Mexican Grill,sp500,XNYS,USD,0001058090,Consumer Cyclical,Restaurants,Consumer Discretionary
+CMI,Cummins,sp500,XNYS,USD,0000026172,Industrials,Specialty Industrial Machinery,Industrials
+CMS,CMS Energy,sp500,XNYS,USD,0000811156,Utilities,Utilities - Regulated Electric,Utilities
+CNC,Centene Corporation,sp500,XNYS,USD,0001071739,Healthcare,Healthcare Plans,Health Care
+CNH,CNH Industrial,sp400,XNYS,USD,0001567094,Industrials,Farm & Heavy Construction Machinery,Industrials
+CNK,"Cinemark Holdings, Inc.",sp600,XNYS,USD,0001385280,Communication Services,Entertainment,Communication Services
+CNM,Core & Main,sp400,XNYS,USD,0001856525,Industrials,Industrial Distribution,Industrials
+CNMD,CONMED Corporation,sp600,XNYS,USD,0000816956,Healthcare,Medical Devices,Health Care
+CNO,CNO Financial Group,sp400,XNYS,USD,0001224608,Financial Services,Insurance - Life,Financials
+CNP,CenterPoint Energy,sp500,XNYS,USD,0001130310,Utilities,Utilities - Regulated Electric,Utilities
+CNR,"Core Natural Resources, Inc.",sp600,XNYS,USD,0001710366,Energy,Thermal Coal,Energy
+CNS,"Cohen & Steers, Inc.",sp600,XNYS,USD,0001284812,Financial Services,Asset Management,Financials
+CNX,CNX Resources,sp400,XNYS,USD,0001070412,Energy,Oil & Gas E&P,Energy
+CNXC,Concentrix,sp600,XNAS,USD,0001803599,Technology,Information Technology Services,Industrials
+CNXN,"PC Connection, Inc.",sp600,XNAS,USD,0001050377,Technology,Electronics & Computer Distribution,Information Technology
+COCO,The Vita Coco Company,sp600,XNAS,USD,0001482981,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+COF,Capital One,sp500,XNYS,USD,0000927628,Financial Services,Credit Services,Financials
+COHR,Coherent Corp.,sp500,XNYS,USD,0000820318,Technology,Scientific & Technical Instruments,Information Technology
+COHU,"Cohu, Inc.",sp600,XNAS,USD,0000021535,Technology,Semiconductor Equipment & Materials,Information Technology
+COIN,Coinbase,sp500,XNAS,USD,0001679788,Financial Services,Financial Data & Stock Exchanges,Financials
+COKE,Coca-Cola Consolidated,sp400,XNAS,USD,0000317540,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+COLB,Columbia Banking System,sp400,XNAS,USD,0000887343,Financial Services,Banks - Regional,Financials
+COLL,"Collegium Pharmaceutical, Inc.",sp600,XNAS,USD,0001267565,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+COLM,Columbia Sportswear,sp400,XNAS,USD,0001050797,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+CON,"Concentra Group Holdings Parent, Inc.",sp600,XNYS,USD,0002014596,Healthcare,Medical Care Facilities,Health Care
+COO,Cooper Companies (The),sp500,XNAS,USD,0000711404,Healthcare,Medical Instruments & Supplies,Health Care
+COP,ConocoPhillips,sp500,XNYS,USD,0001163165,Energy,Oil & Gas E&P,Energy
+COR,Cencora,sp500,XNYS,USD,0001140859,Healthcare,Medical Distribution,Health Care
+CORT,Corcept Therapeutics Incorporated,sp600,XNAS,USD,0001088856,Healthcare,Biotechnology,Health Care
+COST,Costco,sp500,XNAS,USD,0000909832,Consumer Defensive,Discount Stores,Consumer Staples
+COTY,Coty,sp600,XNYS,USD,0001024305,Consumer Defensive,Household & Personal Products,Consumer Staples
+CPAY,Corpay,sp500,XNYS,USD,0001175454,Technology,Software - Infrastructure,Financials
+CPB,The Campbell's Company,sp600,XNAS,USD,0000016732,Consumer Defensive,Packaged Foods,Consumer Staples
+CPF,Central Pacific Financial Corp.,sp600,XNYS,USD,0000701347,Financial Services,Banks - Regional,Financials
+CPK,Chesapeake Utilities Corp.,sp600,XNYS,USD,0000019745,Utilities,Utilities - Regulated Gas,Utilities
+CPRI,Capri Holdings,sp400,XNYS,USD,0001530721,Consumer Cyclical,Luxury Goods,Consumer Discretionary
+CPRT,Copart,sp500,XNAS,USD,0000900075,Industrials,Specialty Business Services,Industrials
+CPT,Camden Property Trust,sp500,XNYS,USD,0000906345,Real Estate,REIT - Residential,Real Estate
+CR,Crane,sp400,XNYS,USD,0001944013,Industrials,Specialty Industrial Machinery,Industrials
+CRBG,Corebridge Financial,sp400,XNYS,USD,0001889539,Financial Services,Asset Management,Financials
+CRC,California Resources Corporation,sp600,XNYS,USD,0001609253,Energy,Oil & Gas E&P,Energy
+CRGY,Crescent Energy Company,sp600,XNYS,USD,0001866175,Energy,Oil & Gas E&P,Energy
+CRH,CRH plc,sp500,XNYS,USD,0000849395,Basic Materials,Building Materials,Materials
+CRI,"Carter's, Inc.",sp600,XNYS,USD,0001060822,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+CRK,"Comstock Resources, Inc.",sp600,XNYS,USD,0000023194,Energy,Oil & Gas E&P,Energy
+CRL,Charles River Laboratories,sp500,XNYS,USD,0001100682,Healthcare,Diagnostics & Research,Health Care
+CRM,Salesforce,sp500,XNYS,USD,0001108524,Technology,Software - Application,Information Technology
+CROX,Crocs,sp400,XNAS,USD,0001334036,Consumer Cyclical,Footwear & Accessories,Consumer Discretionary
+CRS,Carpenter Technology,sp400,XNYS,USD,0000017843,Industrials,Metal Fabrication,Industrials
+CRSR,Corsair Gaming,sp600,XNAS,USD,0001743759,Technology,Computer Hardware,Information Technology
+CRUS,Cirrus Logic,sp400,XNAS,USD,0000772406,Technology,Semiconductors,Information Technology
+CRVL,CorVel Corporation,sp600,XNAS,USD,0000874866,Financial Services,Insurance Brokers,Health Care
+CRWD,CrowdStrike,sp500,XNAS,USD,0001535527,Technology,Software - Infrastructure,Information Technology
+CSCO,Cisco,sp500,XNAS,USD,0000858877,Technology,Communication Equipment,Information Technology
+CSGP,CoStar Group,sp500,XNAS,USD,0001057352,Real Estate,Real Estate Services,Real Estate
+CSL,Carlisle Companies,sp400,XNYS,USD,0000790051,Industrials,Building Products & Equipment,Industrials
+CSR,Centerspace Trust,sp600,XNYS,USD,0000798359,Real Estate,REIT - Residential,Real Estate
+CSW,"CSW Industrials, Inc.",sp600,XNYS,USD,0001624794,Industrials,Specialty Industrial Machinery,Industrials
+CSX,CSX Corporation,sp500,XNAS,USD,0000277948,Industrials,Railroads,Industrials
+CTAS,Cintas,sp500,XNAS,USD,0000723254,Industrials,Specialty Business Services,Industrials
+CTRE,CareTrust REIT,sp400,XNYS,USD,0001590717,Real Estate,REIT - Healthcare Facilities,Real Estate
+CTS,CTS Corporation,sp600,XNYS,USD,0000026058,Technology,Electronic Components,Information Technology
+CTSH,Cognizant,sp500,XNAS,USD,0001058290,Technology,Information Technology Services,Information Technology
+CTVA,Corteva,sp500,XNYS,USD,0001755672,Basic Materials,Agricultural Inputs,Materials
+CUBE,CubeSmart,sp400,XNYS,USD,0001298675,Real Estate,REIT - Industrial,Real Estate
+CUBI,"Customers Bancorp, Inc.",sp600,XNYS,USD,0001488813,Financial Services,Banks - Regional,Financials
+CURB,Curbline Properties Corp.,sp600,XNYS,USD,0002027317,Real Estate,REIT - Retail,Real Estate
+CUZ,Cousins Properties,sp400,XNYS,USD,0000025232,Real Estate,REIT - Office,Real Estate
+CVBF,CVB Financial Corp.,sp600,XNAS,USD,0000354647,Financial Services,Banks - Regional,Financials
+CVCO,"Cavco Industries, Inc.",sp600,XNAS,USD,0000278166,Consumer Cyclical,Residential Construction,Consumer Discretionary
+CVI,"CVR Energy, Inc.",sp600,XNYS,USD,0001376139,Energy,Oil & Gas Refining & Marketing,Energy
+CVLT,CommVault Systems,sp400,XNAS,USD,0001169561,Technology,Software - Application,Information Technology
+CVNA,Carvana,sp500,XNYS,USD,0001690820,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+CVS,CVS Health,sp500,XNYS,USD,0000064803,Healthcare,Healthcare Plans,Health Care
+CVSA,Covista Inc.,sp600,XNYS,USD,0000730464,Consumer Defensive,Education & Training Services,Consumer Discretionary
+CVX,Chevron Corporation,sp500,XNYS,USD,0000093410,Energy,Oil & Gas Integrated,Energy
+CW,Curtiss-Wright,sp400,XNYS,USD,0000026324,Industrials,Aerospace & Defense,Industrials
+CWEN,"Clearway Energy, Inc. (Class C)",sp600,XNYS,USD,0001567683,Utilities,Utilities - Renewable,Utilities
+CWK,Cushman & Wakefield plc,sp600,XNYS,USD,0001628369,Real Estate,Real Estate Services,Real Estate
+CWST,"Casella Waste Systems, Inc.",sp600,XNAS,USD,0000911177,Industrials,Waste Management,Industrials
+CWT,California Water Service Group,sp600,XNYS,USD,0001035201,Utilities,Utilities - Regulated Water,Utilities
+CXM,"Sprinklr, Inc.",sp600,XNYS,USD,0001569345,Technology,Software - Application,Information Technology
+CXT,Crane NXT,sp400,XNYS,USD,0000025445,Industrials,Business Equipment & Supplies,Information Technology
+CXW,CoreCivic,sp600,XNYS,USD,0001070985,Industrials,Security & Protection Services,Industrials
+CYTK,Cytokinetics,sp400,XNAS,USD,0001061983,Healthcare,Biotechnology,Health Care
+CZR,Caesars Entertainment,sp600,XNAS,USD,0001590895,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+D,Dominion Energy,sp500,XNYS,USD,0000715957,Utilities,Utilities - Regulated Electric,Utilities
+DAL,Delta Air Lines,sp500,XNYS,USD,0000027904,Industrials,Airlines,Industrials
+DAN,Dana Incorporated,sp600,XNYS,USD,0000026780,Consumer Cyclical,Auto Parts,Consumer Discretionary
+DAR,Darling Ingredients,sp400,XNYS,USD,0000916540,Consumer Defensive,Packaged Foods,Consumer Staples
+DASH,DoorDash,sp500,XNAS,USD,0001792789,Consumer Cyclical,Internet Retail,Consumer Discretionary
+DAVE,"Dave, Inc.",sp600,XNAS,USD,0001841408,Technology,Software - Application,Financials
+DBD,Diebold Nixdorf,sp600,XNYS,USD,0000028823,Technology,Software - Application,Information Technology
+DBX,Dropbox,sp400,XNAS,USD,0001467623,Technology,Software - Infrastructure,Information Technology
+DCH,Dauch Corporation,sp600,XNYS,USD,0001062231,Consumer Cyclical,Auto Parts,Consumer Discretionary
+DCI,Donaldson Company,sp400,XNYS,USD,0000029644,Industrials,Specialty Industrial Machinery,Industrials
+DCOM,"Dime Community Bancshares, Inc.",sp600,XNYS,USD,0000846617,Financial Services,Banks - Regional,Financials
+DD,DuPont,sp500,XNYS,USD,0001666700,Basic Materials,Specialty Chemicals,Industrials
+DDOG,Datadog,sp500,XNAS,USD,0001561550,Technology,Software - Application,Information Technology
+DE,Deere & Company,sp500,XNYS,USD,0000315189,Industrials,Farm & Heavy Construction Machinery,Industrials
+DEA,"Easterly Government Properties, Inc.",sp600,XNYS,USD,0001622194,Real Estate,REIT - Office,Real Estate
+DECK,Deckers Brands,sp500,XNYS,USD,0000910521,Consumer Cyclical,Footwear & Accessories,Consumer Discretionary
+DEI,Douglas Emmett,sp600,XNYS,USD,0001364250,Real Estate,REIT - Office,Real Estate
+DELL,Dell Technologies,sp500,XNYS,USD,0001571996,Technology,Computer Hardware,Information Technology
+DFH,"Dream Finders Homes, Inc.",sp600,XNYS,USD,0001825088,Consumer Cyclical,Residential Construction,Consumer Discretionary
+DFIN,"Donnelley Financial Solutions, Inc.",sp600,XNYS,USD,0001669811,Technology,Software - Application,Financials
+DG,Dollar General,sp500,XNYS,USD,0000029534,Consumer Defensive,Discount Stores,Consumer Staples
+DGII,Digi International Inc.,sp600,XNAS,USD,0000854775,Technology,Communication Equipment,Information Technology
+DGX,Quest Diagnostics,sp500,XNYS,USD,0001022079,Healthcare,Diagnostics & Research,Health Care
+DHI,D. R. Horton,sp500,XNYS,USD,0000882184,Consumer Cyclical,Residential Construction,Consumer Discretionary
+DHR,Danaher Corporation,sp500,XNYS,USD,0000313616,Healthcare,Diagnostics & Research,Health Care
+DINO,HF Sinclair,sp400,XNYS,USD,0001915657,Energy,Oil & Gas Refining & Marketing,Energy
+DIOD,Diodes Incorporated,sp600,XNAS,USD,0000029002,Technology,Semiconductors,Information Technology
+DIS,Walt Disney Company (The),sp500,XNYS,USD,0001744489,Communication Services,Entertainment,Communication Services
+DKS,Dick's Sporting Goods,sp400,XNYS,USD,0001089063,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+DLB,Dolby,sp400,XNYS,USD,0001308547,Industrials,Specialty Business Services,Information Technology
+DLR,Digital Realty,sp500,XNYS,USD,0001297996,Real Estate,REIT - Specialty,Real Estate
+DLTR,Dollar Tree,sp500,XNAS,USD,0000935703,Consumer Defensive,Discount Stores,Consumer Staples
+DLX,Deluxe Corporation,sp600,XNYS,USD,0000027996,Industrials,Conglomerates,Industrials
+DMC,Del Monte Corporation,sp600,XNYS,USD,0001047340,Consumer Defensive,Farm Products,Consumer Staples
+DNOW,NOW Inc,sp600,XNYS,USD,0001599617,Industrials,Industrial Distribution,Industrials
+DOC,Healthpeak Properties,sp500,XNYS,USD,0000765880,Real Estate,REIT - Healthcare Facilities,Real Estate
+DOCN,DigitalOcean,sp400,XNYS,USD,0001582961,Technology,Software - Infrastructure,Information Technology
+DOCS,Doximity,sp400,XNYS,USD,0001516513,Healthcare,Health Information Services,Health Care
+DOCU,Docusign,sp400,XNAS,USD,0001261333,Technology,Software - Application,Information Technology
+DORM,"Dorman Products, Inc.",sp600,XNAS,USD,0000868780,Consumer Cyclical,Auto Parts,Consumer Discretionary
+DOV,Dover Corporation,sp500,XNYS,USD,0000029905,Industrials,Specialty Industrial Machinery,Industrials
+DOW,Dow Inc.,sp500,XNYS,USD,0001751788,Basic Materials,Chemicals,Materials
+DPZ,Domino's,sp500,XNAS,USD,0001286681,Consumer Cyclical,Restaurants,Consumer Discretionary
+DRH,DiamondRock Hospitality Company,sp600,XNAS,USD,0001298946,Real Estate,REIT - Hotel & Motel,Real Estate
+DRI,Darden Restaurants,sp500,XNYS,USD,0000940944,Consumer Cyclical,Restaurants,Consumer Discretionary
+DT,Dynatrace,sp400,XNYS,USD,0001773383,Technology,Software - Application,Information Technology
+DTE,DTE Energy,sp500,XNYS,USD,0000936340,Utilities,Utilities - Regulated Electric,Utilities
+DTM,DT Midstream,sp400,XNYS,USD,0001842022,Energy,Oil & Gas Midstream,Energy
+DUK,Duke Energy,sp500,XNYS,USD,0001326160,Utilities,Utilities - Regulated Electric,Utilities
+DUOL,Duolingo,sp400,XNAS,USD,0001562088,Technology,Software - Application,Consumer Discretionary
+DV,DoubleVerify Holdings Inc.,sp600,XNYS,USD,0001819928,Communication Services,Advertising Agencies,Communication Services
+DVA,DaVita,sp500,XNYS,USD,0000927066,Healthcare,Medical Care Facilities,Health Care
+DVN,Devon Energy,sp500,XNYS,USD,0001090012,Energy,Oil & Gas E&P,Energy
+DXC,DXC Technology,sp600,XNYS,USD,0001688568,Technology,Information Technology Services,Information Technology
+DXCM,Dexcom,sp500,XNAS,USD,0001093557,Healthcare,Medical Devices,Health Care
+DXPE,"DXP Enterprises, Inc.",sp600,XNAS,USD,0001020710,Industrials,Industrial Distribution,Industrials
+DY,Dycom Industries,sp400,XNYS,USD,0000067215,Industrials,Engineering & Construction,Industrials
+EAT,"Brinker International, Inc.",sp600,XNYS,USD,0000703351,Consumer Cyclical,Restaurants,Consumer Discretionary
+EBAY,eBay Inc.,sp500,XNAS,USD,0001065088,Consumer Cyclical,Internet Retail,Consumer Discretionary
+EBC,"Eastern Bankshares, Inc.",sp600,XNAS,USD,0001810546,Financial Services,Banks - Regional,Financials
+ECG,"Everus Construction Group, Inc.",sp600,XNYS,USD,0002015845,Industrials,Engineering & Construction,Industrials
+ECHO,EchoStar,sp500,XNAS,USD,0001415404,Communication Services,Telecom Services,Communication Services
+ECL,Ecolab,sp500,XNYS,USD,0000031462,Basic Materials,Specialty Chemicals,Materials
+ECPG,"Encore Capital Group, Inc.",sp600,XNAS,USD,0001084961,Financial Services,Credit Services,Financials
+ED,Consolidated Edison,sp500,XNYS,USD,0001047862,Utilities,Utilities - Regulated Electric,Utilities
+EEFT,Euronet Worldwide,sp400,XNAS,USD,0001029199,Technology,Software - Infrastructure,Financials
+EFC,"Ellington Financial, Inc.",sp600,XNYS,USD,0001411342,Real Estate,REIT - Mortgage,Financials
+EFOR,Everforth Inc.,sp600,XNYS,USD,0000890564,Technology,Information Technology Services,Information Technology
+EFX,Equifax,sp500,XNYS,USD,0000033185,Industrials,Consulting Services,Industrials
+EG,Everest Group,sp500,XNYS,USD,0001095073,Financial Services,Insurance - Reinsurance,Financials
+EGBN,Eagle Bancorp Inc,sp600,XNAS,USD,0001050441,Financial Services,Banks - Regional,Financials
+EGP,EastGroup Properties,sp400,XNYS,USD,0000049600,Real Estate,REIT - Industrial,Real Estate
+EHC,Encompass Health,sp400,XNYS,USD,0000785161,Healthcare,Medical Care Facilities,Health Care
+EIG,"Employers Holdings, Inc.",sp600,XNYS,USD,0001379041,Financial Services,Insurance - Specialty,Financials
+EIX,Edison International,sp500,XNYS,USD,0000827052,Utilities,Utilities - Regulated Electric,Utilities
+EL,Estée Lauder Companies (The),sp500,XNYS,USD,0001001250,Consumer Defensive,Household & Personal Products,Consumer Staples
+ELAN,Elanco,sp400,XNYS,USD,0001739104,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+ELF,e.l.f. Beauty,sp400,XNYS,USD,0001600033,Consumer Defensive,Household & Personal Products,Consumer Staples
+ELS,Equity Lifestyle Properties,sp400,XNYS,USD,0000895417,Real Estate,REIT - Residential,Real Estate
+ELV,Elevance Health,sp500,XNYS,USD,0001156039,Healthcare,Healthcare Plans,Health Care
+EME,Emcor,sp500,XNYS,USD,0000105634,Industrials,Engineering & Construction,Industrials
+EMN,Eastman Chemical Company,sp600,XNYS,USD,0000915389,Basic Materials,Specialty Chemicals,Materials
+EMR,Emerson Electric,sp500,XNYS,USD,0000032604,Industrials,Specialty Industrial Machinery,Industrials
+ENOV,Enovis,sp600,XNYS,USD,0001420800,Healthcare,Medical Devices,Health Care
+ENPH,Enphase Energy,sp600,XNAS,USD,0001463101,Technology,Solar,Information Technology
+ENR,Energizer,sp600,XNYS,USD,0001632790,Industrials,Electrical Equipment & Parts,Consumer Staples
+ENS,EnerSys,sp400,XNYS,USD,0001289308,Industrials,Electrical Equipment & Parts,Industrials
+ENSG,Ensign Group,sp400,XNAS,USD,0001125376,Healthcare,Medical Care Facilities,Health Care
+ENTG,Entegris,sp400,XNAS,USD,0001101302,Technology,Semiconductor Equipment & Materials,Information Technology
+ENVA,"Enova International, Inc.",sp600,XNYS,USD,0001529864,Financial Services,Credit Services,Financials
+EOG,EOG Resources,sp500,XNYS,USD,0000821189,Energy,Oil & Gas E&P,Energy
+EPAC,Enerpac Tool Group,sp600,XNYS,USD,0000006955,Industrials,Specialty Industrial Machinery,Industrials
+EPAM,EPAM Systems,sp600,XNYS,USD,0001352010,Technology,Information Technology Services,Information Technology
+EPC,Edgewell Personal Care,sp600,XNYS,USD,0001096752,Consumer Defensive,Household & Personal Products,Consumer Staples
+EPR,EPR Properties,sp400,XNYS,USD,0001045450,Real Estate,REIT - Specialty,Real Estate
+EPRT,"Essential Properties Realty Trust, Inc.",sp600,XNYS,USD,0001728951,Real Estate,REIT - Retail,Real Estate
+EQH,Equitable Holdings,sp400,XNYS,USD,0001333986,Financial Services,Asset Management,Financials
+EQIX,Equinix,sp500,XNAS,USD,0001101239,Real Estate,REIT - Specialty,Real Estate
+EQT,EQT Corporation,sp500,XNYS,USD,0000033213,Energy,Oil & Gas E&P,Energy
+ERIE,Erie Indemnity,sp500,XNAS,USD,0000922621,Financial Services,Insurance Brokers,Financials
+ES,Eversource Energy,sp500,XNYS,USD,0000072741,Utilities,Utilities - Regulated Electric,Utilities
+ESAB,ESAB,sp400,XNYS,USD,0001877322,Industrials,Metal Fabrication,Industrials
+ESE,ESCO Technologies Inc.,sp600,XNYS,USD,0000866706,Technology,Scientific & Technical Instruments,Industrials
+ESI,Element Solutions,sp600,XNYS,USD,0001590714,Basic Materials,Specialty Chemicals,Materials
+ESNT,Essent Group Ltd.,sp400,XNYS,USD,0001448893,Financial Services,Insurance - Specialty,Financials
+ESS,Essex Property Trust,sp500,XNYS,USD,0000920522,Real Estate,REIT - Residential,Real Estate
+ETN,Eaton Corporation,sp500,XNYS,USD,0001551182,Industrials,Specialty Industrial Machinery,Industrials
+ETR,Entergy,sp500,XNYS,USD,0000065984,Utilities,Utilities - Regulated Electric,Utilities
+ETSY,Etsy,sp600,XNYS,USD,0001370637,Consumer Cyclical,Internet Retail,Consumer Discretionary
+EVR,Evercore,sp400,XNYS,USD,0001360901,Financial Services,Capital Markets,Financials
+EVRG,Evergy,sp500,XNAS,USD,0001711269,Utilities,Utilities - Regulated Electric,Utilities
+EVTC,"EVERTEC, Inc.",sp600,XNYS,USD,0001559865,Technology,Software - Infrastructure,Financials
+EW,Edwards Lifesciences,sp500,XNYS,USD,0001099800,Healthcare,Medical Devices,Health Care
+EWBC,East West Bancorp,sp400,XNAS,USD,0001069157,Financial Services,Banks - Regional,Financials
+EXC,Exelon,sp500,XNAS,USD,0001109357,Utilities,Utilities - Regulated Electric,Utilities
+EXE,Expand Energy,sp500,XNAS,USD,0000895126,Energy,Oil & Gas E&P,Energy
+EXEL,Exelixis,sp400,XNAS,USD,0000939767,Healthcare,Biotechnology,Health Care
+EXLS,EXL Service,sp400,XNAS,USD,0001297989,Technology,Information Technology Services,Industrials
+EXP,Eagle Materials,sp400,XNYS,USD,0000918646,Basic Materials,Building Materials,Materials
+EXPD,Expeditors International,sp500,XNYS,USD,0000746515,Industrials,Integrated Freight & Logistics,Industrials
+EXPE,Expedia Group,sp500,XNAS,USD,0001324424,Consumer Cyclical,Travel Services,Consumer Discretionary
+EXPO,"Exponent, Inc.",sp400,XNAS,USD,0000851520,Industrials,Engineering & Construction,Industrials
+EXR,Extra Space Storage,sp500,XNYS,USD,0001289490,Real Estate,REIT - Industrial,Real Estate
+EXTR,"Extreme Networks, Inc.",sp600,XNAS,USD,0001078271,Technology,Communication Equipment,Information Technology
+EYE,National Vision Holdings,sp600,XNAS,USD,0001710155,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+EZPW,"EZCORP, Inc.",sp600,XNAS,USD,0000876523,Financial Services,Credit Services,Financials
+F,Ford Motor Company,sp500,XNYS,USD,0000037996,Consumer Cyclical,Auto Manufacturers,Consumer Discretionary
+FA,First Advantage Corporation,sp600,XNAS,USD,0001210677,Industrials,Specialty Business Services,Industrials
+FAF,First American Financial Corporation,sp400,XNYS,USD,0001472787,Financial Services,Insurance - Specialty,Financials
+FANG,Diamondback Energy,sp500,XNAS,USD,0001539838,Energy,Oil & Gas E&P,Energy
+FAST,Fastenal,sp500,XNAS,USD,0000815556,Industrials,Industrial Distribution,Industrials
+FBIN,Fortune Brands Innovations,sp400,XNYS,USD,0001519751,Industrials,Building Products & Equipment,Industrials
+FBK,FB Financial Corp.,sp600,XNYS,USD,0001649749,Financial Services,Banks - Regional,Financials
+FBNC,First Bancorp (Southern Pines NC),sp600,XNAS,USD,0000811589,Financial Services,Banks - Regional,Financials
+FBP,First BanCorp (Puerto Rico),sp600,XNYS,USD,0001057706,Financial Services,Banks - Regional,Financials
+FBRT,"Franklin BSP Realty Trust, Inc.",sp600,XNYS,USD,0001562528,Real Estate,REIT - Mortgage,Real Estate
+FCF,"First Commonwealth Financial, Corp.",sp600,XNYS,USD,0000712537,Financial Services,Banks - Regional,Financials
+FCFS,FirstCash,sp400,XNAS,USD,0000840489,Financial Services,Credit Services,Financials
+FCN,FTI Consulting,sp400,XNYS,USD,0000887936,Industrials,Consulting Services,Industrials
+FCPT,"Four Corners Property Trust, Inc.",sp600,XNYS,USD,0001650132,Real Estate,REIT - Retail,Real Estate
+FCX,Freeport-McMoRan,sp500,XNYS,USD,0000831259,Basic Materials,Copper,Materials
+FDS,FactSet,sp500,XNYS,USD,0001013237,Financial Services,Financial Data & Stock Exchanges,Financials
+FDX,FedEx,sp500,XNYS,USD,0001048911,Industrials,Integrated Freight & Logistics,Industrials
+FDXF,FedEx Freight,sp500,XNYS,USD,0002082247,Industrials,Integrated Freight & Logistics,Industrials
+FE,FirstEnergy,sp500,XNYS,USD,0001031296,Utilities,Utilities - Regulated Electric,Utilities
+FELE,Franklin Electric,sp600,XNAS,USD,0000038725,Industrials,Specialty Industrial Machinery,Industrials
+FERG,Ferguson Enterprises,sp500,XNYS,USD,0002011641,Industrials,Industrial Distribution,Industrials
+FFBC,First Financial Bancorp,sp600,XNAS,USD,0000708955,Financial Services,Banks - Regional,Financials
+FFIN,First Financial Bankshares,sp400,XNAS,USD,0000036029,Financial Services,Banks - Regional,Financials
+FFIV,"F5, Inc.",sp500,XNAS,USD,0001048695,Technology,Software - Infrastructure,Information Technology
+FG,"F&G Annuities & Life, Inc.",sp600,XNYS,USD,0001934850,Financial Services,Insurance - Life,Financials
+FHB,"First Hawaiian, Inc.",sp600,XNAS,USD,0000036377,Financial Services,Banks - Regional,Financials
+FHI,Federated Hermes,sp400,XNYS,USD,0001056288,Financial Services,Asset Management,Financials
+FHN,First Horizon,sp400,XNYS,USD,0000036966,Financial Services,Banks - Regional,Financials
+FIBK,"First Interstate BancSystem, Inc.",sp600,XNAS,USD,0000860413,Financial Services,Banks - Regional,Financials
+FICO,Fair Isaac,sp500,XNYS,USD,0000814547,Technology,Software - Application,Information Technology
+FIS,Fidelity National Information Services,sp500,XNYS,USD,0001136893,Technology,Information Technology Services,Financials
+FITB,Fifth Third Bancorp,sp500,XNYS,USD,0000035527,Financial Services,Banks - Regional,Financials
+FIVE,Five Below,sp400,XNAS,USD,0001177609,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+FIVN,"Five9, Inc.",sp600,XNAS,USD,0001288847,Technology,Software - Infrastructure,Information Technology
+FIX,Comfort Systems USA,sp500,XNYS,USD,0001035983,Industrials,Engineering & Construction,Industrials
+FIZZ,National Beverage Corp.,sp600,XNAS,USD,0000069891,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+FLEX,Flex Ltd.,sp500,XNAS,USD,0000866374,Technology,Electronic Components,Information Technology
+FLG,Flagstar Bank,sp400,XNYS,USD,0000910073,Financial Services,Banks - Regional,Financials
+FLO,Flowers Foods,sp600,XNYS,USD,0001128928,Consumer Defensive,Packaged Foods,Consumer Staples
+FLR,Fluor,sp400,XNYS,USD,0001124198,Industrials,Engineering & Construction,Industrials
+FLS,Flowserve,sp400,XNYS,USD,0000030625,Industrials,Specialty Industrial Machinery,Industrials
+FMC,FMC Corporation,sp600,XNYS,USD,0000037785,Basic Materials,Agricultural Inputs,Materials
+FN,Fabrinet,sp400,XNYS,USD,0001408710,Technology,Electronic Components,Information Technology
+FNB,FNB Corporation,sp400,XNYS,USD,0000037808,Financial Services,Banks - Regional,Financials
+FND,Floor & Decor,sp400,XNYS,USD,0001507079,Consumer Cyclical,Home Improvement Retail,Consumer Discretionary
+FNF,Fidelity National Financial,sp400,XNYS,USD,0001331875,Financial Services,Insurance - Specialty,Financials
+FORM,"FormFactor, Inc.",sp600,XNAS,USD,0001039399,Technology,Semiconductor Equipment & Materials,Information Technology
+FOUR,Shift4,sp400,XNYS,USD,0001794669,Technology,Software - Infrastructure,Financials
+FOX,Fox Corporation (Class B),sp500,XNAS,USD,0001754301,Communication Services,Entertainment,Communication Services
+FOXA,Fox Corporation (Class A),sp500,XNAS,USD,0001754301,Communication Services,Entertainment,Communication Services
+FOXF,Fox Factory,sp600,XNAS,USD,0001424929,Consumer Cyclical,Auto Parts,Consumer Discretionary
+FR,First Industrial Realty Trust,sp400,XNYS,USD,0000921825,Real Estate,REIT - Industrial,Real Estate
+FRPT,Freshpet,sp600,XNAS,USD,0001611647,Consumer Defensive,Packaged Foods,Consumer Staples
+FRT,Federal Realty Investment Trust,sp500,XNYS,USD,0000034903,Real Estate,REIT - Retail,Real Estate
+FSLR,First Solar,sp500,XNAS,USD,0001274494,Technology,Solar,Information Technology
+FSS,Federal Signal Corporation,sp600,XNYS,USD,0000277509,Industrials,Farm & Heavy Construction Machinery,Industrials
+FTDR,"Frontdoor, Inc.",sp600,XNAS,USD,0001727263,Consumer Cyclical,Personal Services,Consumer Discretionary
+FTI,TechnipFMC,sp400,XNYS,USD,0001681459,Energy,Oil & Gas Equipment & Services,Energy
+FTNT,Fortinet,sp500,XNAS,USD,0001262039,Technology,Software - Infrastructure,Information Technology
+FTRE,Fortrea,sp600,XNAS,USD,0001965040,Healthcare,Biotechnology,Health Care
+FTV,Fortive,sp500,XNYS,USD,0001659166,Technology,Scientific & Technical Instruments,Industrials
+FUL,H.B. Fuller Company,sp600,XNYS,USD,0000039368,Basic Materials,Specialty Chemicals,Materials
+FULT,Fulton Financial Corporation,sp600,XNAS,USD,0000700564,Financial Services,Banks - Regional,Financials
+FUN,Six Flags,sp600,XNYS,USD,0001999001,Consumer Cyclical,Leisure,Consumer Discretionary
+G,Genpact,sp400,XNYS,USD,0001398659,Technology,Information Technology Services,Industrials
+GAP,Gap Inc.,sp400,XNYS,USD,0000039911,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+GATX,GATX,sp400,XNYS,USD,0000040211,Industrials,Rental & Leasing Services,Industrials
+GBCI,Glacier Bancorp,sp400,XNYS,USD,0000868671,Financial Services,Banks - Regional,Financials
+GBX,"The Greenbrier Companies, Inc.",sp600,XNYS,USD,0000923120,Industrials,Railroads,Industrials
+GD,General Dynamics,sp500,XNYS,USD,0000040533,Industrials,Aerospace & Defense,Industrials
+GDDY,GoDaddy,sp500,XNYS,USD,0001609711,Technology,Software - Infrastructure,Information Technology
+GE,GE Aerospace,sp500,XNYS,USD,0000040545,Industrials,Aerospace & Defense,Industrials
+GEF,"Greif, Inc.",sp400,XNYS,USD,0000043920,Consumer Cyclical,Packaging & Containers,Materials
+GEHC,GE HealthCare,sp500,XNAS,USD,0001932393,Healthcare,Medical Devices,Health Care
+GEN,Gen Digital,sp500,XNAS,USD,0000849399,Technology,Software - Infrastructure,Information Technology
+GEO,"GEO Group, Inc.",sp600,XNYS,USD,0000923796,Industrials,Security & Protection Services,Industrials
+GEV,GE Vernova,sp500,XNYS,USD,0001996810,Industrials,Specialty Industrial Machinery,Industrials
+GFF,Griffon Corporation,sp600,XNYS,USD,0000050725,Industrials,Building Products & Equipment,Industrials
+GGG,Graco Inc.,sp400,XNYS,USD,0000042888,Industrials,Specialty Industrial Machinery,Industrials
+GHC,Graham Holdings,sp400,XNYS,USD,0000104889,Industrials,Conglomerates,Consumer Discretionary
+GIII,"G-III Apparel Group, Ltd.",sp600,XNAS,USD,0000821002,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+GILD,Gilead Sciences,sp500,XNAS,USD,0000882095,Healthcare,Drug Manufacturers - General,Health Care
+GIS,General Mills,sp500,XNYS,USD,0000040704,Consumer Defensive,Packaged Foods,Consumer Staples
+GKOS,Glaukos Corp.,sp600,XNYS,USD,0001192448,Healthcare,Medical Devices,Health Care
+GL,Globe Life,sp500,XNYS,USD,0000320335,Financial Services,Insurance - Life,Financials
+GLPI,Gaming and Leisure Properties,sp400,XNAS,USD,0001575965,Real Estate,REIT - Specialty,Real Estate
+GLW,Corning Inc.,sp500,XNYS,USD,0000024741,Technology,Electronic Components,Information Technology
+GM,General Motors,sp500,XNYS,USD,0001467858,Consumer Cyclical,Auto Manufacturers,Consumer Discretionary
+GME,GameStop,sp400,XNYS,USD,0001326380,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+GMED,Globus Medical,sp400,XNYS,USD,0001237831,Healthcare,Medical Devices,Health Care
+GNL,"Global Net Lease, Inc.",sp600,XNYS,USD,0001526113,Real Estate,REIT - Diversified,Real Estate
+GNRC,Generac,sp500,XNYS,USD,0001474735,Industrials,Specialty Industrial Machinery,Industrials
+GNTX,Gentex,sp400,XNAS,USD,0000355811,Consumer Cyclical,Auto Parts,Consumer Discretionary
+GNW,"Genworth Financial, Inc.",sp600,XNYS,USD,0001276520,Financial Services,Insurance - Life,Financials
+GO,Grocery Outlet,sp600,XNAS,USD,0001771515,Consumer Defensive,Grocery Stores,Consumer Staples
+GOLF,Acushnet Company,sp600,XNYS,USD,0001672013,Consumer Cyclical,Leisure,Consumer Discretionary
+GOOG,Alphabet Inc. (Class C),sp500,XNAS,USD,0001652044,Communication Services,Internet Content & Information,Communication Services
+GOOGL,Alphabet Inc. (Class A),sp500,XNAS,USD,0001652044,Communication Services,Internet Content & Information,Communication Services
+GPC,Genuine Parts Company,sp500,XNYS,USD,0000040987,Consumer Cyclical,Auto Parts,Consumer Discretionary
+GPI,"Group 1 Automotive, Inc.",sp600,XNYS,USD,0001031203,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+GPK,Graphic Packaging,sp400,XNYS,USD,0001408075,Consumer Cyclical,Packaging & Containers,Materials
+GPN,Global Payments,sp500,XNYS,USD,0001123360,Industrials,Specialty Business Services,Financials
+GPOR,Gulfport Energy Corporation,sp600,XNYS,USD,0000874499,Energy,Oil & Gas E&P,Energy
+GRBK,"Green Brick Partners, Inc.",sp600,XNYS,USD,0001373670,Consumer Cyclical,Residential Construction,Consumer Discretionary
+GRMN,Garmin,sp500,XNYS,USD,0001121788,Technology,Scientific & Technical Instruments,Consumer Discretionary
+GS,Goldman Sachs,sp500,XNYS,USD,0000886982,Financial Services,Capital Markets,Financials
+GSHD,"Goosehead Insurance, Inc.",sp600,XNAS,USD,0001726978,Financial Services,Insurance Brokers,Financials
+GT,Goodyear Tire and Rubber Company,sp600,XNAS,USD,0000042582,Consumer Cyclical,Auto Parts,Consumer Discretionary
+GTES,Gates Corporation,sp600,XNYS,USD,0001718512,Industrials,Specialty Industrial Machinery,Industrials
+GTM,ZoomInfo,sp600,XNAS,USD,0001794515,Technology,Software - Application,Communication Services
+GTY,Getty Realty Corp.,sp600,XNYS,USD,0001052752,Real Estate,REIT - Retail,Real Estate
+GVA,"Granite Construction, Inc.",sp600,XNYS,USD,0000861459,Industrials,Engineering & Construction,Industrials
+GWRE,Guidewire Software,sp400,XNYS,USD,0001528396,Technology,Software - Application,Information Technology
+GWW,W. W. Grainger,sp500,XNYS,USD,0000277135,Industrials,Industrial Distribution,Industrials
+GXO,GXO Logistics,sp400,XNYS,USD,0001852244,Industrials,Integrated Freight & Logistics,Industrials
+H,Hyatt,sp400,XNYS,USD,0001468174,Consumer Cyclical,Lodging,Consumer Discretionary
+HAE,Haemonetics,sp400,XNYS,USD,0000313143,Healthcare,Medical Devices,Health Care
+HAFC,Hanmi Financial Corporation,sp600,XNAS,USD,0001109242,Financial Services,Banks - Regional,Financials
+HAL,Halliburton,sp500,XNYS,USD,0000045012,Energy,Oil & Gas Equipment & Services,Energy
+HALO,Halozyme,sp400,XNAS,USD,0001159036,Healthcare,Biotechnology,Health Care
+HAS,Hasbro,sp500,XNAS,USD,0000046080,Consumer Cyclical,Leisure,Consumer Discretionary
+HASI,"Hannon Armstrong Sustainable Infrastructure Capital, Inc.",sp600,XNYS,USD,0001561894,Financial Services,Asset Management,Financials
+HAYW,"Hayward Holdings, Inc.",sp600,XNYS,USD,0001834622,Industrials,Electrical Equipment & Parts,Industrials
+HBAN,Huntington Bancshares,sp500,XNAS,USD,0000049196,Financial Services,Banks - Regional,Financials
+HCA,HCA Healthcare,sp500,XNYS,USD,0000860730,Healthcare,Medical Care Facilities,Health Care
+HCC,"Warrior Met Coal, Inc.",sp600,XNYS,USD,0001691303,Basic Materials,Coking Coal,Materials
+HCI,"HCI Group, Inc.",sp600,XNYS,USD,0001400810,Financial Services,Insurance - Property & Casualty,Financials
+HCSG,"Healthcare Services Group, Inc.",sp600,XNAS,USD,0000731012,Healthcare,Medical Care Facilities,Industrials
+HD,Home Depot (The),sp500,XNYS,USD,0000354950,Consumer Cyclical,Home Improvement Retail,Consumer Discretionary
+HE,"Hawaiian Electric Industries, Inc.",sp600,XNYS,USD,0000354707,Utilities,Utilities - Regulated Electric,Utilities
+HFWA,Heritage Financial Corporation,sp600,XNAS,USD,0001046025,Financial Services,Banks - Regional,Financials
+HGV,Hilton Grand Vacations,sp400,XNYS,USD,0001674168,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+HIG,Hartford (The),sp500,XNYS,USD,0000874766,Financial Services,Insurance - Diversified,Financials
+HII,Huntington Ingalls Industries,sp500,XNYS,USD,0001501585,Industrials,Aerospace & Defense,Industrials
+HIMS,Hims & Hers Health,sp400,XNYS,USD,0001773751,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+HIW,Highwoods Properties,sp600,XNYS,USD,0000921082,Real Estate,REIT - Office,Real Estate
+HL,Hecla Mining,sp400,XNYS,USD,0000719413,Basic Materials,Other Precious Metals & Mining,Materials
+HLI,Houlihan Lokey,sp400,XNYS,USD,0001302215,Financial Services,Capital Markets,Financials
+HLIT,Harmonic Inc.,sp600,XNAS,USD,0000851310,Technology,Communication Equipment,Information Technology
+HLNE,Hamilton Lane,sp400,XNAS,USD,0001433642,Financial Services,Asset Management,Financials
+HLT,Hilton Worldwide,sp500,XNYS,USD,0001585689,Consumer Cyclical,Lodging,Consumer Discretionary
+HLX,"Helix Energy Solutions Group, Inc.",sp600,XNYS,USD,0000866829,Energy,Oil & Gas Equipment & Services,Energy
+HMN,Horace Mann Educators Corporation,sp600,XNYS,USD,0000850141,Financial Services,Insurance - Property & Casualty,Financials
+HNI,HNI Corporation,sp600,XNYS,USD,0000048287,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Industrials
+HOG,Harley-Davidson,sp400,XNYS,USD,0000793952,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+HOMB,Home BancShares,sp400,XNYS,USD,0001331520,Financial Services,Banks - Regional,Financials
+HON,Honeywell Technologies,sp500,XNAS,USD,0000773840,Industrials,Conglomerates,Industrials
+HONA,Honeywell Aerospace,sp500,XNAS,USD,0002089271,Industrials,Aerospace & Defense,Industrials
+HOOD,Robinhood Markets,sp500,XNAS,USD,0001783879,Financial Services,Capital Markets,Financials
+HOPE,"Hope Bancorp, Inc.",sp600,XNAS,USD,0001128361,Financial Services,Banks - Regional,Financials
+HP,"Helmerich & Payne, Inc.",sp600,XNYS,USD,0000046765,Energy,Oil & Gas Drilling,Energy
+HPE,Hewlett Packard Enterprise,sp500,XNYS,USD,0001645590,Technology,Communication Equipment,Information Technology
+HPQ,HP Inc.,sp500,XNYS,USD,0000047217,Technology,Computer Hardware,Information Technology
+HQY,HealthEquity,sp400,XNAS,USD,0001428336,Healthcare,Health Information Services,Health Care
+HR,Healthcare Realty Trust,sp400,XNYS,USD,0001360604,Real Estate,REIT - Healthcare Facilities,Real Estate
+HRB,H&R Block,sp400,XNYS,USD,0000012659,Consumer Cyclical,Personal Services,Consumer Discretionary
+HRL,Hormel Foods,sp500,XNYS,USD,0000048465,Consumer Defensive,Packaged Foods,Consumer Staples
+HRMY,"Harmony Biosciences Holdings, Inc.",sp600,XNAS,USD,0001802665,Healthcare,Biotechnology,Health Care
+HSIC,Henry Schein,sp500,XNAS,USD,0001000228,Healthcare,Medical Distribution,Health Care
+HST,Host Hotels & Resorts,sp500,XNAS,USD,0001070750,Real Estate,REIT - Hotel & Motel,Real Estate
+HSTM,"HealthStream, Inc.",sp600,XNAS,USD,0001095565,Healthcare,Health Information Services,Health Care
+HSY,Hershey Company (The),sp500,XNYS,USD,0000047111,Consumer Defensive,Confectioners,Consumer Staples
+HTH,Hilltop Holdings Inc.,sp600,XNYS,USD,0001265131,Financial Services,Financial Conglomerates,Financials
+HTLD,"Heartland Express, Inc.",sp600,XNAS,USD,0000799233,Industrials,Trucking,Industrials
+HTO,H2O America,sp600,XNAS,USD,0000766829,Utilities,Utilities - Regulated Water,Utilities
+HUBB,Hubbell Incorporated,sp500,XNYS,USD,0000048898,Industrials,Electrical Equipment & Parts,Industrials
+HUBG,"Hub Group, Inc.",sp600,XNAS,USD,0000940942,Industrials,Integrated Freight & Logistics,Industrials
+HUM,Humana,sp500,XNYS,USD,0000049071,Healthcare,Healthcare Plans,Health Care
+HWC,Hancock Whitney,sp400,XNAS,USD,0000750577,Financial Services,Banks - Regional,Financials
+HWKN,"Hawkins, Inc.",sp600,XNAS,USD,0000046250,Basic Materials,Specialty Chemicals,Materials
+HWM,Howmet Aerospace,sp500,XNYS,USD,0000004281,Industrials,Aerospace & Defense,Industrials
+HXL,Hexcel,sp400,XNYS,USD,0000717605,Industrials,Aerospace & Defense,Industrials
+HZO,"MarineMax, Inc.",sp600,XNYS,USD,0001057060,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+IART,Integra Lifesciences Holdings,sp600,XNAS,USD,0000917520,Healthcare,Medical Devices,Health Care
+IBKR,Interactive Brokers,sp500,XNAS,USD,0001381197,Financial Services,Capital Markets,Financials
+IBM,IBM,sp500,XNYS,USD,0000051143,Technology,Information Technology Services,Information Technology
+IBOC,Intl Bancshares Corp,sp400,XNAS,USD,0000315709,Financial Services,Banks - Regional,Financials
+IBP,"Installed Building Products, Inc.",sp600,XNYS,USD,0001580905,Consumer Cyclical,Residential Construction,Consumer Discretionary
+ICE,Intercontinental Exchange,sp500,XNYS,USD,0001571949,Financial Services,Financial Data & Stock Exchanges,Financials
+ICHR,"Ichor Holdings, Ltd.",sp600,XNAS,USD,0001652535,Technology,Semiconductor Equipment & Materials,Information Technology
+ICUI,ICU Medical,sp600,XNAS,USD,0000883984,Healthcare,Medical Instruments & Supplies,Health Care
+IDA,Idacorp,sp400,XNYS,USD,0001057877,Utilities,Utilities - Regulated Electric,Utilities
+IDCC,InterDigital,sp400,XNAS,USD,0001405495,Technology,Software - Application,Information Technology
+IDXX,Idexx Laboratories,sp500,XNAS,USD,0000874716,Healthcare,Diagnostics & Research,Health Care
+IESC,IES Holdings,sp400,XNAS,USD,0001048268,Industrials,Engineering & Construction,Industrials
+IEX,IDEX Corporation,sp500,XNYS,USD,0000832101,Industrials,Specialty Industrial Machinery,Industrials
+IFF,International Flavors & Fragrances,sp500,XNYS,USD,0000051253,Basic Materials,Specialty Chemicals,Materials
+IIPR,"Innovative Industrial Properties, Inc.",sp600,XNYS,USD,0001677576,Real Estate,REIT - Industrial,Real Estate
+ILMN,"Illumina, Inc.",sp400,XNAS,USD,0001110803,Healthcare,Diagnostics & Research,Health Care
+INCY,Incyte,sp500,XNAS,USD,0000879169,Healthcare,Biotechnology,Health Care
+INDB,Independent Bank Corp.,sp600,XNAS,USD,0000776901,Financial Services,Banks - Regional,Financials
+INDV,Indivior,sp600,XNAS,USD,0001625297,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+INGR,Ingredion,sp400,XNYS,USD,0001046257,Consumer Defensive,Packaged Foods,Consumer Staples
+INSP,"Inspire Medical Systems, Inc.",sp600,XNYS,USD,0001609550,Healthcare,Medical Devices,Health Care
+INSW,"International Seaways, Inc.",sp600,XNYS,USD,0001679049,Energy,Oil & Gas Midstream,Energy
+INTC,Intel,sp500,XNAS,USD,0000050863,Technology,Semiconductors,Information Technology
+INTU,Intuit,sp500,XNAS,USD,0000896878,Technology,Software - Application,Information Technology
+INVA,"Innoviva, Inc.",sp600,XNAS,USD,0001080014,Healthcare,Biotechnology,Health Care
+INVH,Invitation Homes,sp500,XNYS,USD,0001687229,Real Estate,REIT - Residential,Real Estate
+INVX,"Innovex International, Inc.",sp600,XNYS,USD,0001042893,Energy,Oil & Gas Equipment & Services,Energy
+IOSP,"Innospec, Inc.",sp600,XNAS,USD,0001054905,Basic Materials,Specialty Chemicals,Materials
+IP,International Paper,sp500,XNYS,USD,0000051434,Consumer Cyclical,Packaging & Containers,Materials
+IPAR,"Inter Parfums, Inc.",sp600,XNAS,USD,0000822663,Consumer Defensive,Household & Personal Products,Consumer Staples
+IPGP,IPG Photonics,sp400,XNAS,USD,0001111928,Technology,Semiconductor Equipment & Materials,Information Technology
+IQV,IQVIA,sp500,XNYS,USD,0001478242,Healthcare,Diagnostics & Research,Health Care
+IR,Ingersoll Rand,sp500,XNYS,USD,0001699150,Industrials,Specialty Industrial Machinery,Industrials
+IRDM,Iridium Communications,sp600,XNAS,USD,0001418819,Communication Services,Telecom Services,Communication Services
+IRM,Iron Mountain,sp500,XNYS,USD,0001020569,Real Estate,REIT - Specialty,Real Estate
+IRT,Independence Realty Trust,sp400,XNYS,USD,0001466085,Real Estate,REIT - Residential,Real Estate
+ISRG,Intuitive Surgical,sp500,XNAS,USD,0001035267,Healthcare,Medical Instruments & Supplies,Health Care
+IT,Gartner,sp500,XNYS,USD,0000749251,Technology,Information Technology Services,Information Technology
+ITGR,Integer Holdings Corporation,sp600,XNYS,USD,0001114483,Healthcare,Medical Devices,Health Care
+ITRI,"Itron, Inc.",sp600,XNAS,USD,0000780571,Technology,Scientific & Technical Instruments,Information Technology
+ITT,ITT Inc.,sp400,XNYS,USD,0000216228,Industrials,Specialty Industrial Machinery,Industrials
+ITW,Illinois Tool Works,sp500,XNYS,USD,0000049826,Industrials,Specialty Industrial Machinery,Industrials
+IVT,InvenTrust Properties,sp600,XNYS,USD,0001307748,Real Estate,REIT - Retail,Real Estate
+IVZ,Invesco,sp500,XNYS,USD,0000914208,Financial Services,Asset Management,Financials
+J,Jacobs Solutions,sp500,XNYS,USD,0000052988,Industrials,Engineering & Construction,Industrials
+JAZZ,Jazz Pharmaceuticals,sp400,XNAS,USD,0001232524,Healthcare,Biotechnology,Health Care
+JBGS,JBG Smith,sp600,XNYS,USD,0001689796,Real Estate,REIT - Diversified,Real Estate
+JBHT,J.B. Hunt,sp500,XNAS,USD,0000728535,Industrials,Integrated Freight & Logistics,Industrials
+JBL,Jabil,sp500,XNYS,USD,0000898293,Technology,Electronic Components,Information Technology
+JBLU,JetBlue,sp600,XNAS,USD,0001158463,Industrials,Airlines,Industrials
+JBSS,"John B. Sanfilippo & Son, Inc.",sp600,XNAS,USD,0000880117,Consumer Defensive,Packaged Foods,Consumer Staples
+JBTM,JBT Marel Corporation,sp600,XNYS,USD,0001433660,Industrials,Specialty Industrial Machinery,Industrials
+JCI,Johnson Controls,sp500,XNYS,USD,0000833444,Industrials,Building Products & Equipment,Industrials
+JEF,Jefferies,sp400,XNYS,USD,0000096223,Financial Services,Capital Markets,Financials
+JJSF,J&J Snack Foods Corp.,sp600,XNAS,USD,0000785956,Consumer Defensive,Packaged Foods,Consumer Staples
+JKHY,Jack Henry & Associates,sp500,XNAS,USD,0000779152,Technology,Information Technology Services,Financials
+JLL,Jones Lang LaSalle,sp400,XNYS,USD,0001037976,Real Estate,Real Estate Services,Real Estate
+JNJ,Johnson & Johnson,sp500,XNYS,USD,0000200406,Healthcare,Drug Manufacturers - General,Health Care
+JOE,St. Joe Company,sp600,XNYS,USD,0000745308,Real Estate,Real Estate - Diversified,Real Estate
+JPM,JPMorgan Chase,sp500,XNYS,USD,0000019617,Financial Services,Banks - Diversified,Financials
+JXN,"Jackson Financial, Inc.",sp600,XNYS,USD,0001822993,Financial Services,Insurance - Life,Financials
+KAI,Kadant Inc.,sp600,XNYS,USD,0000886346,Industrials,Specialty Industrial Machinery,Industrials
+KALU,Kaiser Aluminum Corporation,sp600,XNAS,USD,0000811596,Basic Materials,Aluminum,Materials
+KBH,KB Home,sp400,XNYS,USD,0000795266,Consumer Cyclical,Residential Construction,Consumer Discretionary
+KBR,"KBR, Inc.",sp400,XNYS,USD,0001357615,Industrials,Engineering & Construction,Industrials
+KD,Kyndryl,sp400,XNYS,USD,0001867072,Technology,Information Technology Services,Information Technology
+KDP,Keurig Dr Pepper,sp500,XNAS,USD,0001418135,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+KEX,Kirby Corporation,sp400,XNYS,USD,0000056047,Industrials,Marine Shipping,Industrials
+KEY,KeyCorp,sp500,XNYS,USD,0000091576,Financial Services,Banks - Regional,Financials
+KEYS,Keysight Technologies,sp500,XNYS,USD,0001601046,Technology,Scientific & Technical Instruments,Information Technology
+KFY,Korn/Ferry International,sp600,XNYS,USD,0000056679,Industrials,Staffing & Employment Services,Industrials
+KGS,"Kodiak Gas Services, Inc.",sp600,XNYS,USD,0001767042,Energy,Oil & Gas Equipment & Services,Energy
+KHC,Kraft Heinz,sp500,XNAS,USD,0001637459,Consumer Defensive,Packaged Foods,Consumer Staples
+KIM,Kimco Realty,sp500,XNYS,USD,0000879101,Real Estate,REIT - Retail,Real Estate
+KKR,KKR & Co.,sp500,XNYS,USD,0001404912,Financial Services,Asset Management,Financials
+KLAC,KLA Corporation,sp500,XNAS,USD,0000319201,Technology,Semiconductor Equipment & Materials,Information Technology
+KLIC,"Kulicke and Soffa Industries, Inc.",sp600,XNAS,USD,0000056978,Technology,Semiconductor Equipment & Materials,Information Technology
+KMB,Kimberly-Clark,sp500,XNAS,USD,0000055785,Consumer Defensive,Household & Personal Products,Consumer Staples
+KMI,Kinder Morgan,sp500,XNYS,USD,0001506307,Energy,Oil & Gas Midstream,Energy
+KMPR,Kemper Corporation,sp600,XNYS,USD,0000860748,Financial Services,Insurance - Property & Casualty,Financials
+KMT,Kennametal,sp600,XNYS,USD,0000055242,Industrials,Tools & Accessories,Industrials
+KMX,"CarMax, Inc.",sp600,XNYS,USD,0001170010,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+KN,Knowles Corporation,sp600,XNYS,USD,0001587523,Technology,Electronic Components,Information Technology
+KNF,Knife River Corporation,sp400,XNYS,USD,0001955520,Basic Materials,Building Materials,Materials
+KNSL,Kinsale Capital Group,sp400,XNYS,USD,0001669162,Financial Services,Insurance - Property & Casualty,Financials
+KNTK,"Kinetik Holdings, Inc.",sp600,XNYS,USD,0001692787,Energy,Oil & Gas Midstream,Energy
+KNX,Knight-Swift,sp400,XNYS,USD,0001492691,Industrials,Trucking,Industrials
+KO,Coca-Cola Company (The),sp500,XNYS,USD,0000021344,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+KOP,"Koppers Holdings, Inc.",sp600,XNYS,USD,0001315257,Basic Materials,Specialty Chemicals,Materials
+KR,Kroger,sp500,XNYS,USD,0000056873,Consumer Defensive,Grocery Stores,Consumer Staples
+KRC,Kilroy Realty Corp,sp400,XNYS,USD,0001025996,Real Estate,REIT - Office,Real Estate
+KRG,Kite Realty Group Trust,sp400,XNYS,USD,0001286043,Real Estate,REIT - Retail,Real Estate
+KRMN,Karman Holdings,sp600,XNYS,USD,0002040127,Industrials,Aerospace & Defense,Industrials
+KRYS,Krystal Biotech,sp400,XNAS,USD,0001711279,Healthcare,Biotechnology,Health Care
+KSS,Kohl's Corp.,sp600,XNYS,USD,0000885639,Consumer Cyclical,Department Stores,Consumer Discretionary
+KTB,Kontoor Brands,sp600,XNYS,USD,0001760965,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+KTOS,Kratos Defense & Security Solutions,sp400,XNAS,USD,0001069258,Industrials,Aerospace & Defense,Industrials
+KVUE,Kenvue,sp500,XNYS,USD,0001944048,Consumer Defensive,Household & Personal Products,Consumer Staples
+KWR,Quaker Chemical Corporation,sp600,XNYS,USD,0000081362,Basic Materials,Specialty Chemicals,Materials
+L,Loews Corporation,sp500,XNYS,USD,0000060086,Financial Services,Insurance - Property & Casualty,Financials
+LAD,Lithia Motors,sp400,XNYS,USD,0001023128,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+LAMR,Lamar Advertising Company,sp400,XNAS,USD,0001090425,Real Estate,REIT - Specialty,Real Estate
+LAUR,"Laureate Education, Inc.",sp600,XNAS,USD,0000912766,Consumer Defensive,Education & Training Services,Consumer Discretionary
+LAZ,Lazard,sp600,XNYS,USD,0001311370,Financial Services,Capital Markets,Financials
+LBRT,"Liberty Energy, Inc.",sp600,XNYS,USD,0001694028,Energy,Oil & Gas Equipment & Services,Energy
+LCII,LCI Industries,sp600,XNYS,USD,0000763744,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+LDOS,Leidos,sp500,XNYS,USD,0001336920,Technology,Information Technology Services,Industrials
+LEA,Lear,sp400,XNYS,USD,0000842162,Consumer Cyclical,Auto Parts,Consumer Discretionary
+LECO,Lincoln Electric,sp400,XNAS,USD,0000059527,Industrials,Tools & Accessories,Industrials
+LEG,Leggett & Platt,sp600,XNYS,USD,0000058492,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+LEN,Lennar,sp500,XNYS,USD,0000920760,Consumer Cyclical,Residential Construction,Consumer Discretionary
+LEU,Centrus Energy Corp.,sp600,XNYS,USD,0001065059,Energy,Uranium,Energy
+LFST,Lifestance Health,sp600,XNAS,USD,0001845257,Healthcare,Medical Care Facilities,Health Care
+LFUS,Littelfuse,sp400,XNAS,USD,0000889331,Technology,Electronic Components,Information Technology
+LGIH,LGI Homes,sp600,XNAS,USD,0001580670,Consumer Cyclical,Residential Construction,Consumer Discretionary
+LGND,"Ligand Pharmaceuticals, Inc.",sp600,XNAS,USD,0000886163,Healthcare,Biotechnology,Health Care
+LH,Labcorp,sp500,XNYS,USD,0000920148,Healthcare,Diagnostics & Research,Health Care
+LHX,L3Harris,sp500,XNYS,USD,0000202058,Industrials,Aerospace & Defense,Industrials
+LIF,Life360,sp600,XNAS,USD,0001581760,Technology,Software - Application,Information Technology
+LII,Lennox International,sp500,XNYS,USD,0001069202,Industrials,Building Products & Equipment,Industrials
+LIN,Linde plc,sp500,XNAS,USD,0001707925,Basic Materials,Specialty Chemicals,Materials
+LITE,Lumentum,sp500,XNAS,USD,0001633978,Technology,Communication Equipment,Information Technology
+LIVN,LivaNova,sp400,XNAS,USD,0001639691,Healthcare,Medical Devices,Health Care
+LKFN,Lakeland Financial,sp600,XNAS,USD,0000721994,Financial Services,Banks - Regional,Financials
+LKQ,LKQ Corporation,sp600,XNAS,USD,0001065696,Consumer Cyclical,Auto Parts,Consumer Discretionary
+LLY,Lilly (Eli),sp500,XNYS,USD,0000059478,Healthcare,Drug Manufacturers - General,Health Care
+LMAT,LeMaitre Vascular,sp600,XNAS,USD,0001158895,Healthcare,Medical Instruments & Supplies,Health Care
+LMT,Lockheed Martin,sp500,XNYS,USD,0000936468,Industrials,Aerospace & Defense,Industrials
+LNC,Lincoln Financial,sp600,XNYS,USD,0000059558,Financial Services,Insurance - Life,Financials
+LNN,Lindsay Corporation,sp600,XNYS,USD,0000836157,Industrials,Farm & Heavy Construction Machinery,Materials
+LNT,Alliant Energy,sp500,XNAS,USD,0000352541,Utilities,Utilities - Regulated Electric,Utilities
+LNTH,Lantheus Holdings,sp400,XNAS,USD,0001521036,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+LOPE,Grand Canyon Education,sp400,XNAS,USD,0001434588,Consumer Defensive,Education & Training Services,Consumer Discretionary
+LOW,Lowe's,sp500,XNYS,USD,0000060667,Consumer Cyclical,Home Improvement Retail,Consumer Discretionary
+LPG,Dorian LPG Ltd.,sp600,XNYS,USD,0001596993,Energy,Oil & Gas Midstream,Energy
+LPX,Louisiana-Pacific,sp400,XNYS,USD,0000060519,Industrials,Building Products & Equipment,Industrials
+LQDA,Liquidia Corporation,sp600,XNAS,USD,0001819576,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+LQDT,"Liquidity Services, Inc.",sp600,XNAS,USD,0001235468,Consumer Cyclical,Internet Retail,Industrials
+LRCX,Lam Research,sp500,XNAS,USD,0000707549,Technology,Semiconductor Equipment & Materials,Information Technology
+LRN,"Stride, Inc.",sp600,XNYS,USD,0001157408,Consumer Defensive,Education & Training Services,Consumer Discretionary
+LSCC,Lattice Semiconductor,sp400,XNAS,USD,0000855658,Technology,Semiconductors,Information Technology
+LSTR,Landstar System,sp400,XNAS,USD,0000853816,Industrials,Integrated Freight & Logistics,Industrials
+LTC,"LTC Properties, Inc.",sp600,XNYS,USD,0000887905,Real Estate,REIT - Healthcare Facilities,Real Estate
+LTH,"Life Time Group Holdings, Inc.",sp600,XNYS,USD,0001869198,Consumer Cyclical,Leisure,Consumer Discretionary
+LULU,Lululemon Athletica,sp500,XNAS,USD,0001397187,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+LUMN,Lumen Technologies,sp600,XNYS,USD,0000018926,Communication Services,Telecom Services,Communication Services
+LUV,Southwest Airlines,sp500,XNYS,USD,0000092380,Industrials,Airlines,Industrials
+LVS,Las Vegas Sands,sp500,XNYS,USD,0001300514,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+LW,Lamb Weston,sp600,XNYS,USD,0001679273,Consumer Defensive,Packaged Foods,Consumer Staples
+LXP,Lexington Realty Trust,sp600,XNYS,USD,0000910108,Real Estate,REIT - Industrial,Real Estate
+LYB,LyondellBasell,sp500,XNYS,USD,0001489393,Basic Materials,Specialty Chemicals,Materials
+LYFT,"Lyft, Inc.",sp600,XNAS,USD,0001759509,Technology,Software - Application,Industrials
+LYV,Live Nation Entertainment,sp500,XNYS,USD,0001335258,Communication Services,Entertainment,Communication Services
+LZ,"LegalZoom.com, Inc.",sp600,XNAS,USD,0001286139,Industrials,Specialty Business Services,Industrials
+LZB,"La-Z-Boy, Inc.",sp600,XNYS,USD,0000057131,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+M,Macy's,sp400,XNYS,USD,0000794367,Consumer Cyclical,Department Stores,Consumer Discretionary
+MA,Mastercard,sp500,XNYS,USD,0001141391,Financial Services,Credit Services,Financials
+MAA,Mid-America Apartment Communities,sp500,XNYS,USD,0000912595,Real Estate,REIT - Residential,Real Estate
+MAC,Macerich,sp600,XNYS,USD,0000912242,Real Estate,REIT - Retail,Real Estate
+MAN,ManpowerGroup,sp600,XNYS,USD,0000871763,Industrials,Staffing & Employment Services,Industrials
+MANH,Manhattan Associates,sp400,XNAS,USD,0001056696,Technology,Software - Application,Information Technology
+MAR,Marriott International,sp500,XNAS,USD,0001048286,Consumer Cyclical,Lodging,Consumer Discretionary
+MARA,"MARA Holdings, Inc.",sp600,XNAS,USD,0001507605,Financial Services,Capital Markets,Information Technology
+MAS,Masco,sp500,XNYS,USD,0000062996,Industrials,Building Products & Equipment,Industrials
+MAT,Mattel,sp400,XNAS,USD,0000063276,Consumer Cyclical,Leisure,Consumer Discretionary
+MATW,Matthews International Corporation,sp600,XNAS,USD,0000063296,Industrials,Conglomerates,Consumer Discretionary
+MATX,"Matson, Inc.",sp600,XNYS,USD,0000003453,Industrials,Marine Shipping,Industrials
+MBC,"MasterBrand, Inc.",sp600,XNYS,USD,0001941365,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Industrials
+MBGL,"Mobility Global, Inc.",sp600,XNYS,USD,0002090312,Technology,Software - Infrastructure,Industrials
+MBIN,Merchants Bancorp,sp600,XNAS,USD,0001629019,Financial Services,Banks - Regional,Financials
+MC,Moelis & Company,sp600,XNYS,USD,0001596967,Financial Services,Capital Markets,Financials
+MCD,McDonald's,sp500,XNYS,USD,0000063908,Consumer Cyclical,Restaurants,Consumer Discretionary
+MCHP,Microchip Technology,sp500,XNAS,USD,0000827054,Technology,Semiconductors,Information Technology
+MCK,McKesson Corporation,sp500,XNYS,USD,0000927653,Healthcare,Medical Distribution,Health Care
+MCO,Moody's Corporation,sp500,XNYS,USD,0001059556,Financial Services,Financial Data & Stock Exchanges,Financials
+MCRI,"Monarch Casino & Resort, Inc.",sp600,XNAS,USD,0000907242,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+MCY,Mercury General,sp600,XNYS,USD,0000064996,Financial Services,Insurance - Property & Casualty,Financials
+MD,Pediatrix Medical Group,sp600,XNYS,USD,0000893949,Healthcare,Medical Care Facilities,Health Care
+MDLZ,Mondelez International,sp500,XNAS,USD,0001103982,Consumer Defensive,Confectioners,Consumer Staples
+MDT,Medtronic,sp500,XNYS,USD,0001613103,Healthcare,Medical Devices,Health Care
+MDU,"MDU Resources Group, Inc.",sp600,XNYS,USD,0000067716,Utilities,Utilities - Regulated Gas,Utilities
+MEDP,Medpace,sp400,XNAS,USD,0001668397,Healthcare,Diagnostics & Research,Health Care
+MET,MetLife,sp500,XNYS,USD,0001099219,Financial Services,Insurance - Life,Financials
+META,Meta Platforms,sp500,XNAS,USD,0001326801,Communication Services,Internet Content & Information,Communication Services
+MFP,"Midera Food Processing, Inc.",sp600,XNAS,USD,0002088281,Industrials,Specialty Industrial Machinery,Industrials
+MGEE,"MGE Energy, Inc.",sp600,XNAS,USD,0001161728,Utilities,Utilities - Regulated Electric,Utilities
+MGM,MGM Resorts,sp500,XNYS,USD,0000789570,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+MGY,"Magnolia Oil & Gas, Corp.",sp600,XNYS,USD,0001698990,Energy,Oil & Gas E&P,Energy
+MHK,Mohawk Industries,sp600,XNYS,USD,0000851968,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+MHO,"M/I Homes, Inc.",sp600,XNYS,USD,0000799292,Consumer Cyclical,Residential Construction,Consumer Discretionary
+MIDD,Middleby,sp400,XNAS,USD,0000769520,Industrials,Specialty Industrial Machinery,Industrials
+MIR,"Mirion Technologies, Inc.",sp600,XNYS,USD,0001809987,Industrials,Specialty Industrial Machinery,Information Technology
+MKC,McCormick & Company,sp500,XNYS,USD,0000063754,Consumer Defensive,Packaged Foods,Consumer Staples
+MKSI,MKS Instruments,sp400,XNAS,USD,0001049502,Technology,Scientific & Technical Instruments,Information Technology
+MKTX,MarketAxess,sp600,XNAS,USD,0001278021,Financial Services,Capital Markets,Financials
+MLI,Mueller Industries,sp400,XNYS,USD,0000089439,Industrials,Metal Fabrication,Industrials
+MLKN,"MillerKnoll, Inc.",sp600,XNAS,USD,0000066382,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Industrials
+MLM,Martin Marietta Materials,sp500,XNYS,USD,0000916076,Basic Materials,Building Materials,Materials
+MMI,"Marcus & Millichap, Inc.",sp600,XNYS,USD,0001578732,Real Estate,Real Estate Services,Real Estate
+MMM,3M,sp500,XNYS,USD,0000066740,Industrials,Conglomerates,Industrials
+MMS,Maximus Inc.,sp400,XNYS,USD,0001032220,Industrials,Specialty Business Services,Industrials
+MMSI,"Merit Medical Systems, Inc.",sp600,XNAS,USD,0000856982,Healthcare,Medical Instruments & Supplies,Health Care
+MNST,Monster Beverage,sp500,XNAS,USD,0000865752,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+MO,Altria,sp500,XNYS,USD,0000764180,Consumer Defensive,Tobacco,Consumer Staples
+MOG-A,Moog Inc.,sp400,XNYS,USD,0000067887,Industrials,Aerospace & Defense,Industrials
+MOH,Molina Healthcare,sp400,XNYS,USD,0001179929,Healthcare,Healthcare Plans,Health Care
+MORN,"Morningstar, Inc.",sp400,XNAS,USD,0001289419,Financial Services,Financial Data & Stock Exchanges,Financials
+MOS,Mosaic Company (The),sp500,XNYS,USD,0001285785,Basic Materials,Agricultural Inputs,Materials
+MP,MP Materials,sp400,XNYS,USD,0001801368,Basic Materials,Other Industrial Metals & Mining,Materials
+MPC,Marathon Petroleum,sp500,XNYS,USD,0001510295,Energy,Oil & Gas Refining & Marketing,Energy
+MPT,Medical Properties Trust,sp600,XNYS,USD,0001287865,Real Estate,REIT - Healthcare Facilities,Real Estate
+MPWR,Monolithic Power Systems,sp500,XNAS,USD,0001280452,Technology,Semiconductors,Information Technology
+MRCY,Mercury Systems,sp600,XNAS,USD,0001049521,Industrials,Aerospace & Defense,Industrials
+MRK,Merck & Co.,sp500,XNYS,USD,0000310158,Healthcare,Drug Manufacturers - General,Health Care
+MRNA,Moderna,sp500,XNAS,USD,0001682852,Healthcare,Biotechnology,Health Care
+MRP,"Millrose Properties, Inc.",sp600,XNYS,USD,0002017206,Real Estate,REIT - Residential,Real Estate
+MRSH,Marsh McLennan,sp500,XNYS,USD,0000062709,Financial Services,Insurance Brokers,Financials
+MRTN,"Marten Transport, Ltd.",sp600,XNAS,USD,0000799167,Industrials,Trucking,Industrials
+MRVL,Marvell Technology,sp500,XNAS,USD,0001835632,Technology,Semiconductors,Information Technology
+MS,Morgan Stanley,sp500,XNYS,USD,0000895421,Financial Services,Capital Markets,Financials
+MSA,MSA Safety,sp400,XNYS,USD,0000066570,Industrials,Security & Protection Services,Industrials
+MSCI,MSCI,sp500,XNYS,USD,0001408198,Financial Services,Financial Data & Stock Exchanges,Financials
+MSEX,Middlesex Water Company,sp600,XNAS,USD,0000066004,Utilities,Utilities - Regulated Water,Utilities
+MSFT,Microsoft,sp500,XNAS,USD,0000789019,Technology,Software - Infrastructure,Information Technology
+MSGS,Madison Square Garden Sports Corp.,sp600,XNYS,USD,0001636519,Communication Services,Entertainment,Communication Services
+MSI,Motorola Solutions,sp500,XNYS,USD,0000068505,Technology,Communication Equipment,Information Technology
+MSM,MSC Industrial Direct,sp400,XNYS,USD,0001003078,Industrials,Industrial Distribution,Industrials
+MTB,M&T Bank,sp500,XNYS,USD,0000036270,Financial Services,Banks - Regional,Financials
+MTCH,Match Group,sp600,XNAS,USD,0000891103,Communication Services,Internet Content & Information,Communication Services
+MTD,Mettler Toledo,sp500,XNYS,USD,0001037646,Healthcare,Diagnostics & Research,Health Care
+MTDR,Matador Resources,sp400,XNYS,USD,0001520006,Energy,Oil & Gas E&P,Energy
+MTG,MGIC Investment Corporation,sp400,XNYS,USD,0000876437,Financial Services,Insurance - Specialty,Financials
+MTH,Meritage Homes Corporation,sp600,XNYS,USD,0000833079,Consumer Cyclical,Residential Construction,Consumer Discretionary
+MTN,Vail Resorts,sp400,XNYS,USD,0000812011,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+MTRN,Materion Corp.,sp600,XNYS,USD,0001104657,Basic Materials,Other Industrial Metals & Mining,Materials
+MTSI,MACOM Technology Solutions,sp400,XNAS,USD,0001493594,Technology,Semiconductors,Information Technology
+MTUS,Metallus Inc,sp600,XNYS,USD,0001598428,Basic Materials,Steel,Materials
+MTX,Minerals Technologies,sp600,XNYS,USD,0000891014,Basic Materials,Specialty Chemicals,Materials
+MTZ,MasTec,sp400,XNYS,USD,0000015615,Industrials,Engineering & Construction,Industrials
+MU,Micron Technology,sp500,XNAS,USD,0000723125,Technology,Semiconductors,Information Technology
+MUR,Murphy Oil,sp400,XNYS,USD,0000717423,Energy,Oil & Gas E&P,Energy
+MUSA,Murphy USA,sp400,XNYS,USD,0001573516,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+MWA,Mueller Water Products,sp600,XNYS,USD,0001350593,Industrials,Specialty Industrial Machinery,Industrials
+MXL,"MaxLinear, Inc.",sp600,XNAS,USD,0001288469,Technology,Semiconductors,Information Technology
+MYRG,"MYR Group, Inc.",sp600,XNAS,USD,0000700923,Industrials,Engineering & Construction,Industrials
+MZTI,The Marzetti Company,sp400,XNAS,USD,0000057515,Consumer Defensive,Packaged Foods,Consumer Staples
+NABL,"N-able, Inc.",sp600,XNYS,USD,0001834488,Technology,Information Technology Services,Information Technology
+NATL,NCR Atleos,sp600,XNYS,USD,0001974138,Technology,Software - Application,Financials
+NAVI,Navient,sp600,XNAS,USD,0001593538,Financial Services,Credit Services,Financials
+NBHC,National Bank Holdings Corporation,sp600,XNYS,USD,0001475841,Financial Services,Banks - Regional,Financials
+NBIX,Neurocrine Biosciences,sp400,XNAS,USD,0000914475,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+NBTB,"NBT Bancorp, Inc.",sp600,XNAS,USD,0000790359,Financial Services,Banks - Regional,Financials
+NCLH,Norwegian Cruise Line Holdings,sp500,XNYS,USD,0001513761,Consumer Cyclical,Travel Services,Consumer Discretionary
+NDAQ,"Nasdaq, Inc.",sp500,XNAS,USD,0001120193,Financial Services,Financial Data & Stock Exchanges,Financials
+NDSN,Nordson Corporation,sp500,XNAS,USD,0000072331,Industrials,Specialty Industrial Machinery,Industrials
+NE,Noble Corporation,sp600,XNYS,USD,0001895262,Energy,Oil & Gas Drilling,Energy
+NEE,NextEra Energy,sp500,XNYS,USD,0000753308,Utilities,Utilities - Regulated Electric,Utilities
+NEM,Newmont,sp500,XNYS,USD,0001164727,Basic Materials,Gold,Materials
+NEO,"NeoGenomics Laboratories, Inc.",sp600,XNAS,USD,0001077183,Healthcare,Diagnostics & Research,Health Care
+NEOG,Neogen,sp600,XNAS,USD,0000711377,Healthcare,Medical Devices,Health Care
+NEU,NewMarket Corporation,sp400,XNYS,USD,0001282637,Basic Materials,Specialty Chemicals,Materials
+NFG,National Fuel Gas,sp400,XNYS,USD,0000070145,Energy,Oil & Gas Integrated,Utilities
+NFLX,Netflix,sp500,XNAS,USD,0001065280,Communication Services,Entertainment,Communication Services
+NGVT,"Ingevity, Corp.",sp600,XNYS,USD,0001653477,Basic Materials,Specialty Chemicals,Materials
+NHC,"National Healthcare, Corp.",sp600,XASE,USD,0001047335,Healthcare,Medical Care Facilities,Health Care
+NHI,"National Health Investors, Inc.",sp600,XNYS,USD,0000877860,Real Estate,REIT - Healthcare Facilities,Real Estate
+NI,NiSource,sp500,XNYS,USD,0001111711,Utilities,Utilities - Regulated Gas,Utilities
+NIC,Nicolet Bankshares,sp600,XNYS,USD,0001174850,Financial Services,Banks - Regional,Financials
+NJR,New Jersey Resources,sp400,XNYS,USD,0000356309,Utilities,Utilities - Regulated Gas,Utilities
+NKE,"Nike, Inc.",sp500,XNYS,USD,0000320187,Consumer Cyclical,Footwear & Accessories,Consumer Discretionary
+NLY,Annaly Capital Management,sp400,XNYS,USD,0001043219,Real Estate,REIT - Mortgage,Financials
+NMIH,"NMI Holdings, Inc.",sp600,XNAS,USD,0001547903,Financial Services,Insurance - Specialty,Financials
+NNN,NNN Reit,sp400,XNYS,USD,0000751364,Real Estate,REIT - Retail,Real Estate
+NOC,Northrop Grumman,sp500,XNYS,USD,0001133421,Industrials,Aerospace & Defense,Industrials
+NOG,"Northern Oil and Gas, Inc.",sp600,XNYS,USD,0001104485,Energy,Oil & Gas E&P,Energy
+NOV,NOV Inc.,sp400,XNYS,USD,0001021860,Energy,Oil & Gas Equipment & Services,Energy
+NOVT,Novanta,sp400,XNAS,USD,0001076930,Technology,Scientific & Technical Instruments,Information Technology
+NOW,ServiceNow,sp500,XNYS,USD,0001373715,Technology,Software - Application,Information Technology
+NPK,"National Presto Industries, Inc.",sp600,XNYS,USD,0000080172,Industrials,Aerospace & Defense,Industrials
+NPO,"EnPro Industries, Inc.",sp600,XNYS,USD,0001164863,Industrials,Specialty Industrial Machinery,Industrials
+NRG,NRG Energy,sp500,XNYS,USD,0001013871,Utilities,Utilities - Independent Power Producers,Utilities
+NSC,Norfolk Southern,sp500,XNYS,USD,0000702165,Industrials,Railroads,Industrials
+NSIT,"Insight Enterprises, Inc.",sp600,XNAS,USD,0000932696,Technology,Electronics & Computer Distribution,Industrials
+NSP,Insperity,sp600,XNYS,USD,0001000753,Industrials,Staffing & Employment Services,Industrials
+NSSC,Napco Security Technologies,sp600,XNAS,USD,0000069633,Industrials,Security & Protection Services,Information Technology
+NTAP,NetApp,sp500,XNAS,USD,0001002047,Technology,Software - Infrastructure,Information Technology
+NTCT,"NETSCOUT Systems, Inc.",sp600,XNAS,USD,0001078075,Technology,Software - Infrastructure,Information Technology
+NTNX,Nutanix,sp400,XNAS,USD,0001618732,Technology,Software - Infrastructure,Information Technology
+NTRS,Northern Trust,sp500,XNAS,USD,0000073124,Financial Services,Asset Management,Financials
+NTST,NETSTREIT Corp.,sp600,XNYS,USD,0001798100,Real Estate,REIT - Retail,Real Estate
+NUE,Nucor,sp500,XNYS,USD,0000073309,Basic Materials,Steel,Materials
+NVDA,Nvidia,sp500,XNAS,USD,0001045810,Technology,Semiconductors,Information Technology
+NVR,"NVR, Inc.",sp500,XNYS,USD,0000906163,Consumer Cyclical,Residential Construction,Consumer Discretionary
+NVST,Envista Holdings,sp400,XNYS,USD,0001757073,Healthcare,Medical Instruments & Supplies,Health Care
+NVT,nVent Electric plc,sp400,XNYS,USD,0001720635,Industrials,Electrical Equipment & Parts,Industrials
+NWBI,"Northwest Bancshares, Inc.",sp600,XNAS,USD,0001471265,Financial Services,Banks - Regional,Financials
+NWE,NorthWestern Energy,sp400,XNAS,USD,0001993004,Utilities,Utilities - Regulated Electric,Utilities
+NWL,Newell Brands,sp600,XNAS,USD,0000814453,Consumer Defensive,Household & Personal Products,Consumer Discretionary
+NWN,NW Natural,sp600,XNYS,USD,0001733998,Utilities,Utilities - Regulated Gas,Utilities
+NWS,News Corp (Class B),sp500,XNAS,USD,0001564708,Communication Services,Entertainment,Communication Services
+NWSA,News Corp (Class A),sp500,XNAS,USD,0001564708,Communication Services,Entertainment,Communication Services
+NX,Quanex Building Products Corporation,sp600,XNYS,USD,0001423221,Industrials,Building Products & Equipment,Industrials
+NXPI,NXP Semiconductors,sp500,XNAS,USD,0001413447,Technology,Semiconductors,Information Technology
+NXRT,"NexPoint Residential Trust, Inc.",sp600,XNYS,USD,0001620393,Real Estate,REIT - Residential,Real Estate
+NXST,Nexstar Media Group,sp400,XNAS,USD,0001142417,Communication Services,Broadcasting,Communication Services
+NXT,Nextpower,sp400,XNAS,USD,0001852131,Technology,Solar,Industrials
+NYT,New York Times Company,sp400,XNYS,USD,0000071691,Communication Services,Publishing,Communication Services
+O,Realty Income,sp500,XNYS,USD,0000726728,Real Estate,REIT - Retail,Real Estate
+OC,Owens Corning,sp400,XNYS,USD,0001370946,Industrials,Building Products & Equipment,Industrials
+ODFL,Old Dominion,sp500,XNAS,USD,0000878927,Industrials,Trucking,Industrials
+OFG,OFG Bancorp,sp600,XNYS,USD,0001030469,Financial Services,Banks - Regional,Financials
+OGE,OGE Energy,sp400,XNYS,USD,0001021635,Utilities,Utilities - Regulated Electric,Utilities
+OGN,Organon & Co.,sp600,XNYS,USD,0001821825,Healthcare,Drug Manufacturers - General,Health Care
+OGS,One Gas,sp400,XNYS,USD,0001587732,Utilities,Utilities - Regulated Gas,Utilities
+OHI,Omega Healthcare Investors,sp400,XNYS,USD,0000888491,Real Estate,REIT - Healthcare Facilities,Real Estate
+OI,"O-I Glass, Inc.",sp600,XNYS,USD,0000812074,Consumer Cyclical,Packaging & Containers,Materials
+OII,"Oceaneering International, Inc.",sp600,XNYS,USD,0000073756,Energy,Oil & Gas Equipment & Services,Energy
+OKE,Oneok,sp500,XNYS,USD,0001039684,Energy,Oil & Gas Midstream,Energy
+OKTA,"Okta, Inc.",sp400,XNAS,USD,0001660134,Technology,Software - Infrastructure,Information Technology
+OLED,Universal Display,sp400,XNAS,USD,0001005284,Technology,Electronic Components,Information Technology
+OLLI,Ollie's Bargain Outlet,sp400,XNAS,USD,0001639300,Consumer Defensive,Discount Stores,Consumer Discretionary
+OLN,Olin Corporation,sp400,XNYS,USD,0000074303,Basic Materials,Chemicals,Materials
+OMC,Omnicom Group,sp500,XNYS,USD,0000029989,Communication Services,Advertising Agencies,Communication Services
+OMCL,Omnicell,sp600,XNAS,USD,0000926326,Healthcare,Health Information Services,Health Care
+ON,ON Semiconductor,sp500,XNAS,USD,0001097864,Technology,Semiconductors,Information Technology
+ONB,Old National Bank,sp400,XNAS,USD,0000707179,Financial Services,Banks - Regional,Financials
+ONTO,Onto Innovation,sp400,XNYS,USD,0000704532,Technology,Semiconductor Equipment & Materials,Information Technology
+OPCH,Option Care Health,sp400,XNAS,USD,0001014739,Healthcare,Medical Care Facilities,Health Care
+OPLN,"OPENLANE, Inc.",sp600,XNYS,USD,0001395942,Consumer Cyclical,Auto & Truck Dealerships,Industrials
+ORA,Ormat Technologies,sp400,XNYS,USD,0001296445,Utilities,Utilities - Renewable,Utilities
+ORCL,Oracle Corporation,sp500,XNYS,USD,0001341439,Technology,Software - Infrastructure,Information Technology
+ORI,Old Republic International,sp400,XNYS,USD,0000074260,Financial Services,Insurance - Property & Casualty,Financials
+ORLY,O'Reilly Automotive,sp500,XNAS,USD,0000898173,Consumer Cyclical,Auto Parts,Consumer Discretionary
+OSIS,"OSI Systems, Inc.",sp600,XNAS,USD,0001039065,Technology,Electronic Components,Information Technology
+OSK,Oshkosh,sp400,XNYS,USD,0000775158,Industrials,Farm & Heavy Construction Machinery,Industrials
+OSW,OneSpaWorld Holdings Limited,sp600,XNAS,USD,0001758488,Consumer Cyclical,Leisure,Consumer Discretionary
+OTIS,Otis Worldwide,sp500,XNYS,USD,0001781335,Industrials,Specialty Industrial Machinery,Industrials
+OTTR,Otter Tail Corporation,sp600,XNAS,USD,0001466593,Industrials,Conglomerates,Utilities
+OUT,Outfront Media,sp600,XNYS,USD,0001579877,Real Estate,REIT - Specialty,Real Estate
+OVV,Ovintiv,sp400,XNYS,USD,0001792580,Energy,Oil & Gas E&P,Energy
+OXY,Occidental Petroleum,sp500,XNYS,USD,0000797468,Energy,Oil & Gas E&P,Energy
+OZK,Bank OZK,sp400,XNAS,USD,0001569650,Financial Services,Banks - Regional,Financials
+P,Everpure,sp400,XNYS,USD,0001474432,Technology,Computer Hardware,Information Technology
+PAG,Penske Automotive Group,sp400,XNYS,USD,0001019849,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+PAHC,Phibro Animal Health,sp600,XNAS,USD,0001069899,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+PANW,Palo Alto Networks,sp500,XNAS,USD,0001327567,Technology,Software - Infrastructure,Information Technology
+PARR,"Par Pacific Holdings, Inc.",sp600,XNYS,USD,0000821483,Energy,Oil & Gas Refining & Marketing,Energy
+PATH,UiPath,sp400,XNYS,USD,0001734722,Technology,Software - Infrastructure,Information Technology
+PATK,"Patrick Industries, Inc.",sp600,XNAS,USD,0000076605,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+PAYC,Paycom,sp600,XNYS,USD,0001590955,Technology,Software - Application,Industrials
+PAYO,Payoneer Global Inc.,sp600,XNAS,USD,0001845815,Technology,Software - Infrastructure,Financials
+PAYX,Paychex,sp500,XNAS,USD,0000723531,Technology,Software - Application,Industrials
+PB,Prosperity Bancshares,sp400,XNYS,USD,0001068851,Financial Services,Banks - Regional,Financials
+PBF,PBF Energy,sp400,XNYS,USD,0001534504,Energy,Oil & Gas Refining & Marketing,Energy
+PBH,Prestige Consumer Healthcare,sp600,XNYS,USD,0001295947,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+PBI,"Pitney Bowes, Inc.",sp600,XNYS,USD,0000078814,Industrials,Integrated Freight & Logistics,Industrials
+PCAR,Paccar,sp500,XNAS,USD,0000075362,Industrials,Farm & Heavy Construction Machinery,Industrials
+PCG,PG&E Corporation,sp500,XNYS,USD,0001004980,Utilities,Utilities - Regulated Electric,Utilities
+PCRX,"Pacira BioSciences, Inc.",sp600,XNAS,USD,0001396814,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+PCTY,Paylocity,sp400,XNAS,USD,0001591698,Technology,Software - Application,Industrials
+PDFS,"PDF Solutions, Inc.",sp600,XNAS,USD,0001120914,Technology,Software - Application,Information Technology
+PEB,Pebblebrook Hotel Trust,sp600,XNYS,USD,0001474098,Real Estate,REIT - Hotel & Motel,Real Estate
+PECO,Phillips Edison & Company,sp600,XNAS,USD,0001476204,Real Estate,REIT - Retail,Real Estate
+PEG,Public Service Enterprise Group,sp500,XNYS,USD,0000788784,Utilities,Utilities - Regulated Electric,Utilities
+PEGA,Pegasystems,sp400,XNAS,USD,0001013857,Technology,Software - Application,Information Technology
+PEN,"Penumbra, Inc.",sp400,XNYS,USD,0001321732,Healthcare,Medical Devices,Health Care
+PENG,"Penguin Solutions, Inc.",sp600,XNAS,USD,0001616533,Technology,Information Technology Services,Information Technology
+PENN,Penn Entertainment,sp600,XNAS,USD,0000921738,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+PEP,PepsiCo,sp500,XNAS,USD,0000077476,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Staples
+PFBC,Preferred Bank,sp600,XNAS,USD,0001492165,Financial Services,Banks - Regional,Financials
+PFE,Pfizer,sp500,XNYS,USD,0000078003,Healthcare,Drug Manufacturers - General,Health Care
+PFG,Principal Financial Group,sp500,XNAS,USD,0001126328,Financial Services,Asset Management,Financials
+PFGC,Performance Food Group,sp400,XNYS,USD,0001618673,Consumer Defensive,Food Distribution,Consumer Staples
+PFS,"Provident Financial Services, Inc.",sp600,XNYS,USD,0001178970,Financial Services,Banks - Regional,Financials
+PG,Procter & Gamble,sp500,XNYS,USD,0000080424,Consumer Defensive,Household & Personal Products,Consumer Staples
+PGNY,"Progyny, Inc.",sp600,XNAS,USD,0001551306,Healthcare,Healthcare Plans,Health Care
+PGR,Progressive Corporation,sp500,XNYS,USD,0000080661,Financial Services,Insurance - Property & Casualty,Financials
+PH,Parker Hannifin,sp500,XNYS,USD,0000076334,Industrials,Specialty Industrial Machinery,Industrials
+PHIN,"PHINIA, Inc.",sp600,XNYS,USD,0001968915,Consumer Cyclical,Auto Parts,Consumer Discretionary
+PHM,PulteGroup,sp500,XNYS,USD,0000822416,Consumer Cyclical,Residential Construction,Consumer Discretionary
+PI,"Impinj, Inc.",sp600,XNAS,USD,0001114995,Technology,Semiconductors,Information Technology
+PII,Polaris,sp400,XNYS,USD,0000931015,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+PINS,Pinterest,sp400,XNYS,USD,0001506293,Communication Services,Internet Content & Information,Communication Services
+PIPR,Piper Sandler Companies,sp600,XNYS,USD,0001230245,Financial Services,Capital Markets,Financials
+PJT,"PJT Partners, Inc.",sp600,XNYS,USD,0001626115,Financial Services,Capital Markets,Financials
+PK,Park Hotels & Resorts,sp400,XNYS,USD,0001617406,Real Estate,REIT - Hotel & Motel,Real Estate
+PKG,Packaging Corporation of America,sp500,XNYS,USD,0000075677,Consumer Cyclical,Packaging & Containers,Materials
+PLAB,"Photronics, Inc.",sp600,XNAS,USD,0000810136,Technology,Semiconductor Equipment & Materials,Information Technology
+PLD,Prologis,sp500,XNYS,USD,0001045609,Real Estate,REIT - Industrial,Real Estate
+PLMR,"Palomar Holdings, Inc.",sp600,XNAS,USD,0001761312,Financial Services,Insurance - Property & Casualty,Financials
+PLNT,Planet Fitness,sp400,XNYS,USD,0001637207,Consumer Cyclical,Leisure,Consumer Discretionary
+PLTR,Palantir Technologies,sp500,XNAS,USD,0001321655,Technology,Software - Infrastructure,Information Technology
+PLUS,"ePlus, Inc.",sp600,XNAS,USD,0001022408,Technology,Software - Application,Information Technology
+PLXS,Plexus Corp.,sp600,XNAS,USD,0000785786,Technology,Electronic Components,Information Technology
+PM,Philip Morris International,sp500,XNYS,USD,0001413329,Consumer Defensive,Tobacco,Consumer Staples
+PMT,PennyMac Mortgage Investment Trust,sp600,XNYS,USD,0001464423,Real Estate,REIT - Mortgage,Real Estate
+PNC,PNC Financial Services,sp500,XNYS,USD,0000713676,Financial Services,Banks - Regional,Financials
+PNFP,Pinnacle Financial Partners,sp400,XNYS,USD,0002082866,Financial Services,Banks - Regional,Financials
+PNR,Pentair,sp500,XNYS,USD,0000077360,Industrials,Specialty Industrial Machinery,Industrials
+PNW,Pinnacle West Capital,sp500,XNYS,USD,0000764622,Utilities,Utilities - Regulated Electric,Utilities
+PODD,Insulet Corporation,sp500,XNAS,USD,0001145197,Healthcare,Medical Devices,Health Care
+POOL,Pool Corporation,sp600,XNAS,USD,0000945841,Industrials,Industrial Distribution,Consumer Discretionary
+POR,Portland General Electric,sp400,XNYS,USD,0000784977,Utilities,Utilities - Regulated Electric,Utilities
+POST,Post Holdings,sp400,XNYS,USD,0001530950,Consumer Defensive,Packaged Foods,Consumer Staples
+POWI,Power Integrations,sp600,XNAS,USD,0000833640,Technology,Semiconductors,Information Technology
+POWL,"Powell Industries, Inc.",sp600,XNAS,USD,0000080420,Industrials,Electrical Equipment & Parts,Industrials
+PPC,Pilgrim's Pride,sp400,XNAS,USD,0000802481,Consumer Defensive,Packaged Foods,Consumer Staples
+PPG,PPG Industries,sp500,XNYS,USD,0000079879,Basic Materials,Specialty Chemicals,Materials
+PPL,PPL Corporation,sp500,XNYS,USD,0000922224,Utilities,Utilities - Regulated Electric,Utilities
+PPLI,People Inc.,sp600,XNAS,USD,0001800227,Communication Services,Internet Content & Information,Communication Services
+PR,Permian Resources,sp400,XNYS,USD,0001658566,Energy,Oil & Gas E&P,Energy
+PRDO,Perdoceo Education Corp.,sp600,XNAS,USD,0001046568,Consumer Defensive,Education & Training Services,Consumer Discretionary
+PRG,"PROG Holdings, Inc.",sp600,XNYS,USD,0001808834,Industrials,Rental & Leasing Services,Financials
+PRGO,Perrigo,sp600,XNYS,USD,0001585364,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+PRGS,Progress Software Corporation,sp600,XNAS,USD,0000876167,Technology,Software - Infrastructure,Information Technology
+PRI,Primerica,sp400,XNYS,USD,0001475922,Financial Services,Insurance - Life,Financials
+PRIM,Primoris Services Corporation,sp600,XNYS,USD,0001361538,Industrials,Engineering & Construction,Industrials
+PRK,Park National Corp.,sp600,XASE,USD,0000805676,Financial Services,Banks - Regional,Financials
+PRKS,United Parks & Resorts,sp600,XNYS,USD,0001564902,Consumer Cyclical,Leisure,Consumer Discretionary
+PRLB,Protolabs,sp600,XNYS,USD,0001443669,Industrials,Metal Fabrication,Industrials
+PRSU,"Pursuit Attractions & Hospitality, Inc.",sp600,XNYS,USD,0000884219,Consumer Cyclical,Travel Services,Consumer Discretionary
+PRU,Prudential Financial,sp500,XNYS,USD,0001137774,Financial Services,Insurance - Life,Financials
+PRVA,"Privia Health Group, Inc.",sp600,XNAS,USD,0001759655,Healthcare,Health Information Services,Health Care
+PSA,Public Storage,sp500,XNYS,USD,0001393311,Real Estate,REIT - Industrial,Real Estate
+PSKY,Paramount Skydance Corporation,sp500,XNAS,USD,0002041610,Communication Services,Entertainment,Communication Services
+PSMT,PriceSmart,sp600,XNAS,USD,0001041803,Consumer Defensive,Discount Stores,Consumer Staples
+PSN,Parsons Corporation,sp400,XNYS,USD,0000275880,Technology,Information Technology Services,Industrials
+PSX,Phillips 66,sp500,XNYS,USD,0001534701,Energy,Oil & Gas Refining & Marketing,Energy
+PTC,PTC Inc.,sp500,XNAS,USD,0000857005,Technology,Software - Application,Information Technology
+PTCT,"PTC Therapeutics, Inc.",sp600,XNAS,USD,0001070081,Healthcare,Biotechnology,Health Care
+PTEN,"Patterson-UTI Energy, Inc.",sp600,XNAS,USD,0000889900,Energy,Oil & Gas Drilling,Energy
+PTGX,"Protagonist Therapeutics, Inc.",sp600,XNAS,USD,0001377121,Healthcare,Biotechnology,Health Care
+PTON,"Peloton Interactive, Inc.",sp600,XNAS,USD,0001639825,Consumer Cyclical,Leisure,Consumer Discretionary
+PVH,PVH Corp.,sp400,XNYS,USD,0000078239,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+PWR,Quanta Services,sp500,XNYS,USD,0001050915,Industrials,Engineering & Construction,Industrials
+PYPL,PayPal,sp500,XNAS,USD,0001633917,Financial Services,Credit Services,Financials
+PZZA,Papa John's Pizza,sp600,XNAS,USD,0000901491,Consumer Cyclical,Restaurants,Consumer Discretionary
+Q,Qnity Electronics,sp500,XNYS,USD,0002058873,Technology,Semiconductor Equipment & Materials,Information Technology
+QCOM,Qualcomm,sp500,XNAS,USD,0000804328,Technology,Semiconductors,Information Technology
+QDEL,QuidelOrtho,sp600,XNAS,USD,0001906324,Healthcare,Medical Devices,Health Care
+QLYS,Qualys,sp400,XNAS,USD,0001107843,Technology,Software - Infrastructure,Information Technology
+QNST,"QuinStreet, Inc.",sp600,XNAS,USD,0001117297,Communication Services,Advertising Agencies,Communication Services
+QRVO,Qorvo,sp600,XNAS,USD,0001604778,Technology,Semiconductors,Information Technology
+QTWO,"Q2 Holdings, Inc.",sp600,XNYS,USD,0001410384,Technology,Software - Application,Information Technology
+R,Ryder,sp400,XNYS,USD,0000085961,Industrials,Rental & Leasing Services,Industrials
+RAL,Ralliant Corp,sp600,XNYS,USD,0002041385,Technology,Electronic Components,Information Technology
+RAMP,"LiveRamp Holdings, Inc.",sp600,XNYS,USD,0000733269,Technology,Software - Infrastructure,Information Technology
+RBA,RB Global,sp400,XNYS,USD,0001046102,Industrials,Specialty Business Services,Industrials
+RBC,RBC Bearings,sp400,XNYS,USD,0001324948,Industrials,Tools & Accessories,Industrials
+RCL,Royal Caribbean Group,sp500,XNYS,USD,0000884887,Consumer Cyclical,Travel Services,Consumer Discretionary
+RCUS,"Arcus Biosciences, Inc.",sp600,XNYS,USD,0001724521,Healthcare,Biotechnology,Health Care
+RDDT,Reddit,sp500,XNYS,USD,0001713445,Communication Services,Internet Content & Information,Communication Services
+RDN,"Radian Group, Inc.",sp600,XNYS,USD,0000890926,Financial Services,Insurance - Specialty,Financials
+RDNT,"RadNet, Inc.",sp600,XNAS,USD,0000790526,Healthcare,Diagnostics & Research,Health Care
+REG,Regency Centers,sp500,XNAS,USD,0000910606,Real Estate,REIT - Retail,Real Estate
+REGN,Regeneron Pharmaceuticals,sp500,XNAS,USD,0000872589,Healthcare,Biotechnology,Health Care
+RELY,Remitly,sp600,XNAS,USD,0001782170,Technology,Software - Infrastructure,Financials
+RES,"RPC, Inc.",sp600,XNYS,USD,0000742278,Energy,Oil & Gas Equipment & Services,Energy
+REX,REX American Resources Corporation,sp600,XNYS,USD,0000744187,Basic Materials,Chemicals,Energy
+REXR,Rexford Industrial Realty,sp400,XNYS,USD,0001571283,Real Estate,REIT - Industrial,Real Estate
+REYN,Reynolds Consumer Products,sp600,XNAS,USD,0001786431,Consumer Cyclical,Packaging & Containers,Consumer Staples
+REZI,"Resideo Technologies, Inc.",sp600,XNYS,USD,0001740332,Industrials,Industrial Distribution,Industrials
+RF,Regions Financial Corporation,sp500,XNYS,USD,0001281761,Financial Services,Banks - Regional,Financials
+RGA,Reinsurance Group of America,sp400,XNYS,USD,0000898174,Financial Services,Insurance - Reinsurance,Financials
+RGEN,Repligen,sp400,XNAS,USD,0000730272,Healthcare,Medical Instruments & Supplies,Health Care
+RGLD,Royal Gold,sp400,XNAS,USD,0000085535,Basic Materials,Gold,Materials
+RH,RH,sp400,XNYS,USD,0001528849,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+RHI,Robert Half,sp600,XNYS,USD,0000315213,Industrials,Staffing & Employment Services,Industrials
+RHP,Ryman Hospitality Properties,sp600,XNYS,USD,0001040829,Real Estate,REIT - Hotel & Motel,Real Estate
+RITM,Rithm Capital,sp600,XNYS,USD,0001556593,Real Estate,REIT - Mortgage,Financials
+RJF,Raymond James Financial,sp500,XNYS,USD,0000720005,Financial Services,Asset Management,Financials
+RL,Ralph Lauren Corporation,sp500,XNYS,USD,0001037038,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+RLI,RLI Corp.,sp400,XNYS,USD,0000084246,Financial Services,Insurance - Property & Casualty,Financials
+RMBS,Rambus,sp400,XNAS,USD,0000917273,Technology,Semiconductors,Information Technology
+RMD,ResMed|,sp500,XNYS,USD,0000943819,Healthcare,Medical Instruments & Supplies,Health Care
+RNG,"RingCentral, Inc.",sp600,XNYS,USD,0001384905,Technology,Software - Application,Information Technology
+RNR,RenaissanceRe,sp400,XNYS,USD,0000913144,Financial Services,Insurance - Reinsurance,Financials
+RNST,Renasant Corp.,sp600,XNYS,USD,0000715072,Financial Services,Banks - Regional,Financials
+ROAD,"Construction Partners, Inc.",sp600,XNAS,USD,0001718227,Industrials,Engineering & Construction,Industrials
+ROCK,"Gibraltar Industries, Inc.",sp600,XNAS,USD,0000912562,Industrials,Building Products & Equipment,Industrials
+ROG,Rogers Corporation,sp600,XNYS,USD,0000084748,Technology,Electronic Components,Information Technology
+ROIV,Roivant Sciences,sp400,XNAS,USD,0001635088,Healthcare,Biotechnology,Health Care
+ROK,Rockwell Automation,sp500,XNYS,USD,0001024478,Industrials,Specialty Industrial Machinery,Industrials
+ROKU,"Roku, Inc.",sp400,XNAS,USD,0001428439,Communication Services,Entertainment,Communication Services
+ROL,"Rollins, Inc.",sp500,XNYS,USD,0000084839,Consumer Cyclical,Personal Services,Industrials
+ROP,Roper Technologies,sp500,XNAS,USD,0000882835,Technology,Software - Application,Information Technology
+ROST,Ross Stores,sp500,XNAS,USD,0000745732,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+RPM,RPM International,sp400,XNYS,USD,0000110621,Basic Materials,Specialty Chemicals,Materials
+RRC,Range Resources,sp400,XNYS,USD,0000315852,Energy,Oil & Gas E&P,Energy
+RRR,"Red Rock Resorts, Inc.",sp600,XNAS,USD,0001653653,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+RRX,Regal Rexnord,sp400,XNYS,USD,0000082811,Industrials,Specialty Industrial Machinery,Industrials
+RS,"Reliance, Inc.",sp400,XNYS,USD,0000861884,Basic Materials,Steel,Materials
+RSG,Republic Services,sp500,XNYS,USD,0001060391,Industrials,Waste Management,Industrials
+RSI,"Rush Street Interactive, Inc.",sp600,XNYS,USD,0001793659,Consumer Cyclical,Gambling,Consumer Discretionary
+RTX,RTX Corporation,sp500,XNYS,USD,0000101829,Industrials,Aerospace & Defense,Industrials
+RUN,Sunrun,sp600,XNAS,USD,0001469367,Technology,Solar,Industrials
+RUSHA,Rush Enterprises,sp600,XNAS,USD,0001012019,Consumer Cyclical,Auto & Truck Dealerships,Industrials
+RVTY,Revvity,sp500,XNYS,USD,0000031791,Healthcare,Diagnostics & Research,Health Care
+RXO,"RXO, Inc.",sp600,XNYS,USD,0001929561,Industrials,Trucking,Industrials
+RYAN,Ryan Specialty,sp400,XNYS,USD,0001849253,Financial Services,Insurance Brokers,Financials
+RYN,Rayonier,sp400,XNYS,USD,0000052827,Real Estate,REIT - Specialty,Real Estate
+SABR,Sabre,sp600,XNAS,USD,0001597033,Technology,Software - Infrastructure,Consumer Discretionary
+SAFE,"Safehold, Inc.",sp600,XNYS,USD,0001095651,Real Estate,REIT - Diversified,Real Estate
+SAFT,"Safety Insurance Group, Inc.",sp600,XNAS,USD,0001172052,Financial Services,Insurance - Property & Casualty,Financials
+SAH,"Sonic Automotive, Inc.",sp600,XNYS,USD,0001043509,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+SAIA,Saia,sp400,XNAS,USD,0001177702,Industrials,Trucking,Industrials
+SAIC,Science Applications Intl Corp,sp400,XNAS,USD,0001571123,Technology,Information Technology Services,Industrials
+SAM,Boston Beer Company,sp400,XNYS,USD,0000949870,Consumer Defensive,Beverages - Brewers,Consumer Staples
+SANM,Sanmina Corporation,sp400,XNAS,USD,0000897723,Technology,Electronic Components,Information Technology
+SARO,StandardAero,sp400,XNYS,USD,0002025410,Industrials,Aerospace & Defense,Industrials
+SBAC,SBA Communications,sp500,XNAS,USD,0001034054,Real Estate,REIT - Specialty,Real Estate
+SBCF,Seacoast Banking Corporation of Florida,sp600,XNAS,USD,0000730708,Financial Services,Banks - Regional,Financials
+SBH,"Sally Beauty Holdings, Inc.",sp600,XNYS,USD,0001368458,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+SBRA,Sabra Health Care REIT,sp400,XNAS,USD,0001492298,Real Estate,REIT - Healthcare Facilities,Real Estate
+SBSI,"Southside Bancshares, Inc.",sp600,XNYS,USD,0000705432,Financial Services,Banks - Regional,Financials
+SBUX,Starbucks,sp500,XNAS,USD,0000829224,Consumer Cyclical,Restaurants,Consumer Discretionary
+SCHL,Scholastic Corporation,sp600,XNAS,USD,0000866729,Communication Services,Publishing,Consumer Discretionary
+SCHW,Charles Schwab Corporation,sp500,XNYS,USD,0000316709,Financial Services,Capital Markets,Financials
+SCI,Service Corp Intl,sp400,XNYS,USD,0000089089,Consumer Cyclical,Personal Services,Consumer Discretionary
+SCL,Stepan Company,sp600,XNYS,USD,0000094049,Basic Materials,Specialty Chemicals,Materials
+SCSC,"ScanSource, Inc.",sp600,XNAS,USD,0000918965,Technology,Electronics & Computer Distribution,Information Technology
+SDGR,"Schrödinger, Inc.",sp600,XNAS,USD,0001490978,Healthcare,Health Information Services,Health Care
+SEDG,SolarEdge,sp600,XNAS,USD,0001419612,Technology,Solar,Information Technology
+SEI,"Solaris Energy Infrastructure, Inc.",sp600,XNYS,USD,0001697500,Energy,Oil & Gas Equipment & Services,Energy
+SEIC,SEI Investments Company,sp400,XNAS,USD,0000350894,Financial Services,Asset Management,Financials
+SEZL,Sezzle,sp600,XNAS,USD,0001662991,Financial Services,Credit Services,Financials
+SF,Stifel,sp400,XNYS,USD,0000720672,Financial Services,Capital Markets,Financials
+SFBS,"ServisFirst Bancshares, Inc.",sp600,XNYS,USD,0001430723,Financial Services,Banks - Regional,Financials
+SFM,Sprouts Farmers Market,sp400,XNAS,USD,0001575515,Consumer Defensive,Grocery Stores,Consumer Staples
+SFNC,Simmons First National Corporation,sp600,XNAS,USD,0000090498,Financial Services,Banks - Regional,Financials
+SGI,Somnigroup International,sp400,XNYS,USD,0001206264,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+SHAK,"Shake Shack, Inc.",sp600,XNYS,USD,0001620533,Consumer Cyclical,Restaurants,Consumer Discretionary
+SHC,Sotera Health,sp400,XNAS,USD,0001822479,Healthcare,Diagnostics & Research,Health Care
+SHEN,Shenandoah Telecommunications Co,sp600,XNAS,USD,0000354963,Communication Services,Telecom Services,Communication Services
+SHO,"Sunstone Hotel Investors, Inc.",sp600,XNYS,USD,0001295810,Real Estate,REIT - Hotel & Motel,Real Estate
+SHOO,"Steven Madden, Ltd.",sp600,XNAS,USD,0000913241,Consumer Cyclical,Footwear & Accessories,Consumer Discretionary
+SHW,Sherwin-Williams,sp500,XNYS,USD,0000089800,Basic Materials,Specialty Chemicals,Materials
+SIG,Signet Jewelers,sp600,XNYS,USD,0000832988,Consumer Cyclical,Luxury Goods,Consumer Discretionary
+SIGI,Selective Insurance Group,sp400,XNAS,USD,0000230557,Financial Services,Insurance - Property & Casualty,Financials
+SIRI,SiriusXM,sp400,XNAS,USD,0000908937,Communication Services,Entertainment,Communication Services
+SITM,SiTime,sp400,XNAS,USD,0001451809,Technology,Semiconductors,Information Technology
+SJM,J.M. Smucker Company (The),sp500,XNYS,USD,0000091419,Consumer Defensive,Packaged Foods,Consumer Staples
+SKT,"Tanger Factory Outlet Centers, Inc.",sp600,XNYS,USD,0000899715,Real Estate,REIT - Retail,Real Estate
+SKY,"Champion Homes, Inc.",sp600,XNYS,USD,0000090896,Consumer Cyclical,Residential Construction,Consumer Discretionary
+SKYW,"SkyWest, Inc.",sp600,XNAS,USD,0000793733,Industrials,Airlines,Industrials
+SLAB,Silicon Labs,sp400,XNAS,USD,0001038074,Technology,Semiconductors,Information Technology
+SLB,Schlumberger,sp500,XNYS,USD,0000087347,Energy,Oil & Gas Equipment & Services,Energy
+SLG,SL Green Realty,sp600,XNYS,USD,0001040971,Real Estate,REIT - Office,Real Estate
+SLGN,Silgan Holdings,sp400,XNYS,USD,0000849869,Consumer Cyclical,Packaging & Containers,Materials
+SLM,SLM Corp,sp400,XNAS,USD,0001032033,Financial Services,Credit Services,Financials
+SLVM,Sylvamo Corp.,sp600,XNYS,USD,0001856485,Basic Materials,Paper & Paper Products,Materials
+SM,SM Energy Company,sp600,XNYS,USD,0000893538,Energy,Oil & Gas E&P,Energy
+SMCI,Supermicro,sp500,XNAS,USD,0001375365,Technology,Computer Hardware,Information Technology
+SMG,Scotts Miracle-Gro Company,sp400,XNYS,USD,0000825542,Basic Materials,Agricultural Inputs,Materials
+SMP,"Standard Motor Products, Inc.",sp600,XNYS,USD,0000093389,Consumer Cyclical,Auto Parts,Consumer Discretionary
+SMPL,Simply Good Foods Company,sp600,XNAS,USD,0001702744,Consumer Defensive,Packaged Foods,Consumer Staples
+SMTC,Semtech,sp400,XNAS,USD,0000088941,Technology,Semiconductors,Information Technology
+SN,SharkNinja,sp400,XNYS,USD,0001957132,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+SNA,Snap-on,sp500,XNYS,USD,0000091440,Industrials,Tools & Accessories,Industrials
+SNDK,Sandisk,sp500,XNAS,USD,0002023554,Technology,Computer Hardware,Information Technology
+SNDR,Schneider National,sp600,XNYS,USD,0001692063,Industrials,Trucking,Industrials
+SNEX,StoneX Group Inc.,sp600,XNAS,USD,0000913760,Financial Services,Capital Markets,Financials
+SNPS,Synopsys,sp500,XNAS,USD,0000883241,Technology,Software - Infrastructure,Information Technology
+SNX,TD Synnex,sp400,XNYS,USD,0001177394,Technology,Electronics & Computer Distribution,Information Technology
+SO,Southern Company,sp500,XNYS,USD,0000092122,Utilities,Utilities - Regulated Electric,Utilities
+SOLS,Solstice Advanced Materials,sp400,XNAS,USD,0002064953,Basic Materials,Specialty Chemicals,Materials
+SOLV,Solventum,sp500,XNYS,USD,0001964738,Healthcare,Medical Instruments & Supplies,Health Care
+SON,Sonoco,sp400,XNYS,USD,0000091767,Consumer Cyclical,Packaging & Containers,Materials
+SONO,"Sonos, Inc.",sp600,XNAS,USD,0001314727,Technology,Consumer Electronics,Consumer Discretionary
+SPG,Simon Property Group,sp500,XNYS,USD,0001063761,Real Estate,REIT - Retail,Real Estate
+SPGI,S&P Global,sp500,XNYS,USD,0000064040,Financial Services,Financial Data & Stock Exchanges,Financials
+SPHR,Sphere Entertainment,sp600,XNYS,USD,0001795250,Communication Services,Entertainment,Communication Services
+SPNT,SiriusPoint Ltd.,sp600,XNYS,USD,0001576018,Financial Services,Insurance - Reinsurance,Financials
+SPSC,"SPS Commerce, Inc.",sp600,XNAS,USD,0001092699,Technology,Software - Application,Information Technology
+SPXC,SPX Technologies,sp400,XNYS,USD,0000088205,Industrials,Building Products & Equipment,Industrials
+SR,Spire,sp400,XNYS,USD,0001126956,Utilities,Utilities - Regulated Gas,Utilities
+SRE,Sempra,sp500,XNYS,USD,0001032208,Utilities,Utilities - Diversified,Utilities
+SRPT,Sarepta Therapeutics,sp600,XNAS,USD,0000873303,Healthcare,Biotechnology,Health Care
+SSB,South State Bank,sp400,XNYS,USD,0000764038,Financial Services,Banks - Regional,Financials
+SSD,Simpson Manufacturing,sp400,XNYS,USD,0000920371,Basic Materials,Lumber & Wood Production,Industrials
+ST,Sensata Technologies,sp400,XNYS,USD,0001477294,Technology,Scientific & Technical Instruments,Industrials
+STAA,STAAR Surgical Company,sp600,XNAS,USD,0000718937,Healthcare,Medical Instruments & Supplies,Health Care
+STAG,STAG Industrial,sp400,XNYS,USD,0001479094,Real Estate,REIT - Industrial,Real Estate
+STBA,"S&T Bancorp, Inc.",sp600,XNAS,USD,0000719220,Financial Services,Banks - Regional,Financials
+STC,Stewart Information Services Corporation,sp600,XNYS,USD,0000094344,Financial Services,Insurance - Property & Casualty,Financials
+STE,Steris,sp500,XNYS,USD,0001757898,Healthcare,Medical Devices,Health Care
+STEP,StepStone Group,sp600,XNAS,USD,0001796022,Financial Services,Asset Management,Financials
+STLD,Steel Dynamics,sp500,XNAS,USD,0001022671,Basic Materials,Steel,Materials
+STRA,"Strategic Education, Inc.",sp600,XNAS,USD,0001013934,Consumer Defensive,Education & Training Services,Consumer Discretionary
+STRL,Sterling Infrastructure,sp400,XNAS,USD,0000874238,Industrials,Engineering & Construction,Industrials
+STT,State Street Corporation,sp500,XNYS,USD,0000093751,Financial Services,Asset Management,Financials
+STWD,Starwood Property Trust,sp400,XNYS,USD,0001465128,Real Estate,REIT - Mortgage,Financials
+STX,Seagate Technology,sp500,XNAS,USD,0001137789,Technology,Computer Hardware,Information Technology
+STZ,Constellation Brands,sp500,XNYS,USD,0000016918,Consumer Defensive,Beverages - Brewers,Consumer Staples
+SUI,Sun Communities,sp400,XNYS,USD,0000912593,Real Estate,REIT - Residential,Real Estate
+SUPN,"Supernus Pharmaceuticals, Inc.",sp600,XNAS,USD,0001356576,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+SW,Smurfit Westrock,sp500,XNYS,USD,0002005951,Consumer Cyclical,Packaging & Containers,Materials
+SWK,Stanley Black & Decker,sp500,XNYS,USD,0000093556,Industrials,Tools & Accessories,Industrials
+SWKS,Skyworks Solutions,sp500,XNAS,USD,0000004127,Technology,Semiconductors,Information Technology
+SWX,Southwest Gas Corp,sp400,XNYS,USD,0001692115,Utilities,Utilities - Regulated Gas,Utilities
+SXI,Standex International Corporation,sp600,XNYS,USD,0000310354,Industrials,Specialty Industrial Machinery,Industrials
+SXT,Sensient Technologies,sp600,XNYS,USD,0000310142,Basic Materials,Specialty Chemicals,Materials
+SYF,Synchrony Financial,sp500,XNYS,USD,0001601712,Financial Services,Credit Services,Financials
+SYK,Stryker Corporation,sp500,XNYS,USD,0000310764,Healthcare,Medical Devices,Health Care
+SYNA,Synaptics,sp400,XNAS,USD,0000817720,Technology,Semiconductors,Information Technology
+SYY,Sysco,sp500,XNYS,USD,0000096021,Consumer Defensive,Food Distribution,Consumer Staples
+T,AT&T,sp500,XNYS,USD,0000732717,Communication Services,Telecom Services,Communication Services
+TALO,"Talos Energy, Inc.",sp600,XNYS,USD,0001724965,Energy,Oil & Gas E&P,Energy
+TAP,Molson Coors Beverage Company,sp500,XNYS,USD,0000024545,Consumer Defensive,Beverages - Brewers,Consumer Staples
+TBBK,"The Bancorp, Inc.",sp600,XNAS,USD,0001295401,Financial Services,Banks - Regional,Financials
+TCBI,Texas Capital Bancshares,sp400,XNAS,USD,0001077428,Financial Services,Banks - Regional,Financials
+TDC,Teradata,sp600,XNYS,USD,0000816761,Technology,Software - Infrastructure,Information Technology
+TDG,TransDigm Group,sp500,XNYS,USD,0001260221,Industrials,Aerospace & Defense,Industrials
+TDS,"Telephone and Data Systems, Inc.",sp600,XNYS,USD,0001051512,Communication Services,Telecom Services,Communication Services
+TDW,"Tidewater, Inc.",sp600,XNYS,USD,0000098222,Energy,Oil & Gas Equipment & Services,Energy
+TDY,Teledyne Technologies,sp500,XNYS,USD,0001094285,Technology,Scientific & Technical Instruments,Information Technology
+TECH,Bio-Techne,sp500,XNAS,USD,0000842023,Healthcare,Biotechnology,Health Care
+TEL,TE Connectivity,sp500,XNYS,USD,0001385157,Technology,Electronic Components,Information Technology
+TER,Teradyne,sp500,XNAS,USD,0000097210,Technology,Semiconductor Equipment & Materials,Information Technology
+TEX,Terex,sp400,XNYS,USD,0000097216,Industrials,Farm & Heavy Construction Machinery,Industrials
+TFC,Truist Financial,sp500,XNYS,USD,0000092230,Financial Services,Banks - Regional,Financials
+TFIN,"Triumph Bancorp, Inc.",sp600,XNYS,USD,0001539638,Financial Services,Banks - Regional,Financials
+TFX,Teleflex,sp600,XNYS,USD,0000096943,Healthcare,Medical Instruments & Supplies,Health Care
+TGT,Target Corporation,sp500,XNYS,USD,0000027419,Consumer Defensive,Discount Stores,Consumer Staples
+TGTX,"TG Therapeutics, Inc.",sp600,XNAS,USD,0001001316,Healthcare,Biotechnology,Health Care
+THC,Tenet Health,sp400,XNYS,USD,0000070318,Healthcare,Medical Care Facilities,Health Care
+THG,Hanover Insurance,sp400,XNYS,USD,0000944695,Financial Services,Insurance - Property & Casualty,Financials
+THO,Thor Industries,sp400,XNYS,USD,0000730263,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+THRM,Gentherm Incorporated,sp600,XNAS,USD,0000903129,Consumer Cyclical,Auto Parts,Consumer Discretionary
+TILE,"Interface, Inc.",sp600,XNAS,USD,0000715787,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Industrials
+TJX,TJX Companies,sp500,XNYS,USD,0000109198,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+TKO,TKO Group Holdings,sp500,XNYS,USD,0001973266,Communication Services,Entertainment,Communication Services
+TKR,Timken,sp400,XNYS,USD,0000098362,Industrials,Tools & Accessories,Industrials
+TLN,Talen Energy,sp400,XNAS,USD,0001622536,Utilities,Utilities - Independent Power Producers,Utilities
+TMDX,"TransMedics Group, Inc.",sp600,XNAS,USD,0001756262,Healthcare,Medical Devices,Health Care
+TMO,Thermo Fisher Scientific,sp500,XNYS,USD,0000097745,Healthcare,Diagnostics & Research,Health Care
+TMP,Tompkins Financial Corporation,sp600,XASE,USD,0001005817,Financial Services,Banks - Regional,Financials
+TMUS,T-Mobile US,sp500,XNAS,USD,0001283699,Communication Services,Telecom Services,Communication Services
+TNC,Tennant Company,sp600,XNYS,USD,0000097134,Industrials,Specialty Industrial Machinery,Industrials
+TNDM,Tandem Diabetes Care,sp600,XNAS,USD,0001438133,Healthcare,Medical Devices,Health Care
+TNL,Travel + Leisure Co.,sp400,XNYS,USD,0001361658,Consumer Cyclical,Travel Services,Consumer Discretionary
+TOL,Toll Brothers,sp400,XNYS,USD,0000794170,Consumer Cyclical,Residential Construction,Consumer Discretionary
+TOST,"Toast, Inc.",sp400,XNYS,USD,0001650164,Technology,Software - Infrastructure,Financials
+TPC,Tutor Perini Corporation,sp600,XNYS,USD,0000077543,Industrials,Engineering & Construction,Industrials
+TPL,Texas Pacific Land Corporation,sp500,XNYS,USD,0001811074,Energy,Oil & Gas E&P,Energy
+TPR,"Tapestry, Inc.",sp500,XNYS,USD,0001116132,Consumer Cyclical,Luxury Goods,Consumer Discretionary
+TR,"Tootsie Roll Industries, Inc.",sp600,XNYS,USD,0000098677,Consumer Defensive,Confectioners,Consumer Staples
+TREX,Trex,sp400,XNYS,USD,0001069878,Industrials,Building Products & Equipment,Industrials
+TRGP,Targa Resources,sp500,XNYS,USD,0001389170,Energy,Oil & Gas Midstream,Energy
+TRIP,TripAdvisor,sp600,XNAS,USD,0001526520,Consumer Cyclical,Travel Services,Communication Services
+TRMB,Trimble Inc.,sp500,XNAS,USD,0000864749,Technology,Scientific & Technical Instruments,Information Technology
+TRMK,Trustmark Corp.,sp600,XNAS,USD,0000036146,Financial Services,Banks - Regional,Financials
+TRN,"Trinity Industries, Inc.",sp600,XNYS,USD,0000099780,Industrials,Railroads,Industrials
+TRNO,Terreno Realty Corporation,sp600,XNYS,USD,0001476150,Real Estate,REIT - Industrial,Real Estate
+TROW,T. Rowe Price,sp500,XNAS,USD,0001113169,Financial Services,Asset Management,Financials
+TRST,TrustCo Bank Corp NY,sp600,XNAS,USD,0000357301,Financial Services,Banks - Regional,Financials
+TRU,TransUnion,sp400,XNYS,USD,0001552033,Financial Services,Financial Data & Stock Exchanges,Industrials
+TRUP,Trupanion,sp600,XNAS,USD,0001371285,Financial Services,Insurance - Property & Casualty,Financials
+TRV,Travelers Companies (The),sp500,XNYS,USD,0000086312,Financial Services,Insurance - Property & Casualty,Financials
+TSCO,Tractor Supply,sp500,XNAS,USD,0000916365,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+TSLA,"Tesla, Inc.",sp500,XNAS,USD,0001318605,Consumer Cyclical,Auto Manufacturers,Consumer Discretionary
+TSN,Tyson Foods,sp500,XNYS,USD,0000100493,Consumer Defensive,Farm Products,Consumer Staples
+TT,Trane Technologies,sp500,XNYS,USD,0001466258,Industrials,Building Products & Equipment,Industrials
+TTC,Toro,sp400,XNYS,USD,0000737758,Industrials,Tools & Accessories,Industrials
+TTD,Trade Desk (The),sp500,XNAS,USD,0001671933,Communication Services,Advertising Agencies,Communication Services
+TTEK,Tetra Tech,sp400,XNAS,USD,0000831641,Industrials,Engineering & Construction,Industrials
+TTMI,TTM Technologies,sp400,XNAS,USD,0001116942,Technology,Electronic Components,Information Technology
+TTWO,Take-Two Interactive,sp500,XNAS,USD,0000946581,Communication Services,Electronic Gaming & Multimedia,Communication Services
+TWLO,Twilio,sp400,XNYS,USD,0001447669,Technology,Software - Infrastructure,Information Technology
+TXN,Texas Instruments,sp500,XNAS,USD,0000097476,Technology,Semiconductors,Information Technology
+TXNM,TXNM Energy,sp400,XNYS,USD,0001108426,Utilities,Utilities - Regulated Electric,Utilities
+TXRH,Texas Roadhouse,sp400,XNAS,USD,0001289460,Consumer Cyclical,Restaurants,Consumer Discretionary
+TXT,Textron,sp500,XNYS,USD,0000217346,Industrials,Aerospace & Defense,Industrials
+TYL,Tyler Technologies,sp500,XNYS,USD,0000860731,Technology,Software - Application,Information Technology
+UA,Under Armour (Class C),sp600,XNYS,USD,0001336917,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+UAA,Under Armour (Class A),sp600,XNYS,USD,0001336917,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+UAL,United Airlines Holdings,sp500,XNAS,USD,0000100517,Industrials,Airlines,Industrials
+UBER,Uber,sp500,XNYS,USD,0001543151,Technology,Software - Application,Industrials
+UBSI,United Bankshares,sp400,XNAS,USD,0000729986,Financial Services,Banks - Regional,Financials
+UCB,"United Community Banks, Inc.",sp600,XNYS,USD,0000857855,Financial Services,Banks - Regional,Financials
+UCTT,"Ultra Clean Holdings, Inc.",sp600,XNAS,USD,0001275014,Technology,Semiconductor Equipment & Materials,Information Technology
+UDR,"UDR, Inc.",sp500,XNYS,USD,0000074208,Real Estate,REIT - Residential,Real Estate
+UE,Urban Edge Properties,sp600,XNYS,USD,0001611547,Real Estate,REIT - Retail,Real Estate
+UFCS,"United Fire Group, Inc.",sp600,XNAS,USD,0000101199,Financial Services,Insurance - Property & Casualty,Financials
+UFPI,UFP Industries,sp400,XNAS,USD,0000912767,Basic Materials,Lumber & Wood Production,Industrials
+UFPT,"UFP Technologies, Inc.",sp600,XNAS,USD,0000914156,Healthcare,Medical Devices,Health Care
+UGI,UGI Corp,sp400,XNYS,USD,0000884614,Utilities,Utilities - Regulated Gas,Utilities
+UHS,Universal Health Services,sp500,XNYS,USD,0000352915,Healthcare,Medical Care Facilities,Health Care
+ULS,UL Solutions,sp400,XNYS,USD,0001901440,Industrials,Specialty Business Services,Industrials
+ULTA,Ulta Beauty,sp500,XNAS,USD,0001403568,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+UMBF,UMB Financial Corp.,sp400,XNAS,USD,0000101382,Financial Services,Banks - Regional,Financials
+UNF,UniFirst Corporation,sp600,XNYS,USD,0000717954,Industrials,Specialty Business Services,Industrials
+UNFI,United Natural Foods Inc,sp600,XNYS,USD,0001020859,Consumer Defensive,Food Distribution,Consumer Staples
+UNH,UnitedHealth Group,sp500,XNYS,USD,0000731766,Healthcare,Healthcare Plans,Health Care
+UNIT,Uniti Group,sp600,XNAS,USD,0002020795,Real Estate,REIT - Specialty,Communication Services
+UNM,Unum,sp400,XNYS,USD,0000005513,Financial Services,Insurance - Life,Financials
+UNP,Union Pacific Corporation,sp500,XNYS,USD,0000100885,Industrials,Railroads,Industrials
+UPBD,"Upbound Group, Inc.",sp600,XNAS,USD,0000933036,Technology,Software - Application,Consumer Discretionary
+UPS,United Parcel Service,sp500,XNYS,USD,0001090727,Industrials,Integrated Freight & Logistics,Industrials
+UPWK,"Upwork, Inc.",sp600,XNAS,USD,0001627475,Communication Services,Internet Content & Information,Industrials
+URBN,"Urban Outfitters, Inc.",sp600,XNAS,USD,0000912615,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+URI,United Rentals,sp500,XNYS,USD,0001067701,Industrials,Rental & Leasing Services,Industrials
+USB,U.S. Bancorp,sp500,XNYS,USD,0000036104,Financial Services,Banks - Regional,Financials
+USFD,US Foods,sp400,XNYS,USD,0001665918,Consumer Defensive,Food Distribution,Consumer Staples
+USLM,"United States Lime & Minerals, Inc.",sp600,XNAS,USD,0000082020,Basic Materials,Building Materials,Materials
+USPH,"U.S. Physical Therapy, Inc.",sp600,XNYS,USD,0000885978,Healthcare,Medical Care Facilities,Health Care
+UTHR,United Therapeutics,sp400,XNAS,USD,0001082554,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+UTI,Universal Technical Institute,sp600,XNYS,USD,0001261654,Consumer Defensive,Education & Training Services,Consumer Discretionary
+UTL,Unitil Corporation,sp600,XNYS,USD,0000755001,Utilities,Utilities - Diversified,Utilities
+UVV,Universal Corporation,sp600,XNYS,USD,0000102037,Consumer Defensive,Tobacco,Consumer Staples
+V,Visa Inc.,sp500,XNYS,USD,0001403161,Financial Services,Credit Services,Financials
+VAC,Marriott Vacations Worldwide,sp600,XNYS,USD,0001524358,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+VAL,Valaris,sp400,XNYS,USD,0000314808,Energy,Oil & Gas Drilling,Energy
+VC,Visteon,sp400,XNAS,USD,0001111335,Consumer Cyclical,Auto Parts,Consumer Discretionary
+VCEL,Vericel,sp600,XNAS,USD,0000887359,Healthcare,Biotechnology,Health Care
+VCTR,"Victory Capital Holdings, Inc.",sp600,XNAS,USD,0001570827,Financial Services,Asset Management,Financials
+VCYT,"Veracyte, Inc.",sp600,XNAS,USD,0001384101,Healthcare,Diagnostics & Research,Health Care
+VECO,Veeco Instruments Inc.,sp600,XNAS,USD,0000103145,Technology,Semiconductor Equipment & Materials,Information Technology
+VEEV,Veeva Systems,sp500,XNYS,USD,0001393052,Healthcare,Health Information Services,Health Care
+VFC,VF Corporation,sp400,XNYS,USD,0000103379,Consumer Cyclical,Apparel Manufacturing,Consumer Discretionary
+VGNT,Versigent PLC,sp600,XNYS,USD,0002078008,Consumer Cyclical,Auto Parts,Consumer Discretionary
+VIAV,Viavi Solutions,sp400,XNAS,USD,0000912093,Technology,Communication Equipment,Information Technology
+VICI,Vici Properties,sp500,XNYS,USD,0001705696,Real Estate,REIT - Diversified,Real Estate
+VICR,Vicor Corporation,sp400,XNAS,USD,0000751978,Technology,Electronic Components,Industrials
+VIR,"Vir Biotechnology, Inc.",sp600,XNAS,USD,0001706431,Healthcare,Biotechnology,Health Care
+VIRT,"Virtu Financial, Inc.",sp600,XNYS,USD,0001592386,Financial Services,Capital Markets,Financials
+VLO,Valero Energy,sp500,XNYS,USD,0001035002,Energy,Oil & Gas Refining & Marketing,Energy
+VLTO,Veralto,sp500,XNYS,USD,0001967680,Industrials,Pollution & Treatment Controls,Industrials
+VLY,Valley Bank,sp400,XNAS,USD,0000714310,Financial Services,Banks - Regional,Financials
+VMC,Vulcan Materials Company,sp500,XNYS,USD,0001396009,Basic Materials,Building Materials,Materials
+VMI,Valmont Industries,sp400,XNYS,USD,0000102729,Industrials,Conglomerates,Industrials
+VMRK,Vivmark Residential,sp500,XNYS,USD,0000906107,Real Estate,REIT - Residential,Real Estate
+VNO,Vornado Realty Trust,sp400,XNYS,USD,0000899689,Real Estate,REIT - Office,Real Estate
+VNOM,Viper Energy,sp400,XNAS,USD,0002074176,Energy,Oil & Gas Midstream,Energy
+VNT,Vontier,sp400,XNYS,USD,0001786842,Technology,Scientific & Technical Instruments,Information Technology
+VOYA,Voya Financial,sp400,XNYS,USD,0001535929,Financial Services,Financial Conglomerates,Financials
+VRRM,Verra Mobility Corporation,sp600,XNAS,USD,0001682745,Technology,Information Technology Services,Industrials
+VRSK,Verisk Analytics,sp500,XNAS,USD,0001442145,Industrials,Consulting Services,Industrials
+VRSN,Verisign,sp500,XNAS,USD,0001014473,Technology,Software - Infrastructure,Information Technology
+VRT,Vertiv,sp500,XNYS,USD,0001674101,Industrials,Electrical Equipment & Parts,Industrials
+VRTS,"Virtus Investment Partners, Inc.",sp600,XNYS,USD,0000883237,Financial Services,Asset Management,Financials
+VRTX,Vertex Pharmaceuticals,sp500,XNAS,USD,0000875320,Healthcare,Biotechnology,Health Care
+VSAT,"Viasat, Inc.",sp600,XNAS,USD,0000797721,Technology,Communication Equipment,Information Technology
+VSEC,VSE Corporation,sp600,XNAS,USD,0000102752,Industrials,Aerospace & Defense,Industrials
+VSH,Vishay Intertechnology,sp600,XNYS,USD,0000103730,Technology,Semiconductors,Information Technology
+VSNT,"Versant Media Group, Inc.",sp600,XNAS,USD,0002067876,Communication Services,Entertainment,Communication Services
+VST,Vistra Corp.,sp500,XNYS,USD,0001692819,Utilities,Utilities - Independent Power Producers,Utilities
+VSTS,Vestis,sp600,XNYS,USD,0001967649,Industrials,Rental & Leasing Services,Industrials
+VSXY,Victoria's Secret,sp600,XNYS,USD,0001856437,Consumer Cyclical,Apparel Retail,Consumer Discretionary
+VTOL,Bristow Group Inc.,sp600,XNYS,USD,0001525221,Energy,Oil & Gas Equipment & Services,Energy
+VTR,Ventas,sp500,XNYS,USD,0000740260,Real Estate,REIT - Healthcare Facilities,Real Estate
+VTRS,Viatris,sp500,XNAS,USD,0001792044,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+VVV,Valvoline,sp400,XNYS,USD,0001674910,Consumer Cyclical,Auto & Truck Dealerships,Consumer Discretionary
+VVX,"V2X, Inc.",sp600,XNYS,USD,0001601548,Industrials,Aerospace & Defense,Industrials
+VYX,NCR Voyix,sp600,XNYS,USD,0000070866,Technology,Information Technology Services,Information Technology
+VZ,Verizon,sp500,XNYS,USD,0000732712,Communication Services,Telecom Services,Communication Services
+WAB,Wabtec,sp500,XNYS,USD,0000943452,Industrials,Railroads,Industrials
+WABC,Westamerica Bank,sp600,XNAS,USD,0000311094,Financial Services,Banks - Regional,Financials
+WAFD,"WaFd, Inc.",sp600,XNAS,USD,0000936528,Financial Services,Banks - Regional,Financials
+WAL,Western Alliance Bancorporation,sp400,XNYS,USD,0001212545,Financial Services,Banks - Regional,Financials
+WAT,Waters Corporation,sp500,XNYS,USD,0001000697,Healthcare,Diagnostics & Research,Health Care
+WAY,Waystar Holding Corp,sp600,XNAS,USD,0001990354,Healthcare,Health Information Services,Health Care
+WBD,Warner Bros. Discovery,sp500,XNAS,USD,0001437107,Communication Services,Entertainment,Communication Services
+WCC,WESCO International,sp400,XNYS,USD,0000929008,Industrials,Industrial Distribution,Industrials
+WD,"Walker & Dunlop, Inc.",sp600,XNYS,USD,0001497770,Financial Services,Mortgage Finance,Financials
+WDAY,"Workday, Inc.",sp500,XNAS,USD,0001327811,Technology,Software - Application,Information Technology
+WDC,Western Digital,sp500,XNAS,USD,0000106040,Technology,Computer Hardware,Information Technology
+WDFC,WD-40 Company,sp600,XNAS,USD,0000105132,Basic Materials,Specialty Chemicals,Consumer Staples
+WEC,WEC Energy Group,sp500,XNYS,USD,0000783325,Utilities,Utilities - Regulated Electric,Utilities
+WELL,Welltower,sp500,XNYS,USD,0000766704,Real Estate,REIT - Healthcare Facilities,Real Estate
+WEN,The Wendy's Company,sp600,XNAS,USD,0000030697,Consumer Cyclical,Restaurants,Consumer Discretionary
+WERN,Werner Enterprises,sp600,XNAS,USD,0000793074,Industrials,Trucking,Industrials
+WEX,WEX Inc.,sp400,XNYS,USD,0001309108,Technology,Software - Infrastructure,Financials
+WFC,Wells Fargo,sp500,XNYS,USD,0000072971,Financial Services,Banks - Diversified,Financials
+WFRD,Weatherford International,sp400,XNAS,USD,0001603923,Energy,Oil & Gas Equipment & Services,Energy
+WGO,"Winnebago Industries, Inc.",sp600,XNYS,USD,0000107687,Consumer Cyclical,Recreational Vehicles,Consumer Discretionary
+WH,Wyndham Hotels & Resorts,sp400,XNYS,USD,0001722684,Consumer Cyclical,Lodging,Consumer Discretionary
+WHD,"Cactus, Inc.",sp600,XNYS,USD,0001699136,Energy,Oil & Gas Equipment & Services,Energy
+WHR,Whirlpool Corporation,sp400,XNYS,USD,0000106640,Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Discretionary
+WINA,Winmark,sp600,XNAS,USD,0000908315,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+WING,Wingstop,sp400,XNAS,USD,0001636222,Consumer Cyclical,Restaurants,Consumer Discretionary
+WKC,World Kinect Corporation,sp600,XNYS,USD,0000789460,Energy,Oil & Gas Refining & Marketing,Energy
+WLK,Westlake Corporation,sp400,XNYS,USD,0001262823,Basic Materials,Specialty Chemicals,Materials
+WLY,John Wiley & Sons,sp600,XNYS,USD,0000107140,Communication Services,Publishing,Communication Services
+WM,Waste Management,sp500,XNYS,USD,0000823768,Industrials,Waste Management,Industrials
+WMB,Williams Companies,sp500,XNYS,USD,0000107263,Energy,Oil & Gas Midstream,Energy
+WMG,Warner Music Group,sp400,XNAS,USD,0001319161,Communication Services,Entertainment,Communication Services
+WMS,Advanced Drainage Systems,sp400,XNYS,USD,0001604028,Industrials,Building Products & Equipment,Industrials
+WMT,Walmart,sp500,XNAS,USD,0000104169,Consumer Defensive,Discount Stores,Consumer Staples
+WOR,Worthington Enterprises,sp600,XNYS,USD,0000108516,Industrials,Metal Fabrication,Industrials
+WPC,W. P. Carey,sp400,XNYS,USD,0001025378,Real Estate,REIT - Diversified,Real Estate
+WRB,W. R. Berkley Corporation,sp500,XNYS,USD,0000011544,Financial Services,Insurance - Property & Casualty,Financials
+WRBY,Warby Parker,sp600,XNYS,USD,0001504776,Healthcare,Medical Instruments & Supplies,Consumer Discretionary
+WRLD,World Acceptance Corporation,sp600,XNAS,USD,0000108385,Financial Services,Credit Services,Financials
+WS,Worthington Steel,sp600,XNYS,USD,0001968487,Basic Materials,Steel,Materials
+WSBC,WesBanco,sp600,XNAS,USD,0000203596,Financial Services,Banks - Regional,Financials
+WSC,WillScot Holdings Corp.,sp600,XNAS,USD,0001647088,Industrials,Rental & Leasing Services,Industrials
+WSFS,WSFS Financial Corporation,sp600,XNAS,USD,0000828944,Financial Services,Banks - Regional,Financials
+WSM,"Williams-Sonoma, Inc.",sp500,XNYS,USD,0000719955,Consumer Cyclical,Specialty Retail,Consumer Discretionary
+WSO,Watsco,sp400,XNYS,USD,0000105016,Industrials,Industrial Distribution,Industrials
+WST,West Pharmaceutical Services,sp500,XNYS,USD,0000105770,Healthcare,Medical Instruments & Supplies,Health Care
+WT,"WisdomTree Investments, Inc.",sp600,XNYS,USD,0000880631,Financial Services,Asset Management,Financials
+WTFC,Wintrust Financial,sp400,XNAS,USD,0001015328,Financial Services,Banks - Regional,Financials
+WTRG,Essential Utilities,sp400,XNYS,USD,0000078128,Utilities,Utilities - Regulated Water,Utilities
+WTS,Watts Water Technologies,sp400,XNYS,USD,0000795403,Industrials,Specialty Industrial Machinery,Industrials
+WTW,Willis Towers Watson,sp500,XNAS,USD,0001140536,Financial Services,Insurance Brokers,Financials
+WU,Western Union,sp600,XNYS,USD,0001365135,Financial Services,Credit Services,Financials
+WWD,"Woodward, Inc.",sp400,XNAS,USD,0000108312,Industrials,Aerospace & Defense,Industrials
+WWW,"Wolverine World Wide, Inc.",sp600,XNYS,USD,0000110471,Consumer Cyclical,Footwear & Accessories,Consumer Discretionary
+WY,Weyerhaeuser,sp500,XNYS,USD,0000106535,Real Estate,REIT - Specialty,Real Estate
+WYNN,Wynn Resorts,sp500,XNAS,USD,0001174922,Consumer Cyclical,Resorts & Casinos,Consumer Discretionary
+XEL,Xcel Energy,sp500,XNAS,USD,0000072903,Utilities,Utilities - Regulated Electric,Utilities
+XHR,"Xenia Hotels & Resorts, Inc.",sp600,XNYS,USD,0001616000,Real Estate,REIT - Hotel & Motel,Real Estate
+XNCR,Xencor Inc,sp600,XNAS,USD,0001326732,Healthcare,Biotechnology,Health Care
+XOM,ExxonMobil,sp500,XNYS,USD,0002115436,Energy,Oil & Gas Integrated,Energy
+XPEL,"XPEL, Inc.",sp600,XNAS,USD,0001767258,Consumer Cyclical,Auto Parts,Consumer Discretionary
+XPO,"XPO, Inc.",sp400,XNYS,USD,0001166003,Industrials,Trucking,Industrials
+XRAY,Dentsply Sirona,sp400,XNAS,USD,0000818479,Healthcare,Medical Instruments & Supplies,Health Care
+XYL,Xylem Inc.,sp500,XNYS,USD,0001524472,Industrials,Specialty Industrial Machinery,Industrials
+XYZ,"Block, Inc.",sp500,XNYS,USD,0001512673,Technology,Software - Infrastructure,Financials
+YELP,"Yelp, Inc.",sp600,XNYS,USD,0001345016,Communication Services,Internet Content & Information,Communication Services
+YETI,Yeti Holdings,sp400,XNYS,USD,0001670592,Consumer Cyclical,Leisure,Consumer Discretionary
+YOU,"Clear Secure, Inc.",sp600,XNYS,USD,0001856314,Technology,Software - Application,Information Technology
+YUM,Yum! Brands,sp500,XNYS,USD,0001041061,Consumer Cyclical,Restaurants,Consumer Discretionary
+ZBH,Zimmer Biomet,sp500,XNYS,USD,0001136869,Healthcare,Medical Devices,Health Care
+ZBRA,Zebra Technologies,sp500,XNAS,USD,0000877212,Technology,Communication Equipment,Information Technology
+ZD,Ziff Davis,sp600,XNAS,USD,0001084048,Communication Services,Advertising Agencies,Communication Services
+ZION,Zions Bancorporation,sp400,XNAS,USD,0000109380,Financial Services,Banks - Regional,Financials
+ZTS,Zoetis,sp500,XNYS,USD,0001555280,Healthcare,Drug Manufacturers - Specialty & Generic,Health Care
+ZWS,Zurn Elkay Water Solutions Corp.,sp600,XNYS,USD,0001439288,Industrials,Pollution & Treatment Controls,Industrials
