@@ -1315,7 +1315,12 @@ footer.site .prov {
 .sky-noplayer p { font-size: 0.9rem; font-weight: 550; }
 .sky-noplayer span { font-size: 0.75rem; opacity: 0.62; max-width: 34ch; line-height: 1.5; }
 
-.sky-feed-side { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--line); }
+/* `min-height: 0` because a grid item's automatic minimum is its content, and
+   without it the transcript below would still be able to push this row open. */
+.sky-feed-side {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  border-left: 1px solid var(--line);
+}
 @media (max-width: 1000px) { .sky-feed-side { border-left: none; border-top: 1px solid var(--line); } }
 
 .sky-head {
@@ -1329,10 +1334,22 @@ footer.site .prov {
 }
 .sky-head em { margin-left: auto; font-style: normal; font-size: 0.72rem; color: var(--ink-muted); white-space: nowrap; }
 
-/* Fixed height, not `flex: 1`: the card is as tall as the player beside it, and
-   a feed that grew with its content would stretch the row and leave the video
-   floating in the middle of it. */
-.sky-feed { height: 100%; min-height: 260px; max-height: 460px; overflow-y: auto; padding: calc(var(--sp) * 3) calc(var(--sp) * 5); }
+/* The stage is as tall as the 16:9 player, and the transcript takes what is
+   left of it. That needs the feed to be out of flow: a scroll container still
+   reports its content when a grid row is being sized, so a feed left in flow
+   grew the row every few seconds as lines landed — a little at first and then
+   further, until it hit whatever ceiling it had been given. Absolute
+   positioning is what breaks that, because an out-of-flow box contributes
+   nothing to its ancestors' size. The wrapper is what it is positioned
+   against, and holds the height instead. */
+.sky-feed-wrap { position: relative; flex: 1; min-height: 0; }
+.sky-feed {
+  position: absolute; inset: 0; overflow-y: auto;
+  padding: calc(var(--sp) * 3) calc(var(--sp) * 5);
+}
+/* Stacked, there is no player beside it to take a height from, so it needs one
+   of its own — still fixed, for the same reason. */
+@media (max-width: 1000px) { .sky-feed-wrap { flex: none; height: 320px; } }
 .sky-line { display: flex; gap: 10px; font-size: 0.85rem; line-height: 1.55; padding: 3px 0; }
 .sky-line span {
   flex: none; width: 4.5ch; font-family: var(--font-geist-mono), monospace;

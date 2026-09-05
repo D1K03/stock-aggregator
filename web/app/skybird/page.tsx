@@ -254,23 +254,28 @@ export default function Skybird() {
                       <strong>{current.title ?? current.source_url}</strong>
                       <em>{describe(current)}</em>
                     </div>
-                    <div className="sky-feed" ref={feed}>
-                      {segments.length === 0 ? (
-                        <p className="sky-waiting">
-                          {current.state === "paused"
-                            ? "Paused. Resume to carry on from where this left off."
-                            : current.live
-                            ? `Listening. The first lines arrive about ${current.chunk_seconds} seconds behind live.`
-                            : "No transcript was recorded for this capture."}
-                        </p>
-                      ) : (
-                        segments.map((segment) => (
-                          <p key={segment.seq} className="sky-line">
-                            <span>{stamp(segment.offset_seconds)}</span>
-                            {segment.text}
+                    {/* The wrapper takes whatever height the player leaves and
+                        the feed fills it out of flow, so a transcript cannot
+                        size the row it is sitting in. */}
+                    <div className="sky-feed-wrap">
+                      <div className="sky-feed" ref={feed}>
+                        {segments.length === 0 ? (
+                          <p className="sky-waiting">
+                            {current.state === "paused"
+                              ? "Paused. Resume to carry on from where this left off."
+                              : current.live
+                              ? `Listening. The first lines arrive about ${current.chunk_seconds} seconds behind live.`
+                              : "No transcript was recorded for this capture."}
                           </p>
-                        ))
-                      )}
+                        ) : (
+                          segments.map((segment) => (
+                            <p key={segment.seq} className="sky-line">
+                              <span>{stamp(segment.offset_seconds)}</span>
+                              {segment.text}
+                            </p>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.section>

@@ -113,6 +113,41 @@ def test_the_playground_cannot_read_what_it_was_never_granted(playground, table)
     assert "permission denied" in refuse(f"select * from {table}").message
 
 
+def test_skybird_stays_denied_even_where_the_conditional_grant_fired(
+    playground, fresh_db
+):
+    # The test above passes for skybird by accident of ordering. Migration 013
+    # grants the schema when it already exists, and on a fresh database it does
+    # not exist yet -- 014 creates it afterwards -- so the grant never runs and
+    # nothing has to be taken back. A machine that had skybird before the
+    # playground landed is the other case, and there the grant did fire.
+    #
+    # So put the database in that state on purpose and check 016 undoes it.
+    # Without this, whether Steven's `sql` tool can read a transcript depends on
+    # the order two migrations happened to arrive in, which is not a thing
+    # anyone would think to check.
+    fresh_db.execute("grant usage on schema skybird to playground")
+    fresh_db.execute("grant select on all tables in schema skybird to playground")
+    assert "permission denied" not in _tried("select * from skybird.stream_session")
+
+    revoke = MIGRATION.parent / "016_skybird_out_of_the_playground.sql"
+    for statement in revoke.read_text().split(";"):
+        if statement.strip() and not statement.strip().startswith("--"):
+            fresh_db.execute(statement)
+
+    for table in ("platform", "stream_session", "transcript_segment"):
+        assert "permission denied" in refuse(f"select * from skybird.{table}").message
+
+
+def _tried(sql: str) -> str:
+    """The error a query produced, or "" if it succeeded."""
+    try:
+        run(sql, 200)
+    except QueryError as exc:
+        return exc.message
+    return ""
+
+
 def test_the_playground_is_not_a_superuser_and_cannot_read_a_file(playground):
     # The application's own connection *can* do this — it is the cluster
     # superuser — which is the entire reason this feature connects as something
