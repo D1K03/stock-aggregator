@@ -79,11 +79,39 @@ be backfilled into a credible backtest. Only the forward log of daily snapshots 
 APIs first. They are legal, stable, and cheaper to maintain. Scrape only where no API exists,
 respect robots.txt and ToS, and treat scrapers as the fragile layer.
 
-- **yfinance** — prices, fundamentals, analyst recommendations (free). Rate-limits hard: eight
-  concurrent workers lost 43% of 1,506 requests inside 45 seconds to `YFRateLimitError` and
-  Yahoo's anti-bot crumb check, while sequential requests at ~0.35s spacing recovered 99.4%.
-  Budget ~0.8s per symbol — 40 minutes for 3,000 — and throttle with backoff rather than
-  parallelising. Classification changes rarely and does not need pulling daily.
+- **Yahoo Finance, called directly** — prices, fundamentals, analyst recommendations (free).
+  Two endpoints with different requirements, both measured:
+  `/v8/finance/chart` (prices) needs no authentication at all, just a User-Agent;
+  `/v10/finance/quoteSummary` (everything else) needs a crumb, obtained by fetching a cookie
+  from `fc.yahoo.com` then a token from `/v1/test/getcrumb` and appending it to the query.
+
+  A single `quoteSummary` call returns profile, all three financial statements, key statistics,
+  financial data, earnings trend and recommendation trend together — 19 KB raw, 5 KB gzipped.
+  A year of daily prices is 28 KB raw, 8 KB gzipped.
+
+  **Direct beats the library, but on structural grounds rather than a throughput race.** One
+  request per ticker instead of several, a persistent session, and a crumb fetched once and
+  reused are wins that hold regardless of what any timing run shows. The first comparison drawn
+  here — eight concurrent yfinance workers losing 43% of requests against 30 sequential direct
+  ones losing none — was not evidence for anything: it varied concurrency and request count at
+  the same time.
+
+  **Measured at full universe scale:** 1,506 sequential direct `quoteSummary` requests from one
+  IP completed in 182 seconds, 0.121s each, with 1,505 succeeding. The single failure was a 404
+  on a share-class symbol, not a limit. Mean latency per 300-request block stayed flat at
+  0.119–0.122s from the first block to the last, so nothing throttled or degraded across the run.
+
+  **What that still does not establish**, and should not be quoted as though it does:
+
+  - It ran from a development machine, not the VPS that will run the nightly job. Per-IP limits
+    attach to that IP, not to this code.
+  - A night's work is roughly double this: fundamentals *and* prices for every ticker. Prices
+    need no crumb and may sit in a different bucket, but 3,000 requests is untested.
+  - The run took three minutes, so the crumb never expired and the refresh path never executed.
+    Over a longer job it will, routinely.
+
+  Throttle as a safeguard — the measurements say it is not needed at this scale, and they were
+  taken in conditions the real job will not exactly reproduce.
 - **Finnhub** — ratings, news, short interest (free tier, ~60 calls/min)
 - **Alpha Vantage** — news endpoint carries a per-article sentiment score (free tier)
 - **FINRA** — short interest, twice monthly, downloadable
@@ -108,8 +136,14 @@ Both rejections are open to a case being made.
 
 ## Data storage
 
-**Universe:** 500 tickers growing to ~3,000, with 1,000 a better starting floor than 500 — at
-500 the thinnest sector holds exactly 20 names, sitting on the minimum rather than above it.
+**Universe: the S&P 1500 is the v1 ceiling**, not a waypoint to 3,000. The three constituent
+lists are the only free complete source, they stop at 1,500, and everything below the S&P 600's
+~$1bn floor spreads into the thin tail of the sector distribution rather than the fat middle —
+so growth past 1,500 would worsen peer counts per sector at the bottom, not improve them. A
+larger universe is a post-v1 decision that needs a paid constituents source to be worth making.
+
+Within that, start nearer 1,000 than 500: at 500 the thinnest sector holds exactly 20 names,
+sitting on the minimum rather than above it.
 
 Classification comes from yfinance and only yfinance. Its sector labels agree with GICS for just
 92% of the S&P 1500: yfinance "Technology" absorbs payment processors that GICS files under
