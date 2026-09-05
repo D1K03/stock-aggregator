@@ -103,6 +103,15 @@ jobs:
           load: false
           cache-from: type=gha,scope=transcribe
           cache-to: type=gha,mode=max,scope=transcribe
+      - uses: docker/build-push-action@v6
+        name: Build the live capture image
+        with:
+          context: .
+          file: deploy/Dockerfile.skybird
+          push: false
+          load: false
+          cache-from: type=gha,scope=skybird
+          cache-to: type=gha,mode=max,scope=skybird
 
   # A single stable check for branch protection to require. Requiring the matrix
   # jobs by name is brittle: change the matrix and the old name never reports

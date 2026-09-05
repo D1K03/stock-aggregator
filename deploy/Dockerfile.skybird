@@ -1,0 +1,45 @@
+# The live capture service. Its own image, not a command override on the api
+# one like the bot: the bot shares a dependency set with the status service and
+# this does not. yt-dlp is small, but ffmpeg is not, and neither the status
+# service nor the gateway bot has any use for either.
+FROM python:3.11-slim
+
+# Recorded for the same reason the api image records it: a container has no git
+# history, and this is the only way anything inside can say what is running.
+ARG GIT_SHA=""
+ENV SCREENER_GIT_SHA=$GIT_SHA
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# The one apt install in this repository, and it contradicts the note in
+# pyproject.toml that PyAV's wheel makes a system ffmpeg unnecessary. Both are
+# true: PyAV decodes one finished buffer, which is what the transcriber does,
+# and this cuts a live HLS stream into fixed-length files while reconnecting
+# through the gaps — which is the binary's own segment muxer and has no wheel.
+# `--no-install-recommends` keeps it to the codecs rather than pulling in an X
+# stack for a container with no screen.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependency metadata first, so a change to source does not reinstall yt-dlp.
+COPY pyproject.toml README.md ./
+COPY src ./src
+# The `stream` extra, which exists so this is the only image that takes it.
+RUN pip install --no-cache-dir ".[stream]"
+
+# Non-root, and the same uid the other three images use. Audio is written to a
+# tmpfs mounted at SKYBIRD_WORK_DIR and unlinked as soon as it has been read, so
+# nothing here needs a writable image filesystem.
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin screener
+USER 10001
+
+# No port. This talks outward — to the stream, to the transcriber and to
+# Postgres — and nothing ever calls it, which is why it has no Caddy route and
+# no HTTP surface to authenticate.
+CMD ["python", "-m", "screener.skybird"]

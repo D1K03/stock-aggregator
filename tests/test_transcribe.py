@@ -166,7 +166,14 @@ def test_the_service_answers_with_the_text_it_heard(service):
     url, heard = service
     status, body, _ = post(f"{url}/transcribe", AUDIO)
     assert status == 200
-    assert body == {"text": "what did nvidia do last month", "seconds": 4.25}
+    # `segments` is always present and is empty here because this fake returns
+    # the short seam shape. A caller reading `text` cannot tell the difference,
+    # which is the point of keeping the pair accepted.
+    assert body == {
+        "text": "what did nvidia do last month",
+        "seconds": 4.25,
+        "segments": [],
+    }
     assert heard == [AUDIO]
 
 
@@ -296,6 +303,9 @@ def test_the_real_decoder_reads_an_ogg_without_ffmpeg_on_the_path():
 
     from screener.transcribe.server import load_model
 
-    text, seconds = load_model()(buffer.getvalue())
-    assert isinstance(text, str)
-    assert seconds >= 0
+    heard = load_model()(buffer.getvalue())
+    assert isinstance(heard.text, str)
+    assert heard.seconds >= 0
+    # Timings come off the real decoder here or nowhere: every other test in
+    # this file hands the server a fake.
+    assert all(0 <= utterance.start <= utterance.end for utterance in heard.segments)

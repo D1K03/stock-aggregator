@@ -46,6 +46,65 @@ disagree, and pins `series()` against values from the original walk — so the
 duplication is checked rather than trusted. Delete the package when ingest
 lands; the tool then reads `score_snapshot` and nothing else about it changes.
 
+### Skybird — live stream capture
+
+Built. Paste a YouTube or Twitch live stream into `/skybird` — or ask Steven,
+in Discord or on the dashboard, to watch a link for you — and its audio is
+pulled continuously, cut into 15-second chunks, transcribed by the service the
+bot and the dashboard already use, and stored with the second each phrase was
+said at. Watch it on the page while it runs. Pause it, stop it, delete it;
+nothing expires on its own.
+
+**Unlike everything else on the dashboard, this data is real.** It is also the
+first thing in the tree that collects an input the screener has no other way to
+reach — what was actually said on an earnings call or a market show. Deriving
+anything from it is deliberately not built: capturing it honestly is the whole
+of this change.
+
+Five decisions worth keeping when something is built on top of it:
+
+- **The database is the control plane.** The status service writes a row in
+  'requested'; the supervisor in its own container polls for it. No internal
+  HTTP surface between two containers, nothing to authenticate, and a capture
+  outlives the process running it — a session left `running` by a container that
+  died reconciles to `failed` on the next boot instead of vanishing with it.
+- **yt-dlp is the platform layer; our adapters are identity and embedding.** A
+  module in `skybird/platforms` recognises a URL and builds an embed, and never
+  touches the network. That is what makes a third platform one module, one
+  registry entry and one `insert`, rather than a second capture path.
+- **Audio is never written to a disk**, on the same terms as `screener.transcribe`
+  — a tmpfs, one POST, unlinked. What is worth keeping is the text, and a night
+  of it is megabytes against gigabytes.
+- **The cap is two because the transcriber is one.** `screener.transcribe` holds
+  a semaphore of one on two cores, and a third stream would spend more time
+  queued than decoding. Raising it is a `TRANSCRIBER_URL` away — a second
+  transcribe container is configuration, not code.
+- **Steven works the controls and cannot read the transcript.** `watch`,
+  `captures`, `hold`, and nothing that hands him a line of it. The limit reaches
+  him through `captures`, which answers `used/limit` on every call, rather than
+  through the prompt — that string is built at import, before secrets load, so a
+  number in it would be the default frozen in for ever. Reading a capture back
+  is the feature after this one, and the store is shaped for it.
+
+Open, and worth doing in this order:
+
+- **The decode cost is estimated, not measured.** A 15-second chunk of
+  `base.en` int8 is guessed at 1.5–3s, which is where `SKYBIRD_MAX_SESSIONS=2`
+  comes from. Measure it on the VPS and set the cap from the result.
+- **Chunk boundaries clip words.** `condition_on_previous_text=False`, so no
+  context crosses a chunk. Carrying the previous chunk's tail as a prompt would
+  fix it and needs a request-shape change to a service whose design note is
+  "raw bytes, `Content-Length`, no chunked".
+- **Nothing reads the transcript yet.** No search, no ticker extraction, and no
+  tool that gives Steven one. This is the obvious next thing and it is
+  deliberately not in this change: a reading tool sits beside the three control
+  ones without touching the store or the API.
+- **The prompt budget took its largest single rise for this.** Three tools and a
+  line of prompt is about 850 characters of fixed overhead per message, recorded
+  in `tests/test_bot.py`. A fourth skybird tool should be weighed against that
+  number rather than added to it.
+- **English only.** `base.en`, and `language="en"` is hard-coded.
+
 Still not built, and still blocked on ingest:
 
 - **Real data.** Everything above draws fiction. Every surface says so — the

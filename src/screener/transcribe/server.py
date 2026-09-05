@@ -30,11 +30,12 @@ import signal
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from screener.transcribe.client import MAX_AUDIO_BYTES
+from screener.transcribe.client import MAX_AUDIO_BYTES, Utterance
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +72,33 @@ _TRANSCRIBING = threading.BoundedSemaphore(1)
 # worker is reported rather than waited on.
 BUSY_WAIT_SECONDS = 30.0
 
-# What `build_server` hands the handler: audio in, text and seconds out.
-Transcriber = Callable[[bytes], tuple[str, float]]
+@dataclass(frozen=True, slots=True)
+class Heard:
+    """One decode: the words, the length, and where each phrase falls."""
+
+    text: str
+    seconds: float
+    segments: tuple[Utterance, ...] = ()
 
 
-def load_model() -> Transcriber:
+# What `build_server` hands the handler. The plain pair is still accepted, so a
+# test seam stays two lines of Python and only the real model has to care about
+# timings.
+Transcriber = Callable[[bytes], "Heard | tuple[str, float]"]
+
+# What `load_model` actually returns. Narrower than the seam above on purpose:
+# the model always has timings, and only a test is allowed the shorter shape.
+ModelRunner = Callable[[bytes], "Heard"]
+
+
+def _heard(result: "Heard | tuple[str, float]") -> Heard:
+    if isinstance(result, Heard):
+        return result
+    text, seconds = result
+    return Heard(text=text, seconds=seconds)
+
+
+def load_model() -> ModelRunner:
     """The Whisper model, as a function from audio to text and seconds.
 
     Called once, by `serve`, before the socket opens. Loading lazily on the
@@ -101,7 +124,7 @@ def load_model() -> Transcriber:
     )
     logger.info("model ready in %.1fs", time.perf_counter() - started)
 
-    def run(audio: bytes) -> tuple[str, float]:
+    def run(audio: bytes) -> Heard:
         segments, info = model.transcribe(
             io.BytesIO(audio),
             language="en",
@@ -115,8 +138,24 @@ def load_model() -> Transcriber:
             condition_on_previous_text=False,
             initial_prompt=VOCABULARY,
         )
-        text = " ".join(segment.text.strip() for segment in segments).strip()
-        return text, float(info.duration)
+        # Kept, rather than joined away. Whisper already knows where each
+        # phrase starts, and a transcript of a two hour stream is unusable
+        # without it — `text` is still the join, so nothing that only wants the
+        # words has to change.
+        utterances = tuple(
+            Utterance(
+                start=float(segment.start),
+                end=float(segment.end),
+                text=segment.text.strip(),
+            )
+            for segment in segments
+            if segment.text.strip()
+        )
+        return Heard(
+            text=" ".join(utterance.text for utterance in utterances).strip(),
+            seconds=float(info.duration),
+            segments=utterances,
+        )
 
     return run
 
@@ -227,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             started = time.perf_counter()
-            text, seconds = self.transcriber(audio)
+            heard = _heard(self.transcriber(audio))
         except Exception as exc:
             # A container this cannot decode is a bad request rather than a
             # broken service, and the caller can say so in one sentence.
@@ -239,11 +278,25 @@ class Handler(BaseHTTPRequestHandler):
 
         logger.info(
             "transcribed %.1fs of audio in %.1fs, %d characters",
-            seconds,
+            heard.seconds,
             time.perf_counter() - started,
-            len(text),
+            len(heard.text),
         )
-        self._respond(HTTPStatus.OK, {"text": text, "seconds": seconds})
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "text": heard.text,
+                "seconds": heard.seconds,
+                "segments": [
+                    {
+                        "start": utterance.start,
+                        "end": utterance.end,
+                        "text": utterance.text,
+                    }
+                    for utterance in heard.segments
+                ],
+            },
+        )
 
 
 def build_server(

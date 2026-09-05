@@ -54,6 +54,15 @@ MAX_AUDIO = 1_000_000
 # and put straight back, rather than loosening it for every request served.
 BODY_TIMEOUT_SECONDS = 15
 
+# A stream URL, or a session id. Two orders of magnitude more than either needs,
+# and still small enough that nothing can be posted here at any size.
+MAX_SKYBIRD_BODY = 2_000
+
+# How much transcript one poll may carry. The dashboard asks for everything
+# after a sequence number every few seconds, so this only binds when a tab has
+# been in the background for a while.
+MAX_SKYBIRD_SEGMENTS = 500
+
 
 class Handler(BaseHTTPRequestHandler):
     # HTTP/1.1 so cloudflared keeps a connection alive rather than completing a
@@ -167,6 +176,43 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             raise auth.SessionLookupFailed(type(exc).__name__) from exc
 
+    def _require_login(self, config: AuthConfig) -> str | None:
+        """Who is signed in, having already answered if nobody is.
+
+        The four older routes below repeat these lines in full, and the comment
+        on `_transcribe` says why: no decorator, so a route that skipped the
+        check would be public in silence. This keeps that property — the call
+        site still reads `login = self._require_login(...)`, two lines that are
+        impossible to leave out by accident — and drops only the duplicated
+        error bodies, which are what a fifth and sixth copy would actually be.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return None
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+        return login
+
+    def _json_body(self, limit: int) -> dict[str, Any] | None:
+        """The request body as an object, or None having already answered."""
+        raw = self._read_body(limit)
+        if raw is None:
+            return None
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "that was not JSON"})
+            return None
+        if not isinstance(body, dict):
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "expected an object"})
+            return None
+        return body
+
     # -- routes -----------------------------------------------------------
 
     def do_POST(self) -> None:
@@ -183,6 +229,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if route == "/api/transcribe":
             self._transcribe(config)
+        # Skybird's three mutations. The docstring above prefers a GET with its
+        # argument in the query string, and `_handoff` follows that even though
+        # it sends a Discord message — but a GET that deletes a transcript is
+        # one prefetch or one followed link away from deleting it by accident,
+        # and that is worth a Content-Length for.
+        elif route == "/api/skybird/start":
+            self._skybird_start(config)
+        elif route == "/api/skybird/stop":
+            self._skybird_move(config, "stop")
+        elif route == "/api/skybird/pause":
+            self._skybird_move(config, "pause")
+        elif route == "/api/skybird/resume":
+            self._skybird_move(config, "resume")
+        elif route == "/api/skybird/delete":
+            self._skybird_delete(config)
         else:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -265,6 +326,297 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._respond(HTTPStatus.OK, {"text": spoken.text, "seconds": spoken.seconds})
 
+    # -- skybird ----------------------------------------------------------
+    #
+    # A session is required on every one of these, unconditionally, for the
+    # reason `_ask` gives at length. Nothing here checks a spend cap: skybird
+    # spends nothing, the resource it consumes is CPU on a capped container,
+    # and the session count is what bounds that — refusing to capture a stream
+    # because someone had used their model budget would be a cap enforcing the
+    # wrong thing.
+
+    def _skybird_unavailable(self, exc: Exception, doing: str) -> None:
+        # The exception type, never its message: psycopg puts the host and the
+        # username in there, the same reason `health.checks` reports a name.
+        logger.warning("could not %s: %s", doing, exc)
+        self._respond(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            {"error": f"cannot {doing}", "database": type(exc).__name__},
+        )
+
+    def _skybird_sessions(self, config: AuthConfig) -> None:
+        """Every capture, live ones first."""
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        from screener import skybird
+
+        try:
+            sky = skybird.SkybirdConfig.from_env()
+        except RuntimeError as exc:
+            self._respond(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            return
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                sessions = skybird.list_sessions(conn)
+        except Exception as exc:
+            self._skybird_unavailable(exc, "read the captures")
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "sessions": [session.as_json() for session in sessions],
+                # So the interface can name what it accepts without holding its
+                # own copy of the list, which would go stale the day an adapter
+                # is added.
+                "platforms": [
+                    {"code": platform.name, "display_name": platform.display_name}
+                    for platform in skybird.PLATFORMS
+                ],
+                "max_sessions": sky.max_sessions,
+                "chunk_seconds": sky.chunk_seconds,
+            },
+        )
+
+    def _skybird_transcript(
+        self, config: AuthConfig, query: dict[str, list[str]]
+    ) -> None:
+        """Everything said after a sequence number, and the session's own state.
+
+        Both in one answer because the page polls this every few seconds and
+        wants both: a transcript that stopped growing and a capture that failed
+        look identical until you can see the state beside it.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        session_id = _number(query, "session")
+        if session_id is None:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "which session?"})
+            return
+        after = _number(query, "after") or 0
+        limit = min(_number(query, "limit") or MAX_SKYBIRD_SEGMENTS,
+                    MAX_SKYBIRD_SEGMENTS)
+
+        from screener import skybird
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                session = skybird.get_session(conn, session_id)
+                if session is None:
+                    self._respond(HTTPStatus.NOT_FOUND, {"error": "no such capture"})
+                    return
+                found = skybird.session_segments(
+                    conn, session_id, after=after, limit=limit
+                )
+        except Exception as exc:
+            self._skybird_unavailable(exc, "read the transcript")
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "session": session.as_json(),
+                "segments": [segment.as_json() for segment in found],
+            },
+        )
+
+    def _skybird_start(self, config: AuthConfig) -> None:
+        """Ask for a capture. The supervisor picks it up within a poll."""
+        login = self._require_login(config)
+        if login is None:
+            return
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        url = body.get("url")
+        if not isinstance(url, str) or not url.strip():
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "give me a stream URL"})
+            return
+
+        from screener import skybird
+
+        try:
+            sky = skybird.SkybirdConfig.from_env()
+        except RuntimeError as exc:
+            self._respond(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            return
+        try:
+            ref = skybird.resolve(url, parents=sky.embed_parents)
+        except skybird.UnsupportedPlatform as exc:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+
+        started = time.monotonic()
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                # The message, not the enforcement. The supervisor counts what
+                # it is running before it starts anything, which is the check
+                # that actually holds; this one is here so the refusal arrives
+                # while somebody is looking at it.
+                if skybird.active_session_count(conn) >= sky.max_sessions:
+                    self._respond(
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        {
+                            "error": (
+                                f"{sky.max_sessions} captures are already running. "
+                                "Stop one first."
+                            )
+                        },
+                    )
+                    return
+                session = skybird.create_session(
+                    conn,
+                    ref,
+                    requested_by=login,
+                    chunk_seconds=sky.chunk_seconds,
+                )
+        except skybird.AlreadyLive as exc:
+            self._respond(HTTPStatus.CONFLICT, {"error": str(exc)})
+            return
+        except Exception as exc:
+            self._skybird_unavailable(exc, "start the capture")
+            return
+
+        audit.record(
+            kind="command",
+            operation="skybird.start",
+            actor=login,
+            actor_kind="github",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            cost_usd=0,
+            detail={
+                "session_id": session.id,
+                "platform": ref.platform,
+                "external_id": ref.external_id,
+                "url": ref.canonical_url,
+            },
+        )
+        self._respond(HTTPStatus.CREATED, {"session": session.as_json()})
+
+    def _skybird_move(self, config: AuthConfig, action: str) -> None:
+        """Stop, pause or resume a capture.
+
+        One handler for the three, because they are the same request with the
+        same four failures and differ only in a verb. None of them is audited:
+        the session row already carries its own state, `stopped_at` and
+        `stop_reason`, and a second trail that could disagree with the first is
+        worse than one.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        session_id = self._skybird_id()
+        if session_id is None:
+            return
+
+        from screener import skybird
+
+        movers = {
+            "stop": skybird.stop_session,
+            "pause": skybird.pause_session,
+            "resume": skybird.resume_session,
+        }
+        refused = {
+            "stop": "that capture is already {state}",
+            "pause": "cannot pause a capture that is {state}",
+            "resume": "cannot resume a capture that is {state}",
+        }
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                moved = movers[action](conn, session_id)
+                session = skybird.get_session(conn, session_id)
+        except Exception as exc:
+            self._skybird_unavailable(exc, f"{action} the capture")
+            return
+
+        if session is None:
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "no such capture"})
+            return
+        if not moved:
+            self._respond(
+                HTTPStatus.CONFLICT,
+                {"error": refused[action].format(state=session.state)},
+            )
+            return
+        self._respond(HTTPStatus.OK, {"session": session.as_json()})
+
+    def _skybird_delete(self, config: AuthConfig) -> None:
+        """Remove a capture and its transcript.
+
+        This is the whole retention mechanism — nothing here expires on its own
+        — so it is audited, and the row it writes outlives what it deleted.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        session_id = self._skybird_id()
+        if session_id is None:
+            return
+
+        from screener import skybird
+
+        started = time.monotonic()
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                session = skybird.get_session(conn, session_id)
+                if session is None:
+                    self._respond(HTTPStatus.NOT_FOUND, {"error": "no such capture"})
+                    return
+                # A running capture may be deleted outright. The supervisor
+                # works from the live set, so a row that has gone drops out of
+                # it and the ffmpeg behind it is stopped on the next poll —
+                # making the user stop it first would be ceremony over a case
+                # the mechanism already handles.
+                skybird.delete_session(conn, session_id)
+        except Exception as exc:
+            self._skybird_unavailable(exc, "delete the capture")
+            return
+
+        audit.record(
+            kind="command",
+            operation="skybird.delete",
+            actor=login,
+            actor_kind="github",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            cost_usd=0,
+            detail={
+                "session_id": session_id,
+                "platform": session.platform,
+                "url": session.source_url,
+                # A count, not the words. The transcript is what was deleted;
+                # the trail records that it went, not what was in it.
+                "segments": session.segment_count,
+            },
+        )
+        self._respond(HTTPStatus.OK, {"deleted": session_id})
+
+    def _skybird_id(self) -> int | None:
+        """The session id from a JSON body, having already answered if absent."""
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return None
+        session_id = body.get("id")
+        # `bool` is an `int` in Python, and `{"id": true}` reaching a query as 1
+        # is the kind of thing that is only ever found the hard way.
+        if not isinstance(session_id, int) or isinstance(session_id, bool):
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "which capture?"})
+            return None
+        return session_id
+
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         route, query = parsed.path, urllib.parse.parse_qs(parsed.query)
@@ -324,6 +676,12 @@ class Handler(BaseHTTPRequestHandler):
 
         elif route == "/api/audit":
             self._audit(config, query)
+
+        elif route == "/api/skybird":
+            self._skybird_sessions(config)
+
+        elif route == "/api/skybird/transcript":
+            self._skybird_transcript(config, query)
 
         elif route == "/status":
             try:
@@ -782,6 +1140,19 @@ class Handler(BaseHTTPRequestHandler):
                 auth.clear_cookie(auth.STATE_COOKIE, secure=secure),
             ],
         )
+
+
+def _number(query: dict[str, list[str]], name: str) -> int | None:
+    """A non-negative integer from the query string, or None.
+
+    None for absent and None for nonsense alike: every caller here has a
+    sensible default, and a typo in `after` should re-send the transcript
+    rather than fail the poll that draws it.
+    """
+    raw = (query.get(name) or [""])[0].strip()
+    if not raw.isdigit():
+        return None
+    return int(raw)
 
 
 def build_server(host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> ThreadingHTTPServer:

@@ -66,6 +66,18 @@ services:
       dockerfile: deploy/Dockerfile.transcribe
     image: stock-aggregator-transcribe:local
 
+  skybird:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.skybird
+    image: stock-aggregator-skybird:local
+    # Same as `api`: no Infisical locally, so what it would have fetched is
+    # injected straight from local.env. Optional, so a checkout without one
+    # still builds.
+    env_file:
+      - path: local.env
+        required: false
+
   # Published so you can reach the database with psql while poking at things.
   postgres:
     ports:

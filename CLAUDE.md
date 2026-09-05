@@ -13,8 +13,10 @@ the schema, the pipeline and CI/CD.
 ## Status
 
 The database schema and the infrastructure layer are built and tested; no ingest, scoring or
-alerting code exists yet. Runtime dependencies are `psycopg` and `httpx`, and nothing else —
-check `pyproject.toml` before assuming a library is available.
+alerting code exists yet. Runtime dependencies are `psycopg`, `httpx` and `discord.py`, and nothing
+else — check `pyproject.toml` before assuming a library is available. `faster-whisper` and
+`yt-dlp` are extras (`voice`, `stream`) that one image each installs, and both are imported
+inside a function so the rest of the tree stays importable without them.
 
 ## What it does
 
@@ -97,6 +99,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Load it (no network): `python -m screener.universe load --dry-run` then without `--dry-run`.
   Refuses if more than 10% of the active universe would be retired; `--force` overrides.
 - Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status` on 8080
+- Supervise live stream captures: `python -m screener.skybird` (the container's command).
+  `start <url>`, `stop <id>`, `list` and `delete <id>` are the dashboard's writes from a
+  terminal.
 - Check every integration against the real world: `python -m screener.boot selftest`
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
@@ -151,6 +156,24 @@ nothing outside imports a submodule directly.
   the transcription's own audit row records a length rather than the words. The question
   itself does reach the trail on the reply row, exactly as a typed one does, because that
   is where Steven's memory lives; the `voice` flag is what tells the two apart.
+- `screener.skybird` — live stream capture, in a container of its own. Paste a YouTube or
+  Twitch URL and the audio is pulled continuously, cut into 15-second chunks, transcribed by
+  the same service the bot and the dashboard use, and stored with the second each phrase was
+  said at. Its own `skybird` schema, on the grounds `auth` and `audit` have one. Three shapes
+  carry it: **the database is the control plane** — the status service writes a row in
+  'requested' and the supervisor polls for it, so there is no internal HTTP surface to
+  authenticate and a capture outlives the process running it; **yt-dlp is the platform layer**,
+  so a module in `skybird/platforms` only recognises a URL and builds an embed and never
+  touches the network, which is what makes the third platform one module plus one row; and
+  **audio is never written to a disk**, exactly as in `transcribe`. Watching happens through
+  the platform's own player in an iframe — no restreaming. `supervisor` and `capture` are not
+  re-exported, because reaching them is one import away from yt-dlp and a subprocess.
+  A capture can be **paused**: the ffmpeg goes, the row stays, and it keeps its stream and its
+  transcript while freeing its slot against the session cap. `captured_seconds` on the session
+  is what lets a resumed capture carry on counting rather than laying a second timeline over
+  the first, which is why the clock is in the database and not in the supervisor's memory.
+  Steven controls all of this through `bot/tools/skybird.py` — `watch`, `captures`, `hold` —
+  and deliberately **cannot read a transcript**: he starts and stops captures, nothing more.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.

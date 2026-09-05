@@ -14,7 +14,9 @@ import inspect
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +41,32 @@ class Tool:
 
 
 TOOLS: dict[str, Tool] = {}
+
+# Who the reply is being written for, while it is being written. A ContextVar
+# for the reason `charts.collecting` is one: the model does not know who it is
+# talking to and must not be told, since a name in the arguments is a name it
+# could invent. The dispatcher knows, because the caller told it.
+#
+# What this buys is that a row written by a tool says who asked for it rather
+# than "steven", which would be true of every row and therefore useless.
+_ACTOR: ContextVar[tuple[str, str]] = ContextVar(
+    "tool_actor", default=("system", "system")
+)
+
+
+@contextmanager
+def acting(actor: str, actor_kind: str) -> Iterator[None]:
+    """Attribute everything dispatched inside to one person."""
+    token = _ACTOR.set((actor, actor_kind))
+    try:
+        yield
+    finally:
+        _ACTOR.reset(token)
+
+
+def actor() -> tuple[str, str]:
+    """Who asked, as (actor, actor_kind). ('system', 'system') outside a reply."""
+    return _ACTOR.get()
 
 
 def tool(name: str, description: str) -> Callable[[Callable[..., str]], Callable[..., str]]:
@@ -96,9 +124,13 @@ def dispatch(name: str, arguments: dict[str, Any]) -> str:
     because the model can say "I could not check that" and carry on, whereas an
     exception ends the conversation with nothing for the person who asked.
     """
+    who, who_kind = actor()
     entry = TOOLS.get(name)
     if entry is None:
-        record(kind="tool", operation=name, outcome="error", detail={"error": "unknown tool"})
+        record(
+            kind="tool", operation=name, actor=who, actor_kind=who_kind,
+            outcome="error", detail={"error": "unknown tool"},
+        )
         return f"error: no tool named {name}"
 
     started = time.perf_counter()
@@ -107,13 +139,16 @@ def dispatch(name: str, arguments: dict[str, Any]) -> str:
     except TypeError as exc:
         # Wrong or missing arguments: the model's mistake, and one it can fix
         # on the next turn if it is told plainly.
-        record(kind="tool", operation=name, outcome="error", detail={"error": "bad arguments"})
+        record(
+            kind="tool", operation=name, actor=who, actor_kind=who_kind,
+            outcome="error", detail={"error": "bad arguments"},
+        )
         return f"error: bad arguments for {name}: {exc}"
     except Exception as exc:
         logger.warning("tool %s failed: %s", name, exc)
         record(
-            kind="tool", operation=name, outcome="error",
-            detail={"error": type(exc).__name__},
+            kind="tool", operation=name, actor=who, actor_kind=who_kind,
+            outcome="error", detail={"error": type(exc).__name__},
         )
         return f"error: {name} failed: {type(exc).__name__}"
 
@@ -124,6 +159,8 @@ def dispatch(name: str, arguments: dict[str, Any]) -> str:
     record(
         kind="tool",
         operation=name,
+        actor=who,
+        actor_kind=who_kind,
         duration_ms=int((time.perf_counter() - started) * 1000),
         detail={"arguments": arguments, "chars": len(text)},
     )

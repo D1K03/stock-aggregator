@@ -362,6 +362,15 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         # checked only by a test of its own would be one list away from being
         # the route nobody checked.
         ("/api/transcribe", b"not audio"),
+        # Skybird, for the same reason. `test_skybird_api` checks these too;
+        # this is the list that would catch a route added without one.
+        ("/api/skybird", None),
+        ("/api/skybird/transcript?session=1", None),
+        ("/api/skybird/start", b'{"url": "https://youtu.be/jNQXAC9IVRw"}'),
+        ("/api/skybird/stop", b'{"id": 1}'),
+        ("/api/skybird/pause", b'{"id": 1}'),
+        ("/api/skybird/resume", b'{"id": 1}'),
+        ("/api/skybird/delete", b'{"id": 1}'),
     ],
 )
 def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path, data):

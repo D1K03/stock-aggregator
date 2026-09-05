@@ -458,10 +458,21 @@ def test_the_prompt_stays_small_enough_to_send_on_every_message():
     # Raised from 1200 when the chart tool landed: a second tool, its
     # enumerated `mark` argument, and two lines of prompt telling Steven when to
     # reach for it. That is roughly 600 characters and it bought a feature.
-    # Left as tight as the old one — about 40 characters of headroom — so the
+    #
+    # Raised again, from 1800, when skybird control landed: three tools —
+    # `watch`, `captures`, `hold` — and a line of prompt. Roughly 850
+    # characters, and the largest single rise so far, so it is worth saying what
+    # it bought and what it cost. It bought the ability to put a live stream on
+    # by asking for it, from Discord or the dashboard, and to hold or stop one
+    # the same way. The line of prompt is mostly not about the tools: it is
+    # there to tell Steven a limit exists and that `captures` reports it, since
+    # `SKYBIRD_MAX_SESSIONS` is configuration and this string is built at import
+    # — a number written in here would be the default, frozen in for ever.
+    #
+    # Left as tight as the old one — about 50 characters of headroom — so the
     # next thing that grows the prompt is also a decision and not a drift.
     overhead = len(agent.SYSTEM_PROMPT) + len(json.dumps(specs(), separators=(",", ":")))
-    assert overhead < 1800
+    assert overhead < 2680
 
 
 # -- the Discord handoff ---------------------------------------------------

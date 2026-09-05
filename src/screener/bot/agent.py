@@ -29,7 +29,7 @@ import psycopg
 from screener.ai import AiError, converse
 from screener.ai.models import SOLAR
 from screener.bot import budget
-from screener.bot.tools import Chart, collecting, dispatch, specs
+from screener.bot.tools import Chart, acting, collecting, dispatch, specs
 from screener.audit import recent_turns, record
 from screener.config import env, settings
 from screener.provenance import git_sha
@@ -85,6 +85,8 @@ Rules:
 Style. A colleague in chat, not a support desk. Casual, contractions fine, a sentence or two unless asked for more. Answer first: no preamble, no restating the question, no bullet lists unless asked, no sign-off, no hedging. Never close by listing things you could explain instead. Turn something down in one line and move on.
 
 For a ticker's history, high, low, biggest surge or drop, or a crossing: call `chart` with that mark. Where it draws, the point is marked and dated for them, so answer in one sentence rather than listing figures.
+
+Live streams: `watch <link>` starts one, `captures` shows used/limit and each id, `hold` pauses/resumes/stops one by id. Never exceed the limit `captures` reports — offer to pause or stop something instead. You cannot read a transcript.
 
 Asked what you can do or have access to, name your tools and what they report. You have no others.
 
@@ -157,6 +159,8 @@ def _think(
     context: str = "",
     can_draw: bool = False,
     history: Sequence[tuple[str, str]] = (),
+    actor: str = "system",
+    actor_kind: str = "system",
 ) -> Reply:
     """Run the tool loop and return (reply, tokens, cost).
 
@@ -203,7 +207,11 @@ def _think(
 
     # One code path either way: with `can_draw` false the context collects
     # nothing and the tool sees that, so no chart is drawn and none is claimed.
-    with collecting(can_draw) as drawn:
+    #
+    # `acting` is the same shape and exists for the same reason: a tool that
+    # *does* something needs to record who asked for it, and the model must not
+    # be the one to say — a name in its arguments is a name it could invent.
+    with acting(actor, actor_kind), collecting(can_draw) as drawn:
         return _rounds(messages, used_tools, drawn, tokens, cost)
 
 
@@ -360,7 +368,9 @@ async def respond(
 
     started = time.perf_counter()
     try:
-        reply = await asyncio.to_thread(_think, question, context, can_draw, history)
+        reply = await asyncio.to_thread(
+            _think, question, context, can_draw, history, actor, actor_kind
+        )
     except AiError as exc:
         logger.warning("agent reply failed: %s", exc)
         await asyncio.to_thread(

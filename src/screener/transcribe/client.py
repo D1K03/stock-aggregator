@@ -44,11 +44,30 @@ MAX_AUDIO_BYTES = 4_000_000
 
 
 @dataclass(frozen=True, slots=True)
+class Utterance:
+    """One phrase, and where in the audio it falls.
+
+    Seconds from the start of the clip. Whisper separates these itself and the
+    service used to join them and throw the boundaries away; a voice note does
+    not miss them, and a transcript of a two hour stream is unusable without
+    them.
+    """
+
+    start: float
+    end: float
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class Transcript:
     """What was heard, and how long it took to say."""
 
     text: str
     seconds: float
+    # Empty is a legitimate answer, not a missing one: silence has no
+    # utterances, and neither does a response from a service too old to send
+    # them. Callers that only want the words read `text` and never notice.
+    segments: tuple[Utterance, ...] = ()
 
 
 def transcriber_url() -> str:
@@ -105,6 +124,7 @@ def transcribe(
         return Transcript(
             text=body["text"].strip(),
             seconds=float(body.get("seconds") or 0.0),
+            segments=_utterances(body.get("segments")),
         )
     except Exception as exc:
         logger.warning("could not transcribe: %s", type(exc).__name__)
@@ -112,3 +132,27 @@ def transcribe(
     finally:
         if owned:
             client.close()
+
+
+def _utterances(raw: object) -> tuple[Utterance, ...]:
+    """The timed lines, or none of them.
+
+    Defensive to the point of dropping the lot, deliberately: the words are in
+    `text` regardless, so a service sending a segment list this cannot read
+    should cost the timings and not the transcript.
+    """
+    if not isinstance(raw, list):
+        return ()
+    found: list[Utterance] = []
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+            continue
+        try:
+            start = float(item.get("start") or 0.0)
+            end = float(item.get("end") or 0.0)
+        except (TypeError, ValueError):
+            return ()
+        text = item["text"].strip()
+        if text:
+            found.append(Utterance(start=start, end=max(end, start), text=text))
+    return tuple(found)

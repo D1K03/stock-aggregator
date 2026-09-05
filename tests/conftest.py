@@ -31,6 +31,7 @@ def empty_db(db_url):
         # tests and the migration runner fails re-creating them.
         conn.execute("drop schema if exists auth cascade")
         conn.execute("drop schema if exists audit cascade")
+        conn.execute("drop schema if exists skybird cascade")
         conn.execute("create schema public")
         yield conn
 

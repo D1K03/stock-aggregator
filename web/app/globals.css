@@ -1145,3 +1145,128 @@ footer.site .prov {
 /* The signed-in user's own GitHub picture, in place of their initials. Same
    circle, so the rail does not shift when it loads or fails to. */
 .avatar.as-picture { background: var(--paper); object-fit: cover; }
+
+/* ---- skybird -------------------------------------------------------------- */
+/* `.card` carries no padding of its own, so everything here insets to the same
+   place `.card h2` does. */
+
+.sky-empty { padding: calc(var(--sp) * 8); text-align: center; }
+.sky-empty p { color: var(--ink-muted); font-size: 0.85rem; }
+.sky-empty a { color: var(--copper); }
+
+/* The URL box. Grid rather than flex so the hint spans both columns and sits
+   under the field instead of pushing the button off the end. */
+.sky-start {
+  display: grid; grid-template-columns: 1fr auto; gap: calc(var(--sp) * 3);
+  align-items: center; padding: calc(var(--sp) * 5); margin-top: calc(var(--sp) * 4);
+}
+.sky-start input {
+  width: 100%; padding: 10px 12px; font: inherit; font-size: 0.85rem;
+  color: var(--ink); background: var(--sand);
+  border: 1px solid var(--line); border-radius: var(--r-lg); outline: none;
+  transition: border-color 0.15s var(--ease);
+}
+.sky-start input:focus { border-color: var(--copper); }
+.sky-start input::placeholder { color: var(--ink-muted); }
+.sky-start button {
+  padding: 10px 18px; font: inherit; font-size: 0.85rem; font-weight: 550;
+  color: var(--cream); background: var(--copper);
+  border: none; border-radius: var(--r-lg); cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.sky-start button:hover:not(:disabled) { background: var(--copper-deep); }
+.sky-start button:disabled { background: var(--line); color: var(--ink-muted); cursor: default; }
+.sky-hint { grid-column: 1 / -1; font-size: 0.75rem; color: var(--ink-muted); }
+
+.sky-say {
+  margin-top: calc(var(--sp) * 3); padding: 0 calc(var(--sp) * 1);
+  font-size: 0.8rem; color: var(--ink-muted);
+}
+.sky-say.bad { color: var(--copper-deep); }
+
+/* The stage: player beside the transcript, stacked once there is no room for
+   a 16:9 frame and a readable column side by side. */
+.sky-stage {
+  display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  margin-top: calc(var(--sp) * 4);
+}
+@media (max-width: 1000px) { .sky-stage { grid-template-columns: 1fr; } }
+
+.sky-player { position: relative; aspect-ratio: 16 / 9; background: var(--ink); }
+.sky-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.sky-noplayer {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; padding: calc(var(--sp) * 6);
+  text-align: center; color: var(--paper);
+}
+.sky-noplayer p { font-size: 0.9rem; font-weight: 550; }
+.sky-noplayer span { font-size: 0.75rem; opacity: 0.62; max-width: 34ch; line-height: 1.5; }
+
+.sky-feed-side { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--line); }
+@media (max-width: 1000px) { .sky-feed-side { border-left: none; border-top: 1px solid var(--line); } }
+
+.sky-head {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: calc(var(--sp) * 4) calc(var(--sp) * 5);
+  border-bottom: 1px solid var(--line);
+}
+.sky-head strong {
+  font-size: 0.85rem; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.sky-head em { margin-left: auto; font-style: normal; font-size: 0.72rem; color: var(--ink-muted); white-space: nowrap; }
+
+/* Fixed height, not `flex: 1`: the card is as tall as the player beside it, and
+   a feed that grew with its content would stretch the row and leave the video
+   floating in the middle of it. */
+.sky-feed { height: 100%; min-height: 260px; max-height: 460px; overflow-y: auto; padding: calc(var(--sp) * 3) calc(var(--sp) * 5); }
+.sky-line { display: flex; gap: 10px; font-size: 0.85rem; line-height: 1.55; padding: 3px 0; }
+.sky-line span {
+  flex: none; width: 4.5ch; font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem; color: var(--ink-muted); padding-top: 3px;
+}
+.sky-waiting { padding: calc(var(--sp) * 4) 0; font-size: 0.8rem; color: var(--ink-muted); line-height: 1.55; }
+/* Inside `.sky-feed` the parent already pads, but `.card` pads nothing at all —
+   so the same message sitting in the captures list has to inset itself to where
+   `.card h2` sits, or it starts hard against the border. */
+.sky-list .sky-waiting { padding-left: calc(var(--sp) * 5); padding-right: calc(var(--sp) * 5); }
+
+/* On, waiting, off, broken. The colour carries the state at a glance and the
+   text beside it carries it for anyone who cannot use the colour. */
+.sky-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); }
+.sky-dot.on { background: var(--copper); box-shadow: 0 0 0 3px color-mix(in srgb, var(--copper) 22%, transparent); }
+.sky-dot.wait { background: var(--amber-4); }
+/* Held rather than running: amber like `wait`, but hollow, because nothing is
+   happening and the ring on `.on` means something is. */
+.sky-dot.held { background: var(--card); border: 2px solid var(--amber-5); }
+.sky-dot.off { background: var(--line); }
+.sky-dot.bad { background: var(--copper-deep); }
+
+.sky-list { margin-top: calc(var(--sp) * 4); margin-bottom: calc(var(--sp) * 10); }
+.sky-list ul { list-style: none; margin-top: calc(var(--sp) * 3); }
+.sky-list li {
+  display: flex; align-items: center; gap: calc(var(--sp) * 3);
+  padding: 0 calc(var(--sp) * 5); border-top: 1px solid var(--line);
+}
+.sky-list li.on { background: var(--sand); }
+.sky-pick {
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 0; font: inherit; text-align: left;
+  background: none; border: none; cursor: pointer; color: inherit;
+}
+.sky-pick .sky-dot { margin-top: 5px; }
+.sky-what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sky-what strong { font-size: 0.85rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-what em { font-style: normal; font-size: 0.74rem; color: var(--ink-muted); }
+.sky-bad { color: var(--copper-deep) !important; }
+
+.sky-acts { flex: none; display: flex; gap: 6px; }
+.sky-acts button {
+  padding: 5px 12px; font: inherit; font-size: 0.74rem; font-weight: 550;
+  color: var(--ink-soft); background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.sky-acts button:hover:not(:disabled) { border-color: var(--ink-muted); }
+.sky-acts button.bad:hover:not(:disabled) { border-color: var(--copper-deep); color: var(--copper-deep); }
+.sky-acts button:disabled { color: var(--ink-muted); cursor: default; }
