@@ -46,6 +46,29 @@ dependencies = [
 voice = [
     "faster-whisper>=1.2,<2",
 ]
+# Live stream capture, installed by exactly one image and by nothing else. The
+# three runtime dependencies above are unchanged: `screener.skybird` is reached
+# by the status service for `store` and `platforms`, neither of which imports
+# this, and `capture` imports it inside a function the way `transcribe.server`
+# imports faster-whisper.
+#
+# yt-dlp rather than our own extractors. YouTube and Twitch each want player
+# response parsing, an access token dance and a repair every time either
+# changes something; this is the "take the better tool for a specific job"
+# clause in DESIGN.md, and it is pure Python with nothing compiled under it.
+#
+# No upper bound, unlike discord.py and faster-whisper. We sit on
+# `extract_info` and a dict, not on a wide API surface, and being *stale* is the
+# failure mode that actually bites here: a pin would hold the version that
+# stopped working the week a platform changed something.
+#
+# ffmpeg is the other half and cannot come from a wheel: this is live HLS
+# segmentation with reconnect, which is the binary's own muxer rather than a
+# decode of one finished buffer. `deploy/Dockerfile.skybird` apt-installs it,
+# and that image only.
+stream = [
+    "yt-dlp>=2026.1",
+]
 dev = [
     "pytest>=8.0",
     "pyright>=1.1.400",

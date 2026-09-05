@@ -14,17 +14,21 @@ draws it so the tables and packages below have somewhere to land.
 
 ## What runs, and what talks to what
 
-Six containers in one compose project, sharing a VPS with four other stacks.
-Three facts do most of the work in this picture:
+Nine containers in one compose project, sharing a VPS with four other stacks.
+Four facts do most of the work in this picture:
 
 - **Nothing publishes a host port in production.** Caddy reaches the services
   over the compose network and the tunnel reaches Caddy, so there is no port to
   collide with the neighbouring stacks and the database has no public surface.
 - **`cloudflared` dials outward.** The Cloudflare edge never dials in. That is
   the whole ingress story, and it is why there is no firewall rule to maintain.
-- **`api` and `bot` are the same image** with different commands. One dependency
-  set, one build; the cost is that the api image carries `discord.py` without
-  importing it.
+- **`api`, `bot` and `reddit` are the same image** with different commands. One
+  dependency set, one build; the cost is that the api image carries `discord.py`
+  without importing it.
+- **`transcribe` and `skybird` are not**, and that is the rule the pair above is
+  the exception to. A separate image is what a separate dependency set earns:
+  ctranslate2, onnxruntime and PyAV for one, ffmpeg and yt-dlp for the other,
+  and neither the status service nor the bot has any use for either.
 
 ```mermaid
 flowchart LR
@@ -37,6 +41,9 @@ flowchart LR
         api["api<br/>ghcr.io/d1k03/stock-aggregator<br/>python -m screener.boot"]
         web["web<br/>ghcr.io/d1k03/stock-aggregator-web<br/>node server.js"]
         bot["bot<br/>same image as api<br/>python -m screener.bot"]
+        tr["transcribe<br/>ghcr.io/d1k03/stock-aggregator-transcribe<br/>faster-whisper, expose 8081"]
+        sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
+        rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
         pg[("postgres:16<br/>named volume pg_data")]
     end
 
@@ -45,6 +52,8 @@ flowchart LR
     router["OpenRouter"]
     dgw["Discord gateway"]
     drest["Discord REST v10"]
+    streams["YouTube / Twitch"]
+    arctic["Arctic Shift"]
 
     internet --> edge
     cfd -->|"dials outward, never in"| edge
@@ -52,8 +61,15 @@ flowchart LR
     app -->|"/auth/* /health /ready /status /api/*"| api
     app -->|"everything else"| web
     bot -->|"POST /api/render"| web
+    api -->|"POST /transcribe"| tr
+    bot -->|"POST /transcribe"| tr
+    sky -->|"POST /transcribe"| tr
+    sky -->|"audio only, via yt-dlp"| streams
+    rdt -->|"posts + comments"| arctic
     api --> pg
     bot --> pg
+    sky --> pg
+    rdt --> pg
     api --> infisical
     api --> ghoauth
     api --> router
@@ -61,6 +77,7 @@ flowchart LR
     bot --> infisical
     bot --> router
     bot --> dgw
+    rdt --> infisical
 ```
 
 Two edges are the ones people get wrong.
@@ -82,6 +99,18 @@ it holds no credentials, and it never opens a database connection. `bot` has no
 port, no Caddy route and no healthcheck — discord.py reconnects with its own
 backoff, and a check that cannot tell "reconnecting" from "wedged" would restart
 a bot that was about to recover.
+
+**`skybird` has no port either, and no edge pointing at it.** It is the only
+service nothing calls: it reads what to do from Postgres, pulls audio, posts it
+to the transcriber and writes lines back. That is what "the database is the
+control plane" means in this picture — the arrow from the dashboard to a running
+capture goes through `pg`, not across the network. It has no healthcheck for the
+same reason the bot has none, and it holds a Postgres advisory lock so a second
+copy stands by rather than capturing the same stream twice.
+
+**`transcribe` has no Caddy route on purpose.** `/transcribe` matches the
+catch-all, which goes to Next.js, so nothing on the internet resolves to it. The
+browser reaches it through `api`, which is what holds the session.
 
 ---
 
@@ -185,6 +214,7 @@ flowchart TD
     universe["universe"]
     blobs["blobs<br/>local + s3, hand-rolled SigV4"]
     ingest["ingest<br/>prices + sweep"]
+    skybird["skybird<br/>store + platforms only"]
 
     boot --> settings
     boot --> secrets
@@ -213,6 +243,7 @@ flowchart TD
     bot --> tools
 
     tools --> concept
+    tools --> skybird
     tools --> audit
     tools --> checks
     tools --> prov
@@ -227,6 +258,8 @@ flowchart TD
     ingest --> blobs
 
     audit --> settings
+    health -.->|"lazy, inside a request handler"| skybird
+    skybird --> settings
 ```
 
 Two asymmetries are worth reading off it.
@@ -498,6 +531,56 @@ to one table would invent a relationship that does not exist.
 `public.schema_migration` is created by `src/screener/migrate.py`, not by any
 migration file. It keys on the filename stem rather than a content hash, so
 **renaming a shipped migration re-runs it**.
+
+### Live stream capture
+
+```mermaid
+erDiagram
+    platform ||--o{ stream_session : "platform"
+    stream_session ||--o{ transcript_segment : "session_id, on delete cascade"
+
+    platform {
+        text code PK "youtube, twitch"
+        text display_name
+    }
+    stream_session {
+        bigint id PK
+        text platform FK
+        text external_id "video id, or channel where the URL names none"
+        text state "requested, starting, running, stopping, stopped, failed"
+        text embed_url "built server-side; null until a probe names the video"
+        smallint chunk_seconds
+        integer chunks_ok "counted, so a failing stream and a quiet one differ"
+    }
+    transcript_segment {
+        bigint session_id FK
+        integer seq PK "what the dashboard polls after"
+        timestamptz captured_at "wall clock, re-anchored on reconnect"
+        numeric offset_seconds "from the start of the session"
+        text text
+    }
+```
+
+Three things here go against the grain of the rest of the schema, each on
+purpose.
+
+**`platform` is a table rather than `text` + `check`.** The schema conventions
+say enumerations are check constraints, and `state` follows that — it is a
+closed set this code owns. The platform list is the opposite: the whole point is
+that it grows, and a growing list behind a check constraint is a migration every
+time somebody writes an adapter.
+
+**`transcript_segment` is not partitioned**, unlike every other table that grows
+by the day. Retention here is "delete the session", which cascades, rather than
+a date-range drop; and the only read that matters is one session in sequence
+order, which partitioning by time would scatter across partitions instead of
+keeping adjacent.
+
+**`stream_session` is a queue as well as a record.** A partial unique index on
+`(platform, external_id)` over the four live states is what stops one stream
+being captured twice, and a partial index on `state` is what makes the
+supervisor's two-second poll cheap. Nothing else in this schema is read by a
+process asking what to do next.
 
 ### Partitions
 

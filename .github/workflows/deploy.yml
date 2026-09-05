@@ -68,6 +68,12 @@ jobs:
             image: stock-aggregator-transcribe
             context: .
             file: deploy/Dockerfile.transcribe
+          # Live stream capture. Root context again for the package, own
+          # Dockerfile because it apt-installs ffmpeg, which nothing else wants.
+          - name: skybird
+            image: stock-aggregator-skybird
+            context: .
+            file: deploy/Dockerfile.skybird
     steps:
       - uses: actions/checkout@v4
 
@@ -205,14 +211,14 @@ jobs:
                 # notice it crash-looping on a token that never reached
                 # Infisical. Give it a moment to fail, then insist it is up.
                 sleep 15
-                for svc in bot transcribe reddit; do
+                for svc in bot transcribe reddit skybird; do
                   if ! $COMPOSE ps --status running --services | grep -qx "$svc"; then
                     echo "::error::the $svc container is not running"
                     $COMPOSE logs --tail=60 "$svc"
                     exit 1
                   fi
                 done
-                echo "bot, transcribe and reddit containers are running"
+                echo "bot, transcribe, reddit and skybird containers are running"
                 # Running is not quite enough for the transcriber: its weights
                 # load before the socket opens, so an answer here is the proof
                 # that they are in the image and were read.
@@ -222,6 +228,16 @@ jobs:
                   exit 1
                 fi
                 echo "transcriber has its weights"
+                # Skybird has no port, so `running` is nearly all there is to
+                # check — except that its loop retries a database it cannot
+                # reach rather than exiting, which would leave it up and useless.
+                # Asking it to read its own tables is what tells the two apart.
+                if ! $COMPOSE exec -T skybird python -c "import psycopg,os,sys; conn=psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=5); conn.execute('select 1 from skybird.stream_session limit 1'); sys.exit(0)"; then
+                  echo "::error::skybird is up but cannot read its own tables"
+                  $COMPOSE logs --tail=60 skybird
+                  exit 1
+                fi
+                echo "skybird can reach its tables"
                 exit 0
               fi
               sleep 3

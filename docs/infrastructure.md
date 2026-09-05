@@ -237,6 +237,13 @@ and nothing else. A role that was never granted `auth.session` cannot read it
 however the query is spelled — through a view, a CTE, a function, or a cast
 nobody thought of.
 
+**`skybird` is denied too, and that one is a feature rather than a precaution.**
+Steven's `sql` tool runs on this role, and he is deliberately built to start and
+stop captures without being able to read one back; a grant here would hand him
+that through the side door. `tests/test_playground.py` holds the deny list with
+the reason for each entry, so a future migration's tables have to be argued
+about before the suite is green again.
+
 | | |
 |---|---|
 | Switch | `PLAYGROUND_DB_PASSWORD`. Unset means the role has no password, cannot log in, and the page reports itself off. |
@@ -252,6 +259,83 @@ Exposing a new table costs a line in migration 013 and a line in
 `tests/test_playground.py`, which is deliberate: a test asserts every table is
 either granted or explicitly denied, so a future migration cannot quietly add
 one to a SQL console.
+
+---
+
+## Live stream capture
+
+`screener.skybird` — yt-dlp and ffmpeg in a container of its own, feeding the
+transcriber that already exists.
+
+```bash
+python -m screener.skybird start https://www.youtube.com/watch?v=...
+python -m screener.skybird list
+python -m screener.skybird delete 3
+```
+
+Or paste a URL into `/skybird` on the dashboard, which is the same writes with a
+player beside them — or ask Steven, in Discord or on the dashboard: *watch this
+for me*, with a link. He has `watch`, `captures` and `hold`, and nothing that
+reads a transcript back. Starting a capture is a write, so the row records **who
+asked**, not "steven" — `tools.acting()` carries that in, for the same reason
+`collecting()` carries a chart out.
+
+**Pause holds a stream without giving it up.** The ffmpeg goes and the row stays:
+it keeps its place in the list, nobody else can capture the same stream while it
+is held, and it survives a supervisor restart untouched. It also stops counting
+against the session cap, which is the point — pause is how you put something
+else on without losing the first one. Resuming goes back through the queue
+rather than straight to running, because the manifest it had has expired and the
+cap has to apply again.
+
+| | |
+|---|---|
+| Cost | Bandwidth only, ~50–60 MB an hour per stream. Audio-only; no per-minute billing anywhere. |
+| Chunks | 15 seconds, so the transcript runs about 20 seconds behind live |
+| Cap | `SKYBIRD_MAX_SESSIONS`, default 2. Paused captures do not count against it. |
+| Platforms | YouTube and Twitch. A third is one module in `skybird/platforms`, one entry in `PLATFORMS`, one row in `skybird.platform`. |
+
+**The database is the control plane.** The dashboard writes a row in
+'requested' and the supervisor polls for it every two seconds. There is no
+internal HTTP surface between the two containers, nothing to authenticate, and
+a capture outlives the process running it — a session left `running` by a
+container that died is reconciled to `failed` on the next boot rather than
+disappearing with it.
+
+**Steven knows the cap because a tool tells him, not because the prompt does.**
+`captures` answers `used/limit` every time, and `watch` names the limit in its
+refusal. The system prompt cannot carry the number: it is built once at import,
+before secrets load, so anything written there would be the default frozen in
+for ever.
+
+**The cap is two because the transcriber is one.** `screener.transcribe` holds a
+semaphore of one on a two-core container, so a 15-second chunk is a couple of
+seconds of it. Two streams is a fifth to two-fifths of its time; a third would
+spend more of its life queued than decoding and would push the dashboard's mic
+button toward its thirty-second busy wait. If that ever needs raising, the
+escape hatch costs no code: `TRANSCRIBER_URL` is already an environment
+variable, so pointing skybird at a second transcribe container is configuration.
+
+**Do not** reach for this to fetch a video. It captures audio, transcribes it
+and throws the audio away — there is no download, no file and nothing to play
+back. Watching goes through the platform's own player in an iframe, which is
+free, is the sanctioned way to do it, and is why `SKYBIRD_EMBED_PARENTS` exists:
+Twitch checks `parent` against the host framing the player and answers a
+mismatch with a black frame rather than an error.
+
+**Do not** expect it outside English. The model is `base.en` and `language="en"`
+is hard-coded in `transcribe/server.py`, so another language produces nonsense
+rather than an error.
+
+**The audio is never written to a disk**, on the same terms as the transcriber:
+chunks land in a tmpfs, are POSTed once, and are unlinked. At most a couple of
+minutes of them exist at any moment, and past that bound the oldest is dropped
+and counted on the session rather than queued into memory.
+
+**Nothing expires.** Transcripts stay until a person deletes one, and deleting a
+session takes its lines with it through `on delete cascade`. That is the whole
+retention story, and it is the thing to remember when a stream has been running
+all week.
 
 ---
 
@@ -361,12 +445,15 @@ enforced by the provider cannot be defeated by a bug in our accounting.
 
 ## Shipping code
 
-Merge to `main` and CI deploys it: build both images, push to GHCR tagged with
-the commit SHA and `latest`, join the tailnet, copy the compose files, pull and
-restart, then smoke-test from inside the container.
+Merge to `main` and CI deploys it: build all four images, push to GHCR tagged
+with the commit SHA and `latest`, join the tailnet, copy the compose files, pull
+and restart, then smoke-test from inside the container.
 
-- Images: `ghcr.io/d1k03/stock-aggregator` and `…-web`
-- The bot runs from the **same image** as the status service, different command
+- Images: `ghcr.io/d1k03/stock-aggregator`, `…-web`, `…-transcribe`, `…-skybird`
+- The bot and the Reddit ingest run from the **same image** as the status
+  service, different commands. The other two have their own because their
+  dependencies are their own: PyAV and ctranslate2 for one, ffmpeg and yt-dlp
+  for the other, and nothing else in the stack has any use for either set.
 
 **Rolling back** is the Deploy workflow run manually with `image_tag` set to an
 older SHA. No rebuild; it points the box at an image that already exists.

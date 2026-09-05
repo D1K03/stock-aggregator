@@ -51,6 +51,7 @@ const ITEMS: Item[] = [
   { label: "Steven", href: "/steven", icon: <Icon d="M21 12a9 9 0 01-9 9 9 9 0 01-4-1l-5 1 1-5a9 9 0 01-1-4 9 9 0 019-9 9 9 0 019 9z" /> },
   { label: "Audit", href: "/audit", icon: <Icon d="M4 4h11l5 5v11H4zM15 4v5h5M8 13h8M8 17h5" /> },
   { label: "Playground", href: "/playground", icon: <Icon d="M4 17l6-6-6-6M13 19h7" /> },
+  { label: "Skybird", href: "/skybird", icon: <Icon d="M4.9 4.9a10 10 0 000 14.2M19.1 4.9a10 10 0 010 14.2M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4M12 10.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3" /> },
   { label: "Universe", href: "#", soon: true, icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
   { label: "Alerts", href: "#", soon: true, icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
   { label: "Runs", href: "#", soon: true, icon: <Icon d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> },

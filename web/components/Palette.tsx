@@ -24,6 +24,7 @@ const PAGES = [
   { label: "Steven", href: "/steven", hint: "The full page, same conversation" },
   { label: "Audit", href: "/audit", hint: "Commands, spend, tool calls" },
   { label: "Playground", href: "/playground", hint: "Read-only SQL over the data" },
+  { label: "Skybird", href: "/skybird", hint: "Live stream capture and transcripts" },
 ];
 
 /* Docked to the right, it stays put across navigations, so its width lives in

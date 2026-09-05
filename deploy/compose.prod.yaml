@@ -218,6 +218,60 @@ services:
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
+  # Live stream capture. Its own image, because ffmpeg and yt-dlp belong to
+  # nothing else in this stack.
+  #
+  # No ports, no expose and no Caddy route: this calls out to the stream, the
+  # transcriber and Postgres, and nothing ever calls it. There is no HTTP
+  # surface to authenticate because there is no HTTP surface. The dashboard
+  # asks for a capture by writing a row, which this polls for — the database is
+  # the control plane, which is also what makes a capture survive a restart.
+  #
+  # No healthcheck, for the reason `bot` has none: this reconnects on its own
+  # through expiring manifests and network gaps, and a check that could not tell
+  # "reconnecting" from "wedged" would restart a capture that was about to come
+  # back.
+  skybird:
+    image: ghcr.io/d1k03/stock-aggregator-skybird:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Migrations run in the api container's entrypoint and skybird's tables
+      # arrive with them. Starting first would work — the loop retries — but it
+      # would open every deploy with a minute of errors that mean nothing.
+      api:
+        condition: service_healthy
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      SKYBIRD_WORK_DIR: /tmp/skybird
+
+    # Audio never reaches a disk. Chunks land here, are POSTed once and are
+    # unlinked; the bound in `skybird.config` keeps at most a couple of minutes
+    # of them, which is a few megabytes. 1777 because the container runs as uid
+    # 10001 and does not own /tmp.
+    tmpfs:
+      - /tmp/skybird:mode=1777,size=64m
+
+    # The second resource limit in this stack, and the second service to earn
+    # one. ffmpeg remuxing audio is cheap, but it runs for as long as a
+    # broadcast does on a box shared with four other compose projects, and a
+    # stream that misbehaves should not be able to take them with it.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
   postgres:
     # Same major version as the test suite and CI. A schema that leans on range
     # partitioning and GiST exclusion constraints should not first meet a
