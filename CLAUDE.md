@@ -103,7 +103,12 @@ nothing outside imports a submodule directly.
 - `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
 - `screener.notify` — a `NotificationChannel` protocol and a Discord webhook. Delivery only.
 - `screener.bot` — the Discord gateway bot, its own process (`python -m screener.bot`) and its
-  own container. A command surface, not a delivery channel: `/ping`, and a reply when mentioned.
+  own container. A command surface, not a delivery channel: `/ping`, a reply when mentioned in
+  the server, and a reply to anything at all in a DM — one rule, "answer when spoken to", which
+  needs saying explicitly in a shared channel and does not in a two-person conversation.
+  A DM shortly after a handoff picks up what the person was looking at, read back from the
+  audit trail rather than held in memory: the handoff is sent by the status service and answered
+  by the bot, and those are two processes.
   The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
   blocking the event loop stalls the gateway heartbeat rather than just one command.
   Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with

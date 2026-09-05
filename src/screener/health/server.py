@@ -328,7 +328,16 @@ class Handler(BaseHTTPRequestHandler):
             operation="steven.handoff",
             actor=who,
             actor_kind="github",
-            detail={"surface": "web", "discord_user_id": str(user_id)},
+            detail={
+                "surface": "web",
+                "discord_user_id": str(user_id),
+                # Kept so the bot can pick the thread up. The message says "ask
+                # me here and I will pick it up", and without this it cannot:
+                # there is no conversation memory, so the next question in that
+                # DM arrives with no antecedent and "can you chart it" gets
+                # answered with "which ticker?".
+                "context": seeing,
+            },
         )
         self._respond(HTTPStatus.OK, {"sent": True})
 

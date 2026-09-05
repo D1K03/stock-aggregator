@@ -194,3 +194,41 @@ def by_actor(conn: psycopg.Connection, limit: int = 20) -> list[ActorSpend]:
             )
             for actor, actor_kind, events, cost, tokens, cost_24h, last_seen in cur.fetchall()
         ]
+
+
+# How long a handoff keeps its context. Long enough to switch apps, find the
+# server and type; short enough that tomorrow's question is not answered
+# against yesterday's screen.
+HANDOFF_WINDOW_MINUTES = 30
+
+
+def last_handoff_context(
+    conn: psycopg.Connection,
+    discord_user_id: str,
+    *,
+    within_minutes: int = HANDOFF_WINDOW_MINUTES,
+) -> str:
+    """What this person was looking at when they asked to continue in Discord.
+
+    Empty when there is no recent handoff, which is the normal case and not an
+    error: most messages to the bot are not a continuation of anything.
+
+    Read from the trail rather than held in memory, because the bot is its own
+    container and the handoff is sent by the status service — a variable in one
+    process is not visible to the other, and a restart would drop it.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select detail ->> 'context'
+            from audit.event
+            where operation = 'steven.handoff'
+              and detail ->> 'discord_user_id' = %s
+              and occurred_at > now() - make_interval(mins => %s)
+            order by occurred_at desc
+            limit 1
+            """,
+            [discord_user_id, within_minutes],
+        )
+        row = cur.fetchone()
+    return (row[0] if row and row[0] else "") or ""
