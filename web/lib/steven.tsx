@@ -22,10 +22,17 @@ import {
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 const STORAGE_ACTIVE = "screener.palette.active";
 
-/* Sounded when a reply lands. Quiet on purpose: a "done" cue for someone who
-   looked away during a model call, not an alert. */
-const CHIME = "/chime.mp3";
+/* Two cues, for two different events.
+ *
+ * `reply` sounds when an answer lands — a "done" signal for someone who looked
+ * away during a model call, not an alert. `handoff` sounds when the
+ * conversation has actually reached Discord, which is the one moment the
+ * dashboard cannot show you the result of: the confirmation is in another
+ * application. Both quiet on purpose. */
+const CHIMES = { reply: "/chime.mp3", handoff: "/handoff.mp3" } as const;
 const CHIME_VOLUME = 0.4;
+
+type Cue = keyof typeof CHIMES;
 
 type Handoff = "idle" | "sending" | "sent" | "failed";
 
@@ -66,7 +73,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
   const [handoffState, setHandoffState] = useState<Handoff>("idle");
   const [handoffNote, setHandoffNote] = useState("");
   const { context } = useScreenContext();
-  const chimeRef = useRef<HTMLAudioElement | null>(null);
+  const chimesRef = useRef<Partial<Record<Cue, HTMLAudioElement>>>({});
 
   useEffect(() => {
     const saved = loadThreads();
@@ -84,12 +91,14 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Built once, on the client: `Audio` does not exist while this renders on
-    // the server, and a new element per reply would re-fetch the file and play
+    // the server, and a new element per event would re-fetch the file and play
     // a beat late, which for a "done" sound is the whole point missed.
-    const audio = new Audio(CHIME);
-    audio.preload = "auto";
-    audio.volume = CHIME_VOLUME;
-    chimeRef.current = audio;
+    for (const [cue, src] of Object.entries(CHIMES)) {
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      audio.volume = CHIME_VOLUME;
+      chimesRef.current[cue as Cue] = audio;
+    }
   }, []);
 
   /* Saved on every change rather than on close: a tab shut mid-conversation is
@@ -102,8 +111,8 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_ACTIVE, threadId);
   }, [turns, threadId]);
 
-  const chime = useCallback(() => {
-    const audio = chimeRef.current;
+  const chime = useCallback((cue: Cue) => {
+    const audio = chimesRef.current[cue];
     if (!audio) return;
     // Rewound first, so a second reply still sounds instead of being swallowed
     // while the first is mid-play.
@@ -148,7 +157,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
         // Both paths reach here, so a failure chimes too: the signal is "Steven
         // is finished", and waiting in silence for an answer that already
         // failed is the worse outcome.
-        chime();
+        chime("reply");
         setTimeout(() => setSettling(false), 2600);
       }
     },
@@ -186,6 +195,10 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
         { credentials: "include", cache: "no-store" }
       );
       setHandoffState(response.ok ? "sent" : "failed");
+      // Only on success, unlike the reply cue. A failure is shown on the chip
+      // right where you are looking; a success happened somewhere else, and
+      // that is the case worth a sound.
+      if (response.ok) chime("handoff");
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         setHandoffNote(body.error ?? "Could not reach Discord.");
@@ -197,7 +210,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
     // Back to its resting label, so the chip stays usable rather than becoming
     // a permanent receipt.
     setTimeout(() => setHandoffState("idle"), 4000);
-  }, [context]);
+  }, [context, chime]);
 
   const value = useMemo<Steven>(
     () => ({
