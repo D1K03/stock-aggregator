@@ -24,6 +24,19 @@ export type Spend = {
   tokens_24h: number;
 };
 
+/* What one person cost. The same person appears twice when they have used both
+   surfaces — once as a GitHub login, once as a Discord id — because joining
+   them needs a mapping the audit layer has no business holding. */
+export type ActorSpend = {
+  actor: string;
+  actor_kind: string;
+  events: number;
+  cost_usd: number;
+  tokens: number;
+  cost_24h_usd: number;
+  last_seen: string;
+};
+
 export type AuditPage = {
   events: AuditEvent[];
   page: number;
@@ -31,6 +44,7 @@ export type AuditPage = {
   total: number;
   pages: number;
   spend: Spend;
+  actors: ActorSpend[];
   operations: { kind: string; operation: string; count: number }[];
 };
 

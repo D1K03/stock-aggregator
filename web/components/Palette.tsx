@@ -13,6 +13,9 @@ import { SKILLS, Thread, whenever } from "@/lib/threads";
 
 const EASE = [0, 0, 0.2, 1] as const;
 
+/* Only what exists. The rail lists Universe, Alerts and Runs greyed out to
+   show the shape of the thing; offering them here, where every row is
+   something you are about to press enter on, would just be a dead end. */
 const PAGES = [
   { label: "Overview", href: "/", hint: "Morning snapshot" },
   { label: "Steven", href: "/steven", hint: "The full page, same conversation" },

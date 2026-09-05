@@ -6,7 +6,7 @@ from typing import Any
 import psycopg
 from psycopg import sql
 
-from screener.audit.models import KINDS, Event, Spend
+from screener.audit.models import KINDS, ActorSpend, Event, Spend
 
 # The interface pages in fifties. Fixed rather than caller-supplied: a page
 # size in a query string is a way to ask for the whole table at once.
@@ -143,3 +143,54 @@ def operations(conn: psycopg.Connection) -> list[tuple[str, str, int]]:
             """
         )
         return [(k, o, int(c)) for k, o, c in cur.fetchall()]
+
+
+def by_actor(conn: psycopg.Connection, limit: int = 20) -> list[ActorSpend]:
+    """Spend per person, dearest first.
+
+    Grouped on the identity that asked rather than on the login, because the
+    same person reaches Steven as a GitHub login on the dashboard and as a
+    Discord user id in the server, and collapsing those two would need a
+    mapping this layer has no business holding. They appear as two rows, each
+    labelled with which surface it is.
+
+    Rows with no cost at all are dropped: the trail records tool calls and
+    slash commands too, and a list of people who spent nothing is noise on a
+    panel whose whole subject is money. So is machine work — `actor_kind` is
+    `system` for anything nobody asked for, and it is not a person. That is
+    also why these figures need not sum to the total: the total is everything,
+    this is only the part with a name against it.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select
+                actor,
+                actor_kind,
+                count(*),
+                coalesce(sum(cost_usd), 0),
+                coalesce(sum(prompt_tokens + completion_tokens), 0),
+                coalesce(sum(cost_usd) filter (
+                    where occurred_at > now() - interval '24 hours'), 0),
+                max(occurred_at)
+            from audit.event
+            where actor_kind <> 'system'
+            group by actor, actor_kind
+            having coalesce(sum(cost_usd), 0) > 0
+            order by 4 desc
+            limit %s
+            """,
+            [max(1, limit)],
+        )
+        return [
+            ActorSpend(
+                actor=actor,
+                actor_kind=actor_kind,
+                events=int(events),
+                cost=cost,
+                tokens=int(tokens),
+                cost_24h=cost_24h,
+                last_seen=last_seen,
+            )
+            for actor, actor_kind, events, cost, tokens, cost_24h, last_seen in cur.fetchall()
+        ]

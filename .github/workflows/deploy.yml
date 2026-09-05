@@ -163,6 +163,18 @@ jobs:
             COMPOSE="docker compose --env-file .env -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml"
             $COMPOSE pull
             $COMPOSE up -d --remove-orphans
+            # Caddy's config is a bind mount, and changing a bind-mounted file
+            # does not make compose recreate the container — so `up -d` leaves
+            # the old routing table live and the new Caddyfile sitting unread
+            # on disk. That is how /api/* kept going to Next.js for a whole
+            # release after the handle for it was added: every deploy copied
+            # the fix and none of them applied it.
+            #
+            # A reload rather than a restart, so in-flight requests are not
+            # dropped. It is skipped silently when the container was recreated
+            # anyway, since it has already read the new file.
+            $COMPOSE exec -T app caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
+              || echo "caddy reload not needed or not possible; it was just started"
             docker image prune -f
 
       - name: Smoke test

@@ -800,6 +800,158 @@ footer.site .prov {
 @keyframes cc-draw { to { stroke-dashoffset: 0; } }
 @keyframes cc-reveal { to { opacity: 1; } }
 
+/* ---- Steven's own page ----------------------------------------------------
+   Two inset panels rather than full-bleed columns: chats on the left, the
+   conversation on the right, both rounded cards floating on the page the way
+   every other surface here does. The conversation panel scrolls inside itself,
+   so the composer sits at the bottom of the card without covering the last
+   reply, and the page itself never scrolls. */
+.stv {
+  display: flex; gap: calc(var(--sp) * 3);
+  height: 100dvh; padding: calc(var(--sp) * 3) calc(var(--sp) * 4) calc(var(--sp) * 4);
+}
+.stv-chats {
+  flex: 0 0 252px; display: flex; flex-direction: column; overflow: hidden;
+  background: color-mix(in srgb, var(--paper) 35%, white);
+  border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.stv-chats-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sp) * 4) calc(var(--sp) * 4) calc(var(--sp) * 2);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-muted);
+}
+.stv-chats-head button {
+  display: grid; place-items: center; width: 25px; height: 25px;
+  border: 1px solid var(--line); border-radius: 9999px;
+  background: var(--card); color: var(--ink-muted); cursor: pointer;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.stv-chats-head button:hover { color: var(--copper); border-color: var(--copper); }
+.stv-chats-list { flex: 1; overflow-y: auto; padding: 0 calc(var(--sp) * 2) calc(var(--sp) * 4); }
+.stv-chats-empty {
+  padding: calc(var(--sp) * 3) calc(var(--sp) * 2); font-size: 0.78rem; color: var(--ink-muted);
+}
+.stv-chat { display: flex; align-items: center; gap: 2px; }
+.stv-chat > button:first-child {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border: none; background: none; border-radius: 10px;
+  font: inherit; text-align: left; cursor: pointer; color: var(--ink);
+  transition: background 0.14s var(--ease);
+}
+.stv-chat > button:first-child span {
+  font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stv-chat > button:first-child small { font-size: 0.68rem; color: var(--ink-muted); }
+.stv-chat:hover > button:first-child { background: var(--card); }
+.stv-chat.on > button:first-child {
+  background: var(--card); font-weight: 550;
+  box-shadow: 0 1px 2px rgb(26 24 23 / 0.05);
+}
+.stv-chat-x {
+  flex-shrink: 0; display: grid; place-items: center; width: 22px; height: 22px;
+  border: none; background: none; border-radius: 9999px; cursor: pointer;
+  color: var(--ink-muted); opacity: 0; transition: opacity 0.14s var(--ease);
+}
+.stv-chat:hover .stv-chat-x { opacity: 1; }
+.stv-chat-x:hover { color: var(--copper); background: var(--paper); }
+
+.stv-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.stv-scroll { flex: 1; overflow-y: auto; }
+.stv-inner {
+  /* Filling the panel, with the conversation pushed to the bottom of it: a
+     two-message thread pinned to the top of a tall card leaves a hole between
+     it and the composer you are typing into. */
+  min-height: 100%;
+  max-width: 880px; margin: 0 auto;
+  padding: calc(var(--sp) * 8) calc(var(--sp) * 7) calc(var(--sp) * 2);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  gap: calc(var(--sp) * 5);
+}
+
+/* Auto margins on both blocks absorb the free space, so the empty state sits
+   in the middle of the panel rather than at the bottom with everything else. */
+.stv-empty { text-align: center; margin-block: auto; }
+.stv-empty h1 {
+  font-size: 1.6rem; font-weight: 650; letter-spacing: -0.025em;
+  margin-top: calc(var(--sp) * 4);
+}
+.stv-empty p {
+  max-width: 48ch; margin: 10px auto 0; font-size: 0.89rem; line-height: 1.6;
+  color: var(--ink-muted);
+}
+.stv-empty .stv-skills { justify-content: center; margin-top: calc(var(--sp) * 6); }
+
+.stv-line { display: flex; flex-direction: column; align-items: flex-start; }
+.stv-line.you { align-items: flex-end; }
+.stv-who {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+  font-size: 0.75rem; font-weight: 600; color: var(--ink-muted);
+}
+.stv-turn { max-width: 100%; font-size: 0.94rem; line-height: 1.65; }
+.stv-turn.you {
+  max-width: 76%; background: var(--ink); color: var(--cream);
+  padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
+}
+.stv-turn.steven { color: var(--ink); }
+.stv-line .cchart { max-width: 620px; width: 100%; border-radius: 14px; }
+.stv-thinking {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 0.86rem; color: var(--ink-muted);
+}
+
+.stv-composer {
+  flex-shrink: 0; padding: calc(var(--sp) * 2) calc(var(--sp) * 7) calc(var(--sp) * 5);
+  /* Fading to the panel it sits in, so text scrolls out of sight under the
+     composer instead of stopping dead behind its top edge. */
+  background: linear-gradient(to top, var(--card) 76%, transparent);
+}
+.stv-composer-inner {
+  max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 9999px;
+  padding: 9px 10px 9px 15px; box-shadow: 0 4px 18px rgb(26 24 23 / 0.05);
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.stv-composer-inner:focus-within {
+  border-color: color-mix(in srgb, var(--copper) 40%, var(--line));
+  box-shadow: 0 6px 24px rgb(231 85 50 / 0.1);
+}
+.stv-composer textarea {
+  flex: 1; border: none; background: none; outline: none; resize: none;
+  font: inherit; font-size: 0.93rem; line-height: 1.5; color: var(--ink);
+  max-height: 140px;
+}
+.stv-composer textarea::placeholder { color: var(--ink-muted); }
+.stv-send {
+  flex-shrink: 0; display: grid; place-items: center; width: 31px; height: 31px;
+  border: none; border-radius: 9999px; background: var(--ink); color: #fff;
+  cursor: pointer; transition: opacity 0.16s var(--ease), transform 0.16s var(--ease);
+}
+.stv-send:hover:not(:disabled) { transform: translateX(1px); }
+.stv-send:disabled { opacity: 0.28; cursor: default; }
+
+.stv-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+.stv-skills.row { max-width: 880px; margin: 10px auto 0; }
+.stv-skills button {
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 9999px;
+  background: var(--card); color: var(--ink-muted); font: inherit; font-size: 0.76rem;
+  cursor: pointer; transition: color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.stv-skills button:hover { color: var(--copper); border-color: var(--copper); }
+
+/* The chats column is the first thing to go: on a narrow screen the
+   conversation is the page, and history is still reachable from the palette. */
+@media (max-width: 900px) {
+  .stv { padding: calc(var(--sp) * 2); }
+  .stv-chats { display: none; }
+  .stv-inner, .stv-composer-inner, .stv-skills.row { max-width: 100%; }
+  .stv-inner { padding-inline: calc(var(--sp) * 4); }
+  .stv-composer { padding-inline: calc(var(--sp) * 4); }
+}
+
 /* ---- phones: the rail becomes a bar along the bottom -----------------------
    A 64px column of icons costs a sixth of a 390px screen permanently and puts
    navigation under the thumb's least reachable corner. As a bottom bar it
@@ -863,3 +1015,48 @@ footer.site .prov {
   .pal-input input { font-size: 16px; }
   .stv-chats-head button, .pal-icon, .pal-dock { width: 32px; height: 32px; }
 }
+
+/* A destination that does not exist yet. Listed, so the shape of the product
+   is visible, but not dressed as something you can press. */
+.rail-nav .soon {
+  display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden;
+  padding: 9px 10px; border-radius: var(--r-lg); font-size: 0.875rem;
+  color: color-mix(in srgb, var(--ink-muted) 55%, transparent);
+  cursor: default; user-select: none;
+}
+.rail.collapsed .rail-nav .soon { justify-content: center; padding: 9px 0; }
+@media (max-width: 760px) {
+  .rail.bar .rail-nav .soon {
+    flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: center;
+    gap: 3px; padding: 5px 1px;
+  }
+}
+
+/* ---- spend by person ------------------------------------------------------ */
+.who { margin-top: calc(var(--sp) * 5); }
+.who h2 { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
+.who-lede {
+  margin-top: 4px; font-size: 0.78rem; line-height: 1.5; color: var(--ink-muted);
+  max-width: 68ch;
+}
+.who-rows { margin-top: calc(var(--sp) * 4); display: grid; gap: calc(var(--sp) * 4); }
+.who-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.who-name { font-size: 0.9rem; font-weight: 600; display: flex; align-items: baseline; gap: 7px; }
+.who-name em {
+  font-style: normal; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-muted);
+  border: 1px solid var(--line); border-radius: 9999px; padding: 2px 7px;
+}
+.who-cost {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.who-bar {
+  margin-top: 7px; height: 7px; border-radius: 9999px; background: var(--paper);
+  overflow: hidden;
+}
+.who-bar i {
+  display: block; height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, var(--copper), var(--amber-4));
+}
+.who-meta { margin-top: 6px; font-size: 0.73rem; color: var(--ink-muted); }

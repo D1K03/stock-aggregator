@@ -366,6 +366,7 @@ class Handler(BaseHTTPRequestHandler):
                     offset=(page_number - 1) * audit.PAGE_SIZE,
                 )
                 totals = audit.spend(conn)
+                actors = audit.by_actor(conn)
                 available = audit.operations(conn)
         except Exception as exc:
             logger.warning("could not read the audit trail: %s", exc)
@@ -409,6 +410,21 @@ class Handler(BaseHTTPRequestHandler):
                     "cost_24h_usd": float(totals.cost_24h),
                     "tokens_24h": totals.tokens_24h,
                 },
+                # Who spent it. Two people share one bill, and a single total
+                # says the month was cheap or expensive without saying whose
+                # questions made it so.
+                "actors": [
+                    {
+                        "actor": a.actor,
+                        "actor_kind": a.actor_kind,
+                        "events": a.events,
+                        "cost_usd": float(a.cost),
+                        "tokens": a.tokens,
+                        "cost_24h_usd": float(a.cost_24h),
+                        "last_seen": a.last_seen.isoformat(),
+                    }
+                    for a in actors
+                ],
                 "operations": [
                     {"kind": k, "operation": o, "count": c} for k, o, c in available
                 ],

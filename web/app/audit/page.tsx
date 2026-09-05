@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { AuditPage, compact, fetchAudit, money } from "@/lib/audit";
+import { ActorSpend, AuditPage, compact, fetchAudit, money } from "@/lib/audit";
 import { usePublishScreen } from "@/lib/screen-context";
 
 const KINDS = ["agent", "command", "tool", "system"] as const;
@@ -14,6 +14,35 @@ function relative(iso: string): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+/* One person's row. The bar is their share of everything spent, which is the
+   comparison actually being made — two numbers side by side make you do the
+   division yourself. */
+function Person({ actor, share }: { actor: ActorSpend; share: number }) {
+  const pct = share > 0 ? (actor.cost_usd / share) * 100 : 0;
+  return (
+    <div className="who-row">
+      <div className="who-head">
+        <span className="who-name">
+          {actor.actor}
+          <em>{actor.actor_kind}</em>
+        </span>
+        <span className="who-cost">{money(actor.cost_usd)}</span>
+      </div>
+      <div className="who-bar">
+        <motion.i
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(1.5, pct)}%` }}
+          transition={{ duration: 0.6, ease: [0, 0, 0.2, 1] }}
+        />
+      </div>
+      <div className="who-meta">
+        {pct.toFixed(0)}% of all spend · {actor.events} paid {actor.events === 1 ? "event" : "events"} ·{" "}
+        {compact(actor.tokens)} tokens · {money(actor.cost_24h_usd)} today · last {relative(actor.last_seen)}
+      </div>
+    </div>
+  );
 }
 
 export default function Audit() {
@@ -102,6 +131,28 @@ export default function Audit() {
                 </motion.div>
               ))}
             </div>
+
+            {(data?.actors?.length ?? 0) > 0 && (
+              <motion.section
+                className="card who"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.45, ease: [0, 0, 0.2, 1] }}
+              >
+                <h2>Spend by person</h2>
+                <p className="who-lede">
+                  Dearest first, billed rather than estimated. Someone who has used
+                  both the dashboard and Discord appears once for each, because
+                  joining the two identities needs a mapping this page does not have.
+                </p>
+                <div className="who-rows">
+                  {data!.actors.map((a) => (
+                    <Person key={`${a.actor_kind}:${a.actor}`} actor={a}
+                            share={data!.spend.total_cost_usd} />
+                  ))}
+                </div>
+              </motion.section>
+            )}
 
             <div className="filters">
               <label>Type</label>
