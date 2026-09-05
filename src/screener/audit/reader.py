@@ -1,5 +1,6 @@
 """Reading the trail back."""
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -232,3 +233,69 @@ def last_handoff_context(
         )
         row = cur.fetchone()
     return (row[0] if row and row[0] else "") or ""
+
+
+# How much of a conversation Steven carries into his next reply: two exchanges,
+# four messages. Enough that "chart it" and "why?" have an antecedent, few
+# enough that remembering stays a fraction of the cost of the reply it is
+# attached to — a remembered turn is re-sent on every round of every message
+# after it, so this number is multiplied rather than paid once.
+MEMORY_EXCHANGES = 2
+
+# The same half hour a handoff keeps its context for, and for the same reason:
+# long enough to switch apps and type, short enough that tomorrow's question is
+# not answered against yesterday's conversation.
+MEMORY_WINDOW_MINUTES = 30
+
+
+def recent_turns(
+    conn: psycopg.Connection,
+    identities: Sequence[tuple[str, str]],
+    *,
+    limit: int = MEMORY_EXCHANGES,
+    within_minutes: int = MEMORY_WINDOW_MINUTES,
+) -> list[tuple[str, str]]:
+    """The last few exchanges this person had with Steven, oldest first.
+
+    `identities` is every (actor, actor_kind) pair belonging to one person, so
+    a conversation started on the dashboard is found again from Discord. That
+    is what makes the handoff's "ask me here and I will pick it up" true of the
+    conversation rather than only of the screen.
+
+    Read from the trail rather than held in a dictionary, for the reason
+    `last_handoff_context` is: the bot and the status service are two
+    processes, and neither one's variables survive a deploy.
+
+    Only what was said. Tool calls, tool results and charts are left behind —
+    they were paid for once already, and the answer they produced says what
+    they found.
+    """
+    if not identities:
+        return []
+
+    # An `or` of matched pairs, composed rather than interpolated, for the
+    # reason `budget` does it: a clause whose length depends on the data is
+    # exactly what psycopg's `LiteralString` guardrail is for, and two `in`
+    # lists would also match a Discord id that happened to equal a login.
+    matches = sql.SQL(" or ").join(
+        sql.SQL("(actor = %s and actor_kind = %s)") for _ in identities
+    )
+    query = sql.SQL(
+        "select detail ->> 'question', detail ->> 'reply' from audit.event "
+        "where operation = 'steven.reply' and outcome = 'ok' "
+        "and detail ->> 'reply' is not null "
+        "and occurred_at > now() - make_interval(mins => %s) and ({}) "
+        # `id` breaks the tie. Two replies in the same instant are rare in a
+        # conversation and routine in a test, and a memory that reorders itself
+        # is worse than no memory.
+        "order by occurred_at desc, id desc limit %s"
+    ).format(matches)
+
+    params: list[object] = [within_minutes]
+    params.extend(value for pair in identities for value in pair)
+    params.append(max(1, limit))
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    return [(asked, said) for asked, said in reversed(rows) if asked and said]

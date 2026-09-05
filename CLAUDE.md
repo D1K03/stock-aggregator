@@ -113,6 +113,11 @@ nothing outside imports a submodule directly.
   A DM shortly after a handoff picks up what the person was looking at, read back from the
   audit trail rather than held in memory: the handoff is sent by the status service and answered
   by the bot, and those are two processes.
+  He remembers the conversation the same way — the last two exchanges, read back per person
+  with Discord folded onto GitHub, so a dashboard thread carries over when you press Continue
+  in Discord. Bounded on every axis at once (two exchanges, `MEMORY_CHARS`, final text only,
+  half an hour, and nothing when the dashboard sends `fresh=1` for a new chat) because a
+  remembered turn is re-sent on every round of every message after it.
   The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
   blocking the event loop stalls the gateway heartbeat rather than just one command.
   Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
