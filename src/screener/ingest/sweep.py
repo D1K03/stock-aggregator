@@ -15,6 +15,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 
+import httpx
 import psycopg
 
 from screener.ingest.load import BAR_FIELDS, Change
@@ -42,7 +43,19 @@ def run_sweep(
     counts: Counter[str] = Counter()
 
     for security_id, symbol in securities:
-        payload = client.fetch(symbol, BACKFILL_START, today)
+        # ChartClient.fetch already swallows httpx.HTTPError into a None return,
+        # so this should not fire in normal operation. It guards a hand-run sweep
+        # across the whole universe: unlike the nightly run this records nothing,
+        # so it has no per-security self-healing to fall back on if one bad
+        # symbol raises instead of returning None — losing the whole pass to
+        # that would defeat the point of a diagnostic whose value is the
+        # aggregate count. Caught narrowly (not `Exception`) so a real
+        # programming error still surfaces instead of reading as a clean sweep.
+        try:
+            payload = client.fetch(symbol, BACKFILL_START, today)
+        except httpx.HTTPError:
+            logger.warning("sweep: fetch raised for %s, skipping", symbol)
+            continue
         if payload is None:
             logger.warning("sweep: no chart for %s", symbol)
             continue
