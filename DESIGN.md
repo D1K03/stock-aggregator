@@ -101,14 +101,31 @@ respect robots.txt and ToS, and treat scrapers as the fragile layer.
   on a share-class symbol, not a limit. Mean latency per 300-request block stayed flat at
   0.119–0.122s from the first block to the last, so nothing throttled or degraded across the run.
 
-  **What that still does not establish**, and should not be quoted as though it does:
+  **A full night has since been measured** — 3,012 sequential requests, both endpoints, in 4.7
+  minutes. Fundamentals: 1,506 requests in 202s, 0.134s each, 1,505 succeeding. Prices: 1,506
+  requests in 83s, 0.055s each, 1,505 succeeding. Per-300-block mean latency was flat to within
+  3 ms across both passes — 0.135, 0.136, 0.133, 0.134, 0.132 for fundamentals — so nothing
+  throttled at a night's full volume either.
+
+  Two things that measurement settled:
+
+  - **Prices need no crumb, confirmed at scale**, and are the cheaper half despite the larger
+    payload: 0.055s against 0.134s, 27.3 KB against 19.5 KB. A night is under five minutes of
+    request time and about 72 MB, so ~2.1 GB a month.
+  - **The single failure on both endpoints was `CWEN-A`, 404.** Identical on the crumb-free
+    endpoint and the crumbed one, which places the share-class problem in symbol formatting
+    rather than anywhere near authentication or rate limiting.
+
+  **What is still not established**, and should not be quoted as though it is:
 
   - It ran from a development machine, not the VPS that will run the nightly job. Per-IP limits
-    attach to that IP, not to this code.
-  - A night's work is roughly double this: fundamentals *and* prices for every ticker. Prices
-    need no crumb and may sit in a different bucket, but 3,000 requests is untested.
-  - The run took three minutes, so the crumb never expired and the refresh path never executed.
-    Over a longer job it will, routinely.
+    attach to that IP, not to this code. This is the one open question, and the only measurement
+    that could still justify putting a proxy in front of Yahoo.
+  - **The crumb refresh path is correct, but a natural expiry has not been observed.** Poisoning
+    the crumb deliberately produces a 401 that the client recognises, refreshes and retries to a
+    200 — the mechanism works. Across the 4.7-minute run the crumb was fetched exactly once, so
+    Yahoo never expired one on us. The claim that a longer job will hit it routinely remains an
+    assumption; at under five minutes a night, it may simply never arise.
 
   Throttle as a safeguard — the measurements say it is not needed at this scale, and they were
   taken in conditions the real job will not exactly reproduce.
