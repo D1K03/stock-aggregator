@@ -7,7 +7,8 @@ import StatTiles from "@/components/StatTiles";
 import UniverseTable from "@/components/UniverseTable";
 import ScoreChart from "@/components/ScoreChart";
 import AlertFeed from "@/components/AlertFeed";
-import { ROWS, agree } from "@/lib/data";
+import { MEDIANS, PILLAR_KEYS, ROWS, agree } from "@/lib/data";
+import { usePublishScreen } from "@/lib/screen-context";
 
 export default function Page() {
   const [selected, setSelected] = useState("NVDA");
@@ -25,6 +26,30 @@ export default function Page() {
   const [flagged, setFlagged] = useState(false);
 
   const sectors = useMemo(() => [...new Set(ROWS.map((r) => r.sector))].sort(), []);
+
+  /* What the palette will describe if asked. Built from the same state the
+     table renders from, so it cannot describe a row that is not selected. */
+  const row = ROWS.find((r) => r.sym === selected);
+  const summary = useMemo(() => {
+    if (!row) return "the universe table";
+    const pillars = row.p.map((v, i) => `${PILLAR_KEYS[i]} ${v}`).join(", ");
+    const delta = row.score - row.prev;
+    const filters = [
+      sector ? `sector ${sector}` : null,
+      minAgree ? "agreement at least 3" : null,
+      flagged ? "flagged only" : null,
+    ].filter(Boolean).join(", ");
+    return (
+      `${row.sym} (${row.name}), ${row.sector}, blended score ${row.score}, ` +
+      `${delta >= 0 ? "up" : "down"} ${Math.abs(delta)} on the day, ` +
+      `pillar percentiles ${pillars}, ${agree(row)} of 5 pillars top-quartile, ` +
+      `sector median ${MEDIANS[row.sector]}` +
+      (row.flags.length ? `, flags: ${row.flags.join(" and ")}` : ", no event flags") +
+      (filters ? `. Filters: ${filters}` : "")
+    );
+  }, [row, sector, minAgree, flagged]);
+
+  usePublishScreen("Overview", summary, true);
   const rows = ROWS.filter(
     (r) =>
       (!sector || r.sector === sector) &&

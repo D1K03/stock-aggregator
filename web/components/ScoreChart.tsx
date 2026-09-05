@@ -32,7 +32,10 @@ export default function ScoreChart({ sym }: { sym: string }) {
     setHover(i);
   };
   const day = (i: number) => {
-    const d = new Date(2026, 8, 5);
+    // Counted back from today, matching what the agent sends with a chart it
+    // draws. A fixed date here would have the same point labelled differently
+    // on the page and in the chat.
+    const d = new Date();
     d.setDate(d.getDate() - (h.length - 1 - i));
     return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   };

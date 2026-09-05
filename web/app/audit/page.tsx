@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { AuditPage, compact, fetchAudit, money } from "@/lib/audit";
+import { usePublishScreen } from "@/lib/screen-context";
 
 const KINDS = ["agent", "command", "tool", "system"] as const;
 
@@ -44,6 +45,16 @@ export default function Audit() {
   };
 
   const operations = (data?.operations ?? []).filter((o) => !kind || o.kind === kind);
+
+  // Real figures, unlike the Overview table, so not flagged illustrative.
+  usePublishScreen(
+    "Audit",
+    data
+      ? `${data.total} recorded events, page ${data.page} of ${data.pages}` +
+        `${kind ? `, filtered to ${kind}` : ""}${operation ? ` / ${operation}` : ""}` +
+        `, total spend ${money(data.spend.total_cost_usd)} over ${compact(data.spend.total_tokens)} tokens`
+      : "loading the audit trail"
+  );
 
   return (
     <div className="shell">
@@ -130,7 +141,7 @@ export default function Audit() {
                   <thead>
                     <tr>
                       <th>When</th><th>Type</th><th>Operation</th><th>Actor</th>
-                      <th>Outcome</th><th>Model</th>
+                      <th>Where</th><th>Outcome</th><th>Model</th>
                       <th className="num">Tokens</th><th className="num">Cost</th><th className="num">Took</th>
                     </tr>
                   </thead>
@@ -146,7 +157,10 @@ export default function Audit() {
                         <td className="sector" title={e.occurred_at}>{relative(e.occurred_at)}</td>
                         <td><span className={`kind kind-${e.kind}`}>{e.kind}</span></td>
                         <td className="tick">{e.operation}</td>
-                        <td className="sector">{e.actor_kind === "system" ? "system" : `${e.actor_kind}:${e.actor}`}</td>
+                        <td className="sector">{e.actor_kind === "system" ? "system" : e.actor}</td>
+                        <td className="sector">
+                          {typeof e.detail?.surface === "string" ? String(e.detail.surface) : "—"}
+                        </td>
                         <td>
                           <span className={`outcome outcome-${e.outcome}`}>{e.outcome}</span>
                         </td>
@@ -158,7 +172,7 @@ export default function Audit() {
                     ))}
                     {data && data.events.length === 0 && (
                       <tr>
-                        <td colSpan={9} style={{ textAlign: "center", color: "var(--ink-muted)", padding: "calc(var(--sp) * 10)" }}>
+                        <td colSpan={10} style={{ textAlign: "center", color: "var(--ink-muted)", padding: "calc(var(--sp) * 10)" }}>
                           Nothing matches those filters yet.
                         </td>
                       </tr>

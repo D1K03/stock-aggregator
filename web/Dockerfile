@@ -7,6 +7,11 @@ RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
+# Off unless a local build turns it on. Next inlines NEXT_PUBLIC_* at build
+# time, so with this unset the sign-in shortcut is not merely hidden in the
+# production image, it is not compiled into the bundle at all.
+ARG NEXT_PUBLIC_LOCAL_LOGIN=""
+ENV NEXT_PUBLIC_LOCAL_LOGIN=$NEXT_PUBLIC_LOCAL_LOGIN
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

@@ -20,7 +20,13 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except the login page itself, Next's own assets, and the paths
-  // Caddy hands to the status service.
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|auth|api|health|ready|status).*)"],
+  // Everything except the login page itself, Next's own assets, the paths Caddy
+  // hands to the status service, and anything with a file extension.
+  //
+  // That last one is why the chime was silently 307ing to /login: files served
+  // out of public/ are fetched by the page itself, not navigated to, and a
+  // redirect to HTML arrives as an audio element that will not play.
+  matcher: [
+    "/((?!login|_next/static|_next/image|favicon.ico|auth|api|health|ready|status|.*\\.[^/]+$).*)",
+  ],
 };

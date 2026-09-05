@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const LOGOUT = process.env.NEXT_PUBLIC_API_BASE
@@ -32,6 +33,7 @@ function Icon({ d }: { d: string }) {
 
 const ITEMS: Item[] = [
   { label: "Overview", href: "/", icon: <Icon d="M3 12h5l2 6 4-14 2 8h5" /> },
+  { label: "Steven", href: "/steven", icon: <Icon d="M21 12a9 9 0 01-9 9 9 9 0 01-4-1l-5 1 1-5a9 9 0 01-1-4 9 9 0 019-9 9 9 0 019 9z" /> },
   { label: "Audit", href: "/audit", icon: <Icon d="M4 4h11l5 5v11H4zM15 4v5h5M8 13h8M8 17h5" /> },
   { label: "Universe", href: "#", icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
   { label: "Alerts", href: "#", icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
@@ -130,7 +132,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
 
         <nav className="rail-nav">
           {ITEMS.map((item) => (
-            <a
+            <Link
               key={item.label}
               href={item.href}
               className={item.label === active ? "on" : undefined}
@@ -138,7 +140,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
             >
               <span className="rail-icon">{item.icon}</span>
               {!collapsed && <span className="rail-label">{item.label}</span>}
-            </a>
+            </Link>
           ))}
         </nav>
 

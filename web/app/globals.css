@@ -44,6 +44,40 @@ a { color: inherit; text-decoration: none; }
 .content { flex: 1; min-width: 0; }
 .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 calc(var(--sp) * 6); }
 
+/* ---- shared chrome -------------------------------------------------------- */
+.wordmark {
+  font-weight: 700; font-size: 1.14rem; letter-spacing: -0.035em; white-space: nowrap;
+  color: var(--ink);
+}
+.sha {
+  font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.7rem;
+  color: var(--ink-muted); background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 3px 7px; white-space: nowrap;
+}
+.avatar {
+  width: 26px; height: 26px; border-radius: 9999px; background: var(--copper); color: #fff;
+  display: grid; place-items: center; font-size: 0.72rem; font-weight: 600; flex-shrink: 0;
+}
+
+/* The account menu, used by the rail footer. */
+.menu {
+  position: absolute; z-index: 40; min-width: 190px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 16px 40px rgb(26 24 23 / 0.14); overflow: hidden;
+}
+.menu-head {
+  font-size: 0.72rem; color: var(--ink-muted); padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.menu-head b { color: var(--ink-soft); font-weight: 600; }
+.menu-item {
+  display: block; width: 100%; text-align: left; font-size: 0.84rem;
+  padding: 10px 12px; cursor: pointer; transition: background 0.15s var(--ease);
+}
+.menu-item:hover { background: var(--sand); }
+.menu-item.danger { color: var(--copper-deep); font-weight: 500; }
+.menu-item.danger:hover { background: var(--cream); }
+
 /* ---- sidebar rail --------------------------------------------------------- */
 .rail-spacer { flex: 0 0 auto; }
 .shell { display: flex; align-items: stretch; min-height: 100dvh; }
@@ -383,6 +417,541 @@ footer.site .prov {
 .gh-btn:hover { background: var(--ink-soft); transform: translateY(-1px); box-shadow: 0 10px 28px rgb(26 24 23 / 0.22); }
 .gh-btn:active { transform: translateY(0) scale(0.99); }
 .gh-btn svg { flex-shrink: 0; }
+.local-login {
+  display: block; margin-top: calc(var(--sp) * 4); padding: 9px 12px;
+  border: 1px dashed var(--amber-4); border-radius: var(--r-lg);
+  background: var(--cream); color: var(--copper-deep);
+  font-size: 0.82rem; font-weight: 500;
+  transition: background 0.18s var(--ease);
+}
+.local-login:hover { background: var(--amber-1); }
+/* Dashed and labelled, so it never reads as a normal way in. */
+.local-login span {
+  display: block; font-weight: 400; font-size: 0.68rem; color: var(--ink-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px;
+}
 .login-note { font-size: 0.72rem; color: var(--ink-muted); margin-top: calc(var(--sp) * 4); }
 .login-foot { margin-top: calc(var(--sp) * 6); padding-top: calc(var(--sp) * 4); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 0.7rem; color: var(--ink-muted); }
 .login-foot .mono { font-size: 0.68rem; }
+
+/* The launcher. Bottom right, out of the way of the sidebar and the table. */
+.pal-launcher {
+  position: fixed; right: calc(var(--sp) * 5); bottom: calc(var(--sp) * 5); z-index: 55;
+  display: flex; align-items: center; gap: 9px;
+  font: inherit; font-size: 0.82rem; font-weight: 500; color: var(--ink-soft);
+  background: color-mix(in srgb, var(--card) 92%, white);
+  border: 1px solid var(--line); border-radius: 9999px;
+  padding: 7px 12px 7px 9px; cursor: pointer;
+  box-shadow: 0 1px 2px rgb(26 24 23 / 0.06), 0 8px 24px rgb(26 24 23 / 0.1);
+  backdrop-filter: saturate(180%) blur(12px);
+  transition: box-shadow 0.22s var(--ease), transform 0.22s var(--ease), border-color 0.22s var(--ease);
+}
+.pal-launcher:hover {
+  transform: translateY(-1px);
+  border-color: var(--amber-2);
+  box-shadow: 0 2px 4px rgb(26 24 23 / 0.08), 0 14px 34px rgb(231 85 50 / 0.16);
+}
+.pal-launcher:active { transform: translateY(0); }
+
+@media (max-width: 640px) {
+  /* Just the orb. The label and the shortcut are both useless on a phone. */
+  .pal-launcher { padding: 8px; right: calc(var(--sp) * 4); bottom: calc(var(--sp) * 4); }
+  .pal-launcher-text, .pal-launcher .pal-kbd { display: none; }
+}
+
+/* ---- command palette ------------------------------------------------------ */
+.pal-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  backdrop-filter: blur(2px);
+}
+.pal {
+  position: fixed; z-index: 70; display: flex; flex-direction: column;
+  background: color-mix(in srgb, var(--card) 92%, white);
+  border: 1px solid var(--line); border-radius: var(--r-2xl);
+  /* Two shadows: a tight one for the edge and a wide soft one for the lift.
+     One shadow doing both jobs reads as a drop shadow rather than a sheet. */
+  box-shadow: 0 1px 2px rgb(26 24 23 / 0.08), 0 24px 64px rgb(26 24 23 / 0.18);
+  backdrop-filter: saturate(180%) blur(20px);
+  overflow: hidden;
+}
+.pal.centre {
+  /* Centred with auto margins, not translateX(-50%). Framer Motion writes an
+     inline `transform` to animate the entrance, which would overwrite a
+     transform used for layout and drop the panel off to one side. */
+  top: 18vh; left: 0; right: 0; margin-inline: auto;
+  width: min(640px, calc(100vw - 32px)); max-height: 64vh;
+}
+.pal.docked {
+  top: calc(var(--sp) * 4); right: calc(var(--sp) * 4); bottom: calc(var(--sp) * 4);
+  width: min(400px, calc(100vw - 32px));
+  border-radius: var(--r-2xl);
+}
+
+.pal-input {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  padding: 0 calc(var(--sp) * 4); height: 54px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  color: var(--ink-muted);
+}
+.pal-input input {
+  flex: 1; min-width: 0; font: inherit; font-size: 1rem; color: var(--ink);
+  background: none; border: none; outline: none;
+}
+.pal-input input::placeholder { color: var(--ink-muted); }
+.pal-dock {
+  display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: var(--r-md);
+  color: var(--ink-muted); cursor: pointer;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.pal-dock:hover { background: var(--sand); color: var(--copper-deep); border-color: var(--line); }
+
+.pal-kbd {
+  font-family: var(--font-geist-mono), monospace; font-size: 0.65rem; color: var(--ink-muted);
+  background: var(--paper); border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: var(--r-sm, 4px); padding: 2px 5px; flex-shrink: 0;
+}
+
+.pal-list { flex: 1; min-height: 0; overflow-y: auto; padding: calc(var(--sp) * 2); }
+.pal-group {
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink-muted); padding: calc(var(--sp) * 2) calc(var(--sp) * 3) 4px;
+}
+.pal-item {
+  display: flex; align-items: baseline; gap: 10px; border-radius: var(--r-lg);
+  padding: 9px calc(var(--sp) * 3); font-size: 0.88rem; color: var(--ink-soft);
+  transition: background 0.14s var(--ease);
+}
+.pal-item:hover { background: var(--sand); color: var(--ink); }
+.pal-item small { color: var(--ink-muted); font-size: 0.75rem; }
+.pal-item.as-hint { color: var(--ink-muted); font-size: 0.82rem; }
+
+.pal-thread {
+  flex: 1; min-height: 0;
+  overflow-y: auto; padding: calc(var(--sp) * 4);
+  display: flex; flex-direction: column; gap: calc(var(--sp) * 3);
+}
+.pal-turn {
+  font-size: 0.86rem; line-height: 1.5; border-radius: var(--r-lg);
+  padding: 9px 12px; max-width: 88%; white-space: pre-wrap;
+}
+.pal-turn.you { align-self: flex-end; background: var(--ink); color: #fff; }
+.pal-turn.steven { align-self: flex-start; background: var(--paper); color: var(--ink); }
+.pal-thinking {
+  display: flex; align-items: center; gap: 10px; align-self: flex-start;
+  font-size: 0.8rem; color: var(--ink-muted); padding: 4px 2px;
+}
+
+/* The chip strip under the bar. */
+.pal-chips {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0;
+  padding: 7px calc(var(--sp) * 4);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+  font: inherit; font-size: 0.7rem; line-height: 1;
+  border-radius: 9999px; padding: 4px 9px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-muted);
+}
+.chip svg { flex-shrink: 0; }
+/* Truncates rather than wraps: it is a reassurance that context is attached,
+   not something to read. The full text is in the title. */
+.chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-seeing {
+  background: var(--cream); border-color: var(--amber-2); color: var(--copper-deep);
+  min-width: 0; flex: 1;
+}
+.chip-discord {
+  cursor: pointer; flex-shrink: 0; white-space: nowrap;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.chip-discord:hover:not(:disabled) { background: #5865f2; border-color: #5865f2; color: #fff; }
+.chip-discord:disabled { opacity: 0.7; cursor: default; }
+.chip-discord.sent { background: color-mix(in srgb, #57f287 22%, var(--card)); border-color: #57f287; color: #1a6b3a; }
+.chip-discord.failed { background: var(--cream); border-color: var(--copper); color: var(--copper-deep); }
+
+/* The pull tab. Outside the panel's own box, so it stays on screen when the
+   panel slides away and is the way back. */
+.pal-tab {
+  position: absolute; left: -22px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 62px; z-index: 1;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--card) 92%, white);
+  color: var(--ink-muted);
+  border: 1px solid var(--line); border-right: none;
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+  box-shadow: -3px 0 12px rgb(26 24 23 / 0.08);
+  cursor: pointer;
+  transition: color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.pal-tab:hover { color: var(--copper-deep); background: var(--cream); }
+/* Tucked, the panel is off screen and only this is left, so it needs to be
+   findable without being loud. */
+.pal.tucked .pal-tab { box-shadow: -4px 0 18px rgb(26 24 23 / 0.14); }
+
+.pal-icon {
+  display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: var(--r-md);
+  color: var(--ink-muted); cursor: pointer;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.pal-icon:hover { background: var(--sand); color: var(--ink); border-color: var(--line); }
+.pal-icon.on { background: var(--cream); color: var(--copper-deep); border-color: var(--amber-2); }
+.pal-icon.subtle { opacity: 0; }
+.pal-thread-row:hover .pal-icon.subtle { opacity: 1; }
+
+.pal-thread-row { display: flex; align-items: center; gap: 4px; }
+.pal-thread-row .pal-item { flex: 1; min-width: 0; text-align: left; background: none; border: none; font: inherit; cursor: pointer; flex-direction: column; align-items: flex-start; gap: 1px; }
+.pal-thread-row .pal-item span { color: var(--ink); }
+
+/* Skills. Small, quiet, and never competing with the answer above them. */
+.pal-skills {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding-top: calc(var(--sp) * 2);
+}
+.pal-skills.in-list { padding: 0 calc(var(--sp) * 3) calc(var(--sp) * 2); }
+.pal-skills button {
+  font: inherit; font-size: 0.74rem; color: var(--ink-soft);
+  background: var(--card); border: 1px solid var(--line); border-radius: 9999px;
+  padding: 4px 11px; cursor: pointer;
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease), color 0.16s var(--ease);
+}
+.pal-skills button:hover {
+  background: var(--cream); border-color: var(--amber-2); color: var(--copper-deep);
+}
+
+.pal-line { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+.pal-line.you { align-items: flex-end; }
+
+/* The working, collapsed. */
+.trace { align-self: flex-start; }
+.trace-head {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 0.7rem; color: var(--ink-muted);
+  background: none; border: none; padding: 0; cursor: pointer;
+  transition: color 0.16s var(--ease);
+}
+.trace-head:hover { color: var(--copper-deep); }
+.trace-caret { display: inline-grid; place-items: center; }
+.trace-dot {
+  width: 5px; height: 5px; border-radius: 9999px; background: var(--copper);
+  box-shadow: 0 0 5px rgb(231 85 50 / 0.5);
+}
+.trace-ms { font-family: var(--font-geist-mono), monospace; opacity: 0.75; }
+.trace-list { list-style: none; margin: 0; padding: 0 0 0 15px; overflow: hidden; }
+.trace-list li {
+  display: flex; align-items: center; gap: 8px; padding: 3px 0;
+  font-size: 0.7rem; color: var(--ink-muted);
+}
+.trace-list code {
+  font-family: var(--font-geist-mono), monospace; font-size: 0.68rem;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--r-sm, 4px); padding: 1px 5px; color: var(--ink-soft);
+}
+
+/* Steven's markdown. Tame on purpose: a chat bubble is not a document, so
+   nothing here is larger than the body text and the spacing stays tight. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 0.5em; }
+.md strong { font-weight: 600; color: var(--ink); }
+.md em { font-style: italic; }
+.md code {
+  font-family: var(--font-geist-mono), monospace; font-size: 0.86em;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-radius: var(--r-sm, 4px); padding: 1px 4px;
+}
+/* Tailwind's preflight sets `list-style: none` on every list, so the markers
+   have to be asked for again or the items read as loose lines. */
+.md ul { list-style: disc; margin: 0 0 0.5em; padding-left: 1.15em; }
+.md ol { list-style: decimal; margin: 0 0 0.5em; padding-left: 1.35em; }
+.md li { margin: 0.15em 0; }
+.md li::marker { color: var(--ink-muted); }
+
+.pal-hints {
+  display: flex; align-items: center; gap: calc(var(--sp) * 4); flex-wrap: wrap;
+  padding: calc(var(--sp) * 3) calc(var(--sp) * 3) calc(var(--sp) * 2);
+  font-size: 0.7rem; color: var(--ink-muted);
+}
+.pal-clear {
+  font: inherit; font-size: 0.72rem; color: var(--ink-muted); flex-shrink: 0;
+  background: none; border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 3px 8px; cursor: pointer;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.pal-clear:hover { color: var(--copper-deep); border-color: var(--amber-4); background: var(--cream); }
+@media (max-width: 640px) {
+  .pal.centre { top: 10vh; max-height: 76vh; }
+  .pal.docked { inset: calc(var(--sp) * 3); width: auto; }
+}
+
+/* ---- Steven's orb --------------------------------------------------------- */
+.orb {
+  position: relative; display: inline-block; flex-shrink: 0;
+  border-radius: 9999px; overflow: hidden;
+  background: radial-gradient(circle at 34% 28%, #3a3330 0%, var(--ink) 70%);
+  isolation: isolate;
+  /* Layered rather than one ring: a tight edge, a close bloom, then a wide
+     faint one. A single shadow at this size reads as a flat sticker halo. */
+  box-shadow:
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.24),
+    inset 0 -1px 2px rgb(0 0 0 / 0.35),
+    0 0 3px rgb(231 85 50 / 0.28),
+    0 0 10px rgb(231 85 50 / 0.16),
+    0 1px 3px rgb(26 24 23 / 0.25);
+  transition: box-shadow 0.5s var(--ease);
+}
+
+.orb-field {
+  position: absolute; inset: -35%;
+  border-radius: 9999px;
+  /* Blur scales with the orb. Fixed at 6px a 20px orb blurs into one flat
+     colour and stops looking like anything is moving inside it. */
+  filter: blur(calc(var(--orb-size, 22px) * 0.22));
+  will-change: transform;
+}
+.orb-a { background: radial-gradient(circle at 32% 30%, var(--copper) 0%, transparent 58%); }
+.orb-b { background: radial-gradient(circle at 70% 38%, var(--amber-4) 0%, transparent 55%); }
+.orb-c { background: radial-gradient(circle at 45% 72%, var(--copper-deep) 0%, transparent 60%); }
+.orb-d { background: radial-gradient(circle at 62% 62%, var(--amber-2) 0%, transparent 48%); opacity: 0.7; }
+
+.orb-spec {
+  position: absolute; top: 12%; left: 20%; width: 24%; height: 24%;
+  border-radius: 9999px; background: rgb(255 255 255 / 0.8);
+  filter: blur(calc(var(--orb-size, 22px) * 0.05));
+  will-change: transform, opacity;
+}
+
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+@keyframes orb-spin-back { to { transform: rotate(-360deg); } }
+@keyframes orb-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes orb-glint {
+  0%, 100% { transform: translate(0, 0); opacity: 0.7; }
+  50% { transform: translate(36%, 24%); opacity: 1; }
+}
+/* The glow breathes with the orb rather than sitting at one intensity, which
+   is what made it read as a printed halo. */
+@keyframes orb-glow {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.28),
+      inset 0 -1px 2px rgb(0 0 0 / 0.35),
+      0 0 4px rgb(231 85 50 / 0.4),
+      0 0 12px rgb(231 85 50 / 0.26),
+      0 0 26px rgb(231 85 50 / 0.12);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.4),
+      inset 0 -1px 2px rgb(0 0 0 / 0.3),
+      0 0 7px rgb(231 85 50 / 0.6),
+      0 0 20px rgb(231 85 50 / 0.42),
+      0 0 44px rgb(249 156 0 / 0.24);
+  }
+}
+
+/* Periods share no small common multiple, so the arrangement never visibly
+   returns to where it started. */
+.orb-a { animation: orb-spin 7s linear infinite; }
+.orb-b { animation: orb-spin-back 11s linear infinite; }
+.orb-c { animation: orb-spin 13s linear infinite; }
+.orb-d { animation: orb-spin-back 17s linear infinite; }
+.orb-spec { animation: orb-glint 9s ease-in-out infinite; }
+
+.orb-idle { animation: orb-breathe 6s ease-in-out infinite; }
+.orb-idle .orb-a { animation-duration: 18s; }
+.orb-idle .orb-b { animation-duration: 26s; }
+.orb-idle .orb-c { animation-duration: 31s; }
+.orb-idle .orb-d { animation-duration: 37s; }
+
+/* Thinking: the speed is the signal, so nothing else needs to say so. */
+.orb-thinking { animation: orb-breathe 1.6s ease-in-out infinite, orb-glow 1.6s ease-in-out infinite; }
+.orb-thinking .orb-a { animation-duration: 1.7s; }
+.orb-thinking .orb-b { animation-duration: 2.3s; }
+.orb-thinking .orb-c { animation-duration: 2.9s; }
+.orb-thinking .orb-d { animation-duration: 3.7s; }
+.orb-thinking .orb-spec { animation-duration: 1.9s; }
+
+.orb-speaking { animation: orb-breathe 3s ease-in-out infinite, orb-glow 3s ease-in-out infinite; }
+.orb-speaking .orb-a { animation-duration: 5s; }
+.orb-speaking .orb-b { animation-duration: 7s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .orb, .orb-field, .orb-spec { animation: none !important; }
+}
+
+/* A chart Steven drew, inside a chat message. Sized to the panel it is in
+   rather than to a fixed width, because the docked panel is resizable and the
+   centred palette is wider than either. */
+.cchart {
+  margin: 8px 0 2px; padding: 10px 10px 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 1px 2px rgb(26 24 23 / 0.04);
+}
+.cchart-title {
+  font-size: 0.78rem; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--ink); margin-bottom: 2px;
+}
+.cchart svg { display: block; overflow: visible; }
+.cchart-foot {
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--paper);
+  font-size: 0.66rem; line-height: 1.4; color: var(--ink-muted);
+}
+
+/* ---- Steven's own page ----------------------------------------------------
+   Two inset panels rather than full-bleed columns: chats on the left, the
+   conversation on the right, both rounded cards floating on the page the way
+   every other surface here does. The conversation panel scrolls inside itself,
+   so the composer sits at the bottom of the card without covering the last
+   reply, and the page itself never scrolls. */
+.stv {
+  display: flex; gap: calc(var(--sp) * 3);
+  height: 100dvh; padding: calc(var(--sp) * 3) calc(var(--sp) * 4) calc(var(--sp) * 4);
+}
+.stv-chats {
+  flex: 0 0 252px; display: flex; flex-direction: column; overflow: hidden;
+  background: color-mix(in srgb, var(--paper) 35%, white);
+  border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.stv-chats-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sp) * 4) calc(var(--sp) * 4) calc(var(--sp) * 2);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-muted);
+}
+.stv-chats-head button {
+  display: grid; place-items: center; width: 25px; height: 25px;
+  border: 1px solid var(--line); border-radius: 9999px;
+  background: var(--card); color: var(--ink-muted); cursor: pointer;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.stv-chats-head button:hover { color: var(--copper); border-color: var(--copper); }
+.stv-chats-list { flex: 1; overflow-y: auto; padding: 0 calc(var(--sp) * 2) calc(var(--sp) * 4); }
+.stv-chats-empty {
+  padding: calc(var(--sp) * 3) calc(var(--sp) * 2); font-size: 0.78rem; color: var(--ink-muted);
+}
+.stv-chat { display: flex; align-items: center; gap: 2px; }
+.stv-chat > button:first-child {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border: none; background: none; border-radius: 10px;
+  font: inherit; text-align: left; cursor: pointer; color: var(--ink);
+  transition: background 0.14s var(--ease);
+}
+.stv-chat > button:first-child span {
+  font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stv-chat > button:first-child small { font-size: 0.68rem; color: var(--ink-muted); }
+.stv-chat:hover > button:first-child { background: var(--card); }
+.stv-chat.on > button:first-child {
+  background: var(--card); font-weight: 550;
+  box-shadow: 0 1px 2px rgb(26 24 23 / 0.05);
+}
+.stv-chat-x {
+  flex-shrink: 0; display: grid; place-items: center; width: 22px; height: 22px;
+  border: none; background: none; border-radius: 9999px; cursor: pointer;
+  color: var(--ink-muted); opacity: 0; transition: opacity 0.14s var(--ease);
+}
+.stv-chat:hover .stv-chat-x { opacity: 1; }
+.stv-chat-x:hover { color: var(--copper); background: var(--paper); }
+
+.stv-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-2xl);
+}
+.stv-scroll { flex: 1; overflow-y: auto; }
+.stv-inner {
+  /* Filling the panel, with the conversation pushed to the bottom of it: a
+     two-message thread pinned to the top of a tall card leaves a hole between
+     it and the composer you are typing into. */
+  min-height: 100%;
+  max-width: 880px; margin: 0 auto;
+  padding: calc(var(--sp) * 8) calc(var(--sp) * 7) calc(var(--sp) * 2);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  gap: calc(var(--sp) * 5);
+}
+
+/* Auto margins on both blocks absorb the free space, so the empty state sits
+   in the middle of the panel rather than at the bottom with everything else. */
+.stv-empty { text-align: center; margin-block: auto; }
+.stv-empty h1 {
+  font-size: 1.6rem; font-weight: 650; letter-spacing: -0.025em;
+  margin-top: calc(var(--sp) * 4);
+}
+.stv-empty p {
+  max-width: 48ch; margin: 10px auto 0; font-size: 0.89rem; line-height: 1.6;
+  color: var(--ink-muted);
+}
+.stv-empty .stv-skills { justify-content: center; margin-top: calc(var(--sp) * 6); }
+
+.stv-line { display: flex; flex-direction: column; align-items: flex-start; }
+.stv-line.you { align-items: flex-end; }
+.stv-who {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+  font-size: 0.75rem; font-weight: 600; color: var(--ink-muted);
+}
+.stv-turn { max-width: 100%; font-size: 0.94rem; line-height: 1.65; }
+.stv-turn.you {
+  max-width: 76%; background: var(--ink); color: var(--cream);
+  padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
+}
+.stv-turn.steven { color: var(--ink); }
+.stv-line .cchart { max-width: 620px; width: 100%; border-radius: 14px; }
+.stv-thinking {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 0.86rem; color: var(--ink-muted);
+}
+
+.stv-composer {
+  flex-shrink: 0; padding: calc(var(--sp) * 2) calc(var(--sp) * 7) calc(var(--sp) * 5);
+  /* Fading to the panel it sits in, so text scrolls out of sight under the
+     composer instead of stopping dead behind its top edge. */
+  background: linear-gradient(to top, var(--card) 76%, transparent);
+}
+.stv-composer-inner {
+  max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 9999px;
+  padding: 9px 10px 9px 15px; box-shadow: 0 4px 18px rgb(26 24 23 / 0.05);
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.stv-composer-inner:focus-within {
+  border-color: color-mix(in srgb, var(--copper) 40%, var(--line));
+  box-shadow: 0 6px 24px rgb(231 85 50 / 0.1);
+}
+.stv-composer textarea {
+  flex: 1; border: none; background: none; outline: none; resize: none;
+  font: inherit; font-size: 0.93rem; line-height: 1.5; color: var(--ink);
+  max-height: 140px;
+}
+.stv-composer textarea::placeholder { color: var(--ink-muted); }
+.stv-send {
+  flex-shrink: 0; display: grid; place-items: center; width: 31px; height: 31px;
+  border: none; border-radius: 9999px; background: var(--ink); color: #fff;
+  cursor: pointer; transition: opacity 0.16s var(--ease), transform 0.16s var(--ease);
+}
+.stv-send:hover:not(:disabled) { transform: translateX(1px); }
+.stv-send:disabled { opacity: 0.28; cursor: default; }
+
+.stv-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+.stv-skills.row { max-width: 880px; margin: 10px auto 0; }
+.stv-skills button {
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 9999px;
+  background: var(--card); color: var(--ink-muted); font: inherit; font-size: 0.76rem;
+  cursor: pointer; transition: color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.stv-skills button:hover { color: var(--copper); border-color: var(--copper); }
+
+/* The chats column is the first thing to go: on a narrow screen the
+   conversation is the page, and history is still reachable from the palette. */
+@media (max-width: 900px) {
+  .stv { padding: calc(var(--sp) * 2); }
+  .stv-chats { display: none; }
+  .stv-inner, .stv-composer-inner, .stv-skills.row { max-width: 100%; }
+  .stv-inner { padding-inline: calc(var(--sp) * 4); }
+  .stv-composer { padding-inline: calc(var(--sp) * 4); }
+}
+
+.cchart svg { cursor: crosshair; }
+.cchart-read { color: var(--ink); }
+.cchart-read b { font-weight: 600; font-variant-numeric: tabular-nums; }
