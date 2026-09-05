@@ -25,7 +25,14 @@ htmlcov/
 *.db
 *.sqlite3
 *.dump
-data/
+# `data/*` rather than `data/`: git does not descend into an ignored directory,
+# so the negations below would never be considered.
+data/*
+# The universe files are the exception the rule exists around — the committed
+# CSV is the review surface a reclassification has to pass through before it can
+# move a score, and git is its audit trail.
+!data/universe.csv
+!data/universe-unresolved.csv
 models/
 *.onnx
 

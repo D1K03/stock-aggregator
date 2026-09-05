@@ -82,6 +82,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   content such as a migration.
 - Apply migrations: `python -m screener.boot migrate` (takes an advisory lock, then pre-creates
   partitions a year ahead)
+- Refresh the universe CSV (quarterly, manual, no database):
+  `python -m screener.universe refresh`
+- Load it (no network): `python -m screener.universe load --dry-run` then without `--dry-run`.
+  Refuses if more than 10% of the active universe would be retired; `--force` overrides.
 - Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status` on 8080
 - Check every integration against the real world: `python -m screener.boot selftest`
 
@@ -113,4 +117,10 @@ nothing outside imports a submodule directly.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.
+- `screener.universe` — the ticker universe, as two commands that share nothing but a file.
+  `refresh` builds `data/universe.csv` from Wikipedia, SEC and Yahoo and never opens a database
+  connection; `load` reconciles that CSV into the identity tables and never opens a socket. The
+  committed CSV is the review surface: a sector reclassification moves a ticker between peer
+  groups, so it has to show up in a diff before it can move a score. Identity is matched on CIK,
+  not symbol — match on symbol and a rename reads as a departure plus an unrelated arrival.
 - `screener.boot` — secrets, then migrations under an advisory lock, then serve.
