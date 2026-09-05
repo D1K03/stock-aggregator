@@ -187,10 +187,33 @@ Azure; it no longer is. The candidates are a volume on the VPS with a pruning jo
 object store billed per GB. The ingest spec has to settle it, because that is the first thing
 that will write one.
 
-Ingest hashes each response and skips the blob write when unchanged, since most fundamentals
-endpoints return full history on every call. The observation row is still written every time —
-otherwise the record of what was known on a date is lost — and a changed hash for a period
-already held is the restatement detector.
+**The volume is now measured.** A night fetches 72 MB raw — 30.0 MB of fundamentals across
+1,506 tickers at 19.5 KB each, and 42.1 MB of prices at 27.3 KB. Compressed that is about
+20 MB a night, so **roughly 7 GB a year**, against the 15 GB figure that argued payloads out of
+Postgres in the first place. Measured gzip on a `quoteSummary` response is 5.2–5.6 KB, which
+matches the 5 KB quoted above; the price figure uses the 8 KB from that same entry rather than a
+fresh measurement.
+
+Ingest hashes each response and skips the blob write when unchanged. The observation row is
+still written every time — otherwise the record of what was known on a date is lost — and a
+changed hash for a period already held is the restatement detector.
+
+**But the hash will change nightly, so that dedup currently saves nothing.** The assumption was
+that fundamentals endpoints return the same full history on every call. Measured, they do not:
+one `quoteSummary` response carries `regularMarketTime`, `regularMarketPrice`,
+`regularMarketVolume`, `marketCap`, `forwardPE`, `priceToBook`, `currentPrice` and
+`targetMeanPrice`, every one of which moves on a trading day. Bundling nine modules into one
+request — the thing that makes direct calls cheap — is also what defeats hashing the response as
+a whole. The 7 GB/year above is therefore a floor, not a number dedup will reduce.
+
+Measured across five tickers, the response splits roughly into: **43% stable between reports**
+(`assetProfile` and the three statement modules), **29% certainly daily-volatile** (`price`,
+`defaultKeyStatistics`, `financialData`), and **28% analyst-driven** (`earningsTrend`,
+`recommendationTrend`) whose real cadence is unknown without hashing across consecutive days.
+Hashing and storing **per module** rather than per response would let the stable 43% dedup
+properly and cut roughly 3 GB a year, while keeping one request per ticker. That is the ingest
+spec's call, but it should be made deliberately rather than discovered after a year of writing
+the same statements 250 times.
 
 **Facts are bitemporal and append-only.** Every fundamental carries `period_end` (what it
 describes) and `observed_at` (when it was learned); a restatement is an insert, never an update.

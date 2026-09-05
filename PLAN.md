@@ -154,6 +154,15 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
   ran from a development machine, not the VPS whose IP the nightly job will use. Per-IP limits
   attach to that IP. Running the same probe from the box is the only outstanding evidence, and
   the only result that could justify putting a proxy in front of Yahoo.
+- **Content-hash dedup does not work on a bundled `quoteSummary`, and the ingest spec has to
+  decide what to do.** The response carries `regularMarketTime`, `regularMarketPrice`,
+  `marketCap`, `forwardPE`, `currentPrice` and `targetMeanPrice`, so its hash changes every
+  trading day and the blob write is never skipped. Measured across five tickers the payload is
+  ~43% stable between reports, ~29% certainly daily-volatile and ~28% analyst-driven. Hashing
+  per module rather than per response recovers the dedup on the stable share — about 3 GB a year
+  — without giving up one request per ticker. Reasoning in `DESIGN.md`.
+- **Payload volume: 72 MB a night raw, ~20 MB compressed, ~7 GB a year.** Enough to settle the
+  open question of where payloads land, which `DESIGN.md` leaves to this spec.
 - **The crumb refresh path is correct; a natural expiry has not been seen.** A deliberately
   poisoned crumb produces a 401 the client recognises, refreshes and retries to a 200. But the
   crumb was fetched exactly once across 4.7 minutes, so Yahoo never expired one — treat "a longer
