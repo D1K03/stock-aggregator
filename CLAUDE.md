@@ -7,6 +7,8 @@ read it before design work. `PLAN.md` holds current scope and the task in flight
 live in `docs/specs/`; the database schema is
 `docs/specs/2026-09-04-database-schema-design.md`. `docs/infrastructure.md` says what tooling
 exists and when to reach for it — read it before adding a proxy, a secret or a model call.
+`docs/architecture.md` draws the same system: containers and their edges, the package graph,
+the schema, the pipeline and CI/CD.
 
 ## Status
 
