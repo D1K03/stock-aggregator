@@ -12,11 +12,15 @@ from screener.audit.models import (
     KINDS, ActorKind, ActorSpend, Event, Kind, Outcome, Spend,
 )
 from screener.audit.people import Person, avatar, fold
-from screener.audit.reader import PAGE_SIZE, by_actor, operations, page, spend
+from screener.audit.reader import (
+    HANDOFF_WINDOW_MINUTES, PAGE_SIZE, by_actor, last_handoff_context, operations,
+    page, spend,
+)
 from screener.audit.writer import record
 
 __all__ = [
     "ActorKind",
+    "HANDOFF_WINDOW_MINUTES",
     "ActorSpend",
     "Event",
     "KINDS",
@@ -28,6 +32,7 @@ __all__ = [
     "avatar",
     "by_actor",
     "fold",
+    "last_handoff_context",
     "operations",
     "page",
     "record",

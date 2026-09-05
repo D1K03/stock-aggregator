@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from screener import audit
@@ -16,17 +17,19 @@ def insert(conn, **overrides):
         "completion_tokens": 20,
         "cost_usd": Decimal("0.00003"),
         "duration_ms": 900,
+        "detail": {},
     }
     values.update(overrides)
+    values["detail"] = json.dumps(values["detail"])
     conn.execute(
         """
         insert into audit.event (
             kind, operation, actor, actor_kind, outcome, model,
-            prompt_tokens, completion_tokens, cost_usd, duration_ms
+            prompt_tokens, completion_tokens, cost_usd, duration_ms, detail
         ) values (
             %(kind)s, %(operation)s, %(actor)s, %(actor_kind)s, %(outcome)s,
             %(model)s, %(prompt_tokens)s, %(completion_tokens)s, %(cost_usd)s,
-            %(duration_ms)s
+            %(duration_ms)s, %(detail)s
         )
         """,
         values,
@@ -241,3 +244,53 @@ def test_the_dearest_person_is_first(fresh_db):
     insert(fresh_db, actor="quiet", cost_usd=Decimal("0.001"))
     insert(fresh_db, actor="chatty", cost_usd=Decimal("0.900"))
     assert [r.actor for r in audit.by_actor(fresh_db)] == ["chatty", "quiet"]
+
+
+# -- picking a conversation back up ----------------------------------------
+
+
+def test_a_recent_handoff_carries_what_they_were_looking_at(fresh_db):
+    # The handoff message says "ask me here and I will pick it up". Without the
+    # context stored, the first follow-up has no antecedent and "can you chart
+    # it" gets answered with "which ticker?".
+    insert(
+        fresh_db, operation="steven.handoff", actor="ehewes", actor_kind="github",
+        detail={"discord_user_id": "2807", "context": "Overview: NVDA, score 82"},
+    )
+    assert audit.last_handoff_context(fresh_db, "2807") == "Overview: NVDA, score 82"
+
+
+def test_someone_elses_handoff_is_not_picked_up(fresh_db):
+    insert(
+        fresh_db, operation="steven.handoff", actor="ehewes", actor_kind="github",
+        detail={"discord_user_id": "2807", "context": "Overview: NVDA"},
+    )
+    assert audit.last_handoff_context(fresh_db, "4010") == ""
+
+
+def test_a_stale_handoff_is_not_picked_up(fresh_db):
+    # Answering tomorrow's question against yesterday's screen is worse than
+    # asking which ticker.
+    fresh_db.execute(
+        """
+        insert into audit.event (kind, operation, actor, actor_kind, detail, occurred_at)
+        values ('agent', 'steven.handoff', 'ehewes', 'github',
+                '{"discord_user_id": "2807", "context": "Overview: NVDA"}'::jsonb,
+                now() - interval '3 hours')
+        """
+    )
+    assert audit.last_handoff_context(fresh_db, "2807") == ""
+
+
+def test_the_newest_handoff_wins(fresh_db):
+    for context in ("Overview: NVDA", "Audit: spend by person"):
+        insert(
+            fresh_db, operation="steven.handoff", actor="ehewes", actor_kind="github",
+            detail={"discord_user_id": "2807", "context": context},
+        )
+    assert audit.last_handoff_context(fresh_db, "2807") == "Audit: spend by person"
+
+
+def test_no_handoff_is_an_empty_string_not_an_error(fresh_db):
+    # Most messages to the bot continue nothing, so this is the normal path.
+    assert audit.last_handoff_context(fresh_db, "2807") == ""

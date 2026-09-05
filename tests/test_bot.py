@@ -9,7 +9,7 @@ from discord import app_commands
 
 from screener.ai import AiError
 from screener.ai.models import MODELS, resolve_model
-from screener.bot import agent
+from screener.bot import agent, client
 from screener.bot.tools import MAX_RESULT, TOOLS, dispatch, specs, tool
 from screener.bot.checks import NotPermitted
 from screener.bot.commands import COMMANDS, ping
@@ -491,3 +491,19 @@ def test_direct_messages_being_closed_is_reported_plainly(monkeypatch):
 
     with pytest.raises(HandoffError, match="switched off"):
         send_dm(login="ehewes", text="hi", transport=httpx.MockTransport(handler))
+
+
+# -- who the bot answers ---------------------------------------------------
+
+
+def test_a_mention_is_needed_in_a_channel():
+    # Anywhere other people are talking, replying to everything is noise.
+    assert client.wants_reply(direct=False, mentioned=True) is True
+    assert client.wants_reply(direct=False, mentioned=False) is False
+
+
+def test_a_direct_message_needs_no_mention():
+    # There is nobody else it could be for. Making someone @-mention the only
+    # other participant in a two-person conversation reads as broken, and the
+    # handoff sends people straight into exactly that DM.
+    assert client.wants_reply(direct=True, mentioned=False) is True

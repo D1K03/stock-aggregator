@@ -5,15 +5,34 @@ import io
 import logging
 
 import discord
+import psycopg
 from discord import app_commands
 
+from screener import audit
+from screener.audit import record
 from screener.bot import agent, render
 from screener.bot.checks import NotPermitted
 from screener.bot.commands import COMMANDS
 from screener.bot.config import BotConfig
-from screener.audit import record
+from screener.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def wants_reply(*, direct: bool, mentioned: bool) -> bool:
+    """Whether a message is being addressed to the bot.
+
+    One rule stated for two places: reply when you are being spoken to. In a
+    shared channel that has to be explicit or the bot is noise in every
+    conversation it can see. In a direct message there is nobody else it could
+    be for, and making someone @-mention the only other participant in a
+    two-person conversation reads as broken.
+
+    A function rather than an inline condition because it is the whole
+    behaviour of the change, and a `discord.Message` cannot be built in a test
+    without a gateway.
+    """
+    return direct or mentioned
 
 
 class ScreenerBot(discord.Client):
@@ -24,10 +43,10 @@ class ScreenerBot(discord.Client):
     which means reactions, voice states, typing, invites and integrations all
     arrive to be decoded and thrown away. Three are switched on and no more.
 
-    `message_content` stays **off**, and the mention handler still works:
+    `message_content` stays **off**, and the message handler still works:
     Discord sends content regardless for messages that mention the app, for
-    DMs, and for the app's own messages. Mentioning the bot is the only way to
-    talk to it, so the one thing it needs to read is the one thing it is given
+    DMs, and for the app's own messages. Those are exactly the two ways to talk
+    to this bot, so the one thing it needs to read is the one thing it is given
     without asking for blanket access to every channel it can see.
     """
 
@@ -82,17 +101,22 @@ class ScreenerBot(discord.Client):
         )
 
     async def on_message(self, message: discord.Message) -> None:
-        """Answer when mentioned. The first agent-style feature.
+        """Answer a mention in the server, or anything at all in a DM.
 
-        Deliberately mention-only. A bot that replies to everything is noise,
-        and reading every message would need the privileged intent this
-        avoids.
+        A mention is required in a channel and not in a DM, because those are
+        the same rule stated twice: reply when you are being spoken to. In a
+        shared channel that needs saying explicitly or the bot is noise; in a
+        direct message there is nobody else it could be for, and making someone
+        @-mention the only other participant in a two-person conversation is
+        the kind of thing that reads as broken.
         """
         # Ignore itself and every other bot, first and unconditionally. A bot
         # that answers a bot is a loop that costs money on every lap.
         if message.author.bot or self.user is None:
             return
-        if self.user not in message.mentions:
+
+        direct = isinstance(message.channel, discord.DMChannel)
+        if not wants_reply(direct=direct, mentioned=self.user in message.mentions):
             return
 
         if not self._config.permits(message.author.id):
@@ -108,8 +132,18 @@ class ScreenerBot(discord.Client):
             return
 
         # Strip the mention itself so the model sees the question rather than
-        # a raw <@id> token.
+        # a raw <@id> token. A DM has none, and this is a no-op there.
         question = message.content.replace(f"<@{self.user.id}>", "").strip()
+
+        # Only in a DM, and only shortly after one: the handoff message says
+        # "ask me here and I will pick it up", and this is what picking it up
+        # means. Without it the first follow-up has no antecedent and "can you
+        # chart it" is answered with "which ticker?".
+        context = (
+            await asyncio.to_thread(self._handoff_context, message.author.id)
+            if direct
+            else ""
+        )
 
         async with message.channel.typing():
             reply = await agent.respond(
@@ -117,6 +151,7 @@ class ScreenerBot(discord.Client):
                 actor=str(message.author.id),
                 actor_kind="discord",
                 surface="discord",
+                context=context,
                 # Discord cannot draw, but it can display what the web service
                 # drew, so the chart tool is allowed to produce one.
                 can_draw=True,
@@ -130,6 +165,22 @@ class ScreenerBot(discord.Client):
             discord.File(io.BytesIO(png), filename=name) for name, png in images
         ]
         await message.reply(reply.text, files=files, mention_author=False)
+
+    @staticmethod
+    def _handoff_context(discord_user_id: int) -> str:
+        """What they were looking at when they asked to continue here.
+
+        Never raises. A missing antecedent costs one clarifying question; an
+        exception here would cost the reply.
+        """
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3
+            ) as conn:
+                return audit.last_handoff_context(conn, str(discord_user_id))
+        except Exception as exc:
+            logger.warning("could not read the handoff context: %s", exc)
+            return ""
 
     async def _on_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
