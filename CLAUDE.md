@@ -116,8 +116,10 @@ nothing outside imports a submodule directly.
   plus `LanePool`, which is the one thing that chain structurally cannot be: a session held
   across requests so a cookie outlives the call that fetched it. A lane is one client, one jar,
   one exit; the pool rotates over them and **never sleeps, retries or throttles**, so rate
-  limiting stays with the caller. Rotation is not concurrency. Reach for `fetch()` unless you
-  are holding a cookie, and read `docs/specs/2026-09-05-yahoo-exit-lanes.md` before changing it.
+  limiting stays with the caller. `across()` is the only concurrency: one worker per lane, no
+  argument to run more, because the safe claim is "one request in flight per exit address"
+  rather than "concurrency is fine". Reach for `fetch()` unless you are holding a cookie, and
+  read `docs/specs/2026-09-05-yahoo-exit-lanes.md` before changing it.
 - `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
 - `screener.notify` — a `NotificationChannel` protocol and a Discord webhook. Delivery only.
 - `screener.bot` — the Discord gateway bot, its own process (`python -m screener.bot`) and its
@@ -140,6 +142,24 @@ nothing outside imports a submodule directly.
   `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
   the web container, which rasterises the same string to PNG for Discord. One renderer, so the
   two surfaces cannot drift — do not add a second way to draw a chart.
+- `screener.playground` — read-only SQL from the dashboard and from Steven's `sql` tool, over
+  one engine so the two cannot allow different things. **The enforcement is a Postgres role, not
+  a check in Python**: the app connects as the cluster superuser, on which a SQL box would be
+  `pg_read_file` and `COPY FROM PROGRAM`, so queries go through `playground`, which holds `select`
+  on the tables listed in `migrations/013_playground.sql` and nothing else — not sign-in, not the
+  audit trail. Every query goes through a *named* cursor, because psycopg uses the simple protocol
+  when a query has no parameters and a plain execute would run `select 1; drop table security`.
+  Unset `PLAYGROUND_DB_PASSWORD` is the off switch and the page says so.
+- `screener.reddit` — social ingest for the Sentiment pillar, in a container that wakes every
+  `REDDIT_REFRESH_HOURS`. Two halves sharing nothing but a dataclass, as `universe` does:
+  `source` never opens a database connection, `store` never opens a socket. **Not Reddit's own
+  API** — it answers unauthenticated requests with 403 whatever User-Agent is sent, its
+  robots.txt disallows every agent, and an OAuth client needs manual approval; the mirror also
+  has the date-range search that Reddit's thousand-item listing cap does not, without which a
+  week of r/wallstreetbets is unreachable. Ingest only: nothing here connects an item to a
+  security or scores it. `content_hash` is taken per item rather than per response, which is the
+  remedy `DESIGN.md` proposes for Yahoo applied where it works — a comment body almost never
+  changes, so a re-fetch writes nothing.
 - `screener.transcribe` — speech to text, in a container of its own. The client half is
   `httpx` and nothing else and is what the bot and the status service import; the server half
   holds faster-whisper and is the only thing that installs the `voice` extra, so the three

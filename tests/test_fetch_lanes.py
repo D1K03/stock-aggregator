@@ -1,3 +1,6 @@
+import threading
+import time
+
 import httpx
 import pytest
 
@@ -199,3 +202,90 @@ def test_closing_the_pool_closes_every_lane():
     lanes = [pool.acquire() for _ in range(3)]
     pool.close()
     assert all(lane._client.is_closed for lane in lanes)
+
+
+# -- running across the lanes ----------------------------------------------
+
+
+def test_across_gives_back_results_in_the_order_it_was_given():
+    now = [0.0]
+    with lanes_at(4, now) as pool:
+        got = pool.across(list(range(20)), lambda lane, n: n * 2)
+    assert got == [n * 2 for n in range(20)]
+
+
+def test_across_never_runs_more_workers_than_there_are_lanes():
+    # The whole safety claim is "one request in flight per exit address", not
+    # "concurrency is fine". If this bound ever slips, four addresses stop
+    # meaning anything and the pool is just four workers on one IP again.
+    now = [0.0]
+    live = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def work(lane, n):
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        time.sleep(0.01)
+        with lock:
+            live -= 1
+        return n
+
+    with lanes_at(3, now) as pool:
+        pool.across(list(range(30)), work)
+    assert peak <= 3
+
+
+def test_across_never_hands_one_lane_to_two_workers_at_once():
+    # A lane is one client and one cookie jar. Two threads inside it is a race,
+    # and with a crumb in that jar it is a race that returns someone else's 401.
+    now = [0.0]
+    inside: dict[str, int] = {}
+    clash = []
+    lock = threading.Lock()
+
+    def work(lane, n):
+        with lock:
+            inside[lane.name] = inside.get(lane.name, 0) + 1
+            if inside[lane.name] > 1:
+                clash.append(lane.name)
+        time.sleep(0.005)
+        with lock:
+            inside[lane.name] -= 1
+        return n
+
+    with lanes_at(4, now) as pool:
+        pool.across(list(range(40)), work)
+    assert clash == []
+
+
+def test_across_a_single_lane_pool_is_simply_sequential():
+    # The unconfigured case, and it must stay the behaviour it always had.
+    now = [0.0]
+    order = []
+    with LanePool.direct() as pool:
+        pool.across(list(range(6)), lambda lane, n: order.append(n))
+    assert order == list(range(6))
+
+
+def test_across_nothing_does_nothing():
+    now = [0.0]
+    with lanes_at(2, now) as pool:
+        assert pool.across([], lambda lane, n: n) == []
+
+
+def test_across_raises_a_failure_rather_than_returning_half_a_run():
+    # Losing one item silently would put a gap in a nightly ingest that nothing
+    # downstream could tell from a ticker Yahoo does not carry.
+    now = [0.0]
+
+    def work(lane, n):
+        if n == 7:
+            raise RuntimeError("that one broke")
+        return n
+
+    with lanes_at(3, now) as pool:
+        with pytest.raises(RuntimeError, match="that one broke"):
+            pool.across(list(range(20)), work)

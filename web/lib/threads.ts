@@ -32,11 +32,23 @@ export type ChartSpec = {
   marks: Mark[];
 };
 
+/* A result set Steven selected. Like a chart, it never entered the
+   conversation: it travels beside the reply, so a wide table is not paid for on
+   every subsequent round. */
+export type RowsSpec = {
+  sql: string;
+  columns: { name: string; type: string }[];
+  rows: (string | number | boolean | null)[][];
+  truncated: boolean;
+  ms: number;
+};
+
 export type Turn = {
   role: "you" | "steven";
   text: string;
   tools?: ToolRun[];
   charts?: ChartSpec[];
+  rows?: RowsSpec[];
 };
 export type Thread = { id: string; title: string; turns: Turn[]; updatedAt: number };
 

@@ -455,13 +455,18 @@ def test_the_prompt_stays_small_enough_to_send_on_every_message():
     # a decision worth making on purpose.
     import json
 
+    # Raised again from 1800 when the `sql` tool landed. Roughly 400 characters,
+    # and what it buys is the only tool here that returns a real figure from real
+    # data: `chart` draws invented concept numbers and `status` reports process
+    # facts. Left as tight as the last two.
+    #
     # Raised from 1200 when the chart tool landed: a second tool, its
     # enumerated `mark` argument, and two lines of prompt telling Steven when to
     # reach for it. That is roughly 600 characters and it bought a feature.
     # Left as tight as the old one — about 40 characters of headroom — so the
     # next thing that grows the prompt is also a decision and not a drift.
     overhead = len(agent.SYSTEM_PROMPT) + len(json.dumps(specs(), separators=(",", ":")))
-    assert overhead < 1800
+    assert overhead < 2200
 
 
 # -- the Discord handoff ---------------------------------------------------
@@ -674,3 +679,88 @@ def test_a_spoken_turn_is_marked_as_one_in_the_audit_detail(monkeypatch):
     # and a spoken question is a question. The flag is what tells it from a
     # typed one when reading the trail back, which is the whole point of it.
     assert rows[-1]["detail"]["question"] == "chart nvidia"
+
+
+# -- the sql tool -----------------------------------------------------------
+
+
+def test_the_sql_tool_says_the_console_is_off_rather_than_failing(monkeypatch):
+    monkeypatch.delenv("PLAYGROUND_DATABASE_URL", raising=False)
+    assert "not configured" in dispatch("sql", {"query": "select 1"})
+
+
+def test_a_small_result_is_said_rather_than_shown(monkeypatch):
+    # A chart is never a scalar; a query often is. "How many securities are
+    # there" wants the number in the sentence, not a one-cell table.
+    from screener import playground
+    from screener.bot.tools import query as tool_module
+
+    monkeypatch.setattr(playground, "enabled", lambda: True)
+    monkeypatch.setattr(tool_module.playground, "enabled", lambda: True)
+    monkeypatch.setattr(
+        tool_module.playground,
+        "run",
+        lambda q, n: playground.Result(
+            columns=(playground.Column("n", "bigint"),),
+            rows=((412,),), row_count=1, truncated=False, shortened=0, ms=3, limit=n,
+        ),
+    )
+    assert dispatch("sql", {"query": "select count(*) as n from security"}) == "n=412"
+
+
+def test_a_wide_result_reaches_the_surface_rather_than_the_model(monkeypatch):
+    from screener import playground
+    from screener.bot.tools import collecting_rows
+    from screener.bot.tools import query as tool_module
+
+    monkeypatch.setattr(tool_module.playground, "enabled", lambda: True)
+    monkeypatch.setattr(
+        tool_module.playground,
+        "run",
+        lambda q, n: playground.Result(
+            columns=(playground.Column("sym", "text"), playground.Column("v", "numeric")),
+            rows=tuple((f"S{i}", str(i)) for i in range(20)),
+            row_count=20, truncated=False, shortened=0, ms=7, limit=n,
+        ),
+    )
+    with collecting_rows(True) as selected:
+        said = dispatch("sql", {"query": "select sym, v from t"})
+    # The model is told the shape; the rows travelled beside the reply.
+    assert "rows=20" in said and "S0" not in said
+    assert len(selected) == 1 and len(selected[0].rows) == 20
+
+
+def test_discord_gets_the_rows_as_text_because_it_cannot_render_a_table(monkeypatch):
+    from screener import playground
+    from screener.bot.tools import collecting_rows
+    from screener.bot.tools import query as tool_module
+
+    monkeypatch.setattr(tool_module.playground, "enabled", lambda: True)
+    monkeypatch.setattr(
+        tool_module.playground,
+        "run",
+        lambda q, n: playground.Result(
+            columns=(playground.Column("sym", "text"), playground.Column("v", "numeric")),
+            rows=tuple((f"S{i}", str(i)) for i in range(20)),
+            row_count=20, truncated=False, shortened=0, ms=7, limit=n,
+        ),
+    )
+    with collecting_rows(False) as selected:
+        said = dispatch("sql", {"query": "select sym, v from t"})
+    assert "S0" in said and selected == []
+
+
+def test_an_unknown_table_comes_back_with_the_list(monkeypatch):
+    # Naming the set on the round the model got it wrong costs nothing per
+    # message, which a second `tables` tool would.
+    from screener import playground
+    from screener.bot.tools import query as tool_module
+
+    def boom(q, n):
+        raise playground.QueryError(message='relation "nope" does not exist', sqlstate="42P01")
+
+    monkeypatch.setattr(tool_module.playground, "enabled", lambda: True)
+    monkeypatch.setattr(tool_module.playground, "run", boom)
+    monkeypatch.setattr(tool_module, "_known_tables", lambda: "public.security public.metric")
+    said = dispatch("sql", {"query": "select * from nope"})
+    assert "does not exist" in said and "public.security" in said

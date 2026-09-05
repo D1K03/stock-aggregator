@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import ChatChart from "@/components/ChatChart";
+import ChatRows from "@/components/ChatRows";
 import DiscordHandoff from "@/components/DiscordHandoff";
 import MicButton from "@/components/MicButton";
 import Orb, { OrbState } from "@/components/Orb";
@@ -22,6 +23,7 @@ const PAGES = [
   { label: "Overview", href: "/", hint: "Morning snapshot" },
   { label: "Steven", href: "/steven", hint: "The full page, same conversation" },
   { label: "Audit", href: "/audit", hint: "Commands, spend, tool calls" },
+  { label: "Playground", href: "/playground", hint: "Read-only SQL over the data" },
 ];
 
 /* Docked to the right, it stays put across navigations, so its width lives in
@@ -281,6 +283,9 @@ export default function Palette() {
               {turn.charts?.map((spec, c) => (
                 <ChatChart key={`${i}-${c}`} spec={spec} />
               ))}
+                      {turn.rows?.map((spec, c) => (
+                        <ChatRows key={`r${i}-${c}`} spec={spec} />
+                      ))}
             </motion.div>
           ))}
           {thinking && (

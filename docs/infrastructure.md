@@ -67,12 +67,18 @@ of a run. A pool hands them out round-robin, so a long job leaves by every
 address the zone holds instead of piling onto one. `park(seconds)` takes a lane
 out of rotation after a 429 and `acquire()` skips it until it frees.
 
-Three things it deliberately is not. It is **not a strategy** — it does not
-appear in the table above and `fetch()` cannot reach it. It is **not
-concurrency**: a lane changes which address a request leaves by, never how many
-are in flight, and callers stay sequential. And it is **not a rate limiter** —
-the pool never sleeps and never retries, so the waiting and the numbers stay
-with the caller, which is where D6 puts them.
+Two things it deliberately is not. It is **not a strategy** — it does not appear
+in the table above and `fetch()` cannot reach it. And it is **not a rate
+limiter**: the pool never sleeps and never retries, so the waiting and the
+numbers stay with the caller, which is where D6 puts them.
+
+`pool.across(items, work)` is the one place concurrency lives, and it runs
+**one worker per lane and has no argument to run more**. The claim it rests on
+is not "concurrency is fine" but the narrower "one request in flight per exit
+address": four workers over four addresses is not four over one. Measured before
+it was allowed — the whole S&P 500, 1,006 requests, 44s against 138s sequential,
+every one a 200. `acquire()` is still the sequential path and still does not
+change how many requests are in flight.
 
 Yahoo is the only caller today, through `screener.universe.sources.yahoo`.
 
@@ -147,6 +153,73 @@ clip was rather than what was in it. The question does reach the trail on the
 reply row, exactly as a typed question does, because that is where Steven's
 memory lives, and a spoken question is a question. The `voice` flag on that row
 is what tells a transcription error from a typo when reading it back.
+
+---
+
+## Social ingest
+
+`screener.reddit` — posts and comments from **Arctic Shift**, a public Reddit
+mirror, on a six-hourly loop in a container of its own.
+
+**Reddit's own API is not used, and that was checked rather than assumed.**
+`reddit.com/r/stocks/new.json` answers 403 with an HTML body whatever
+User-Agent is sent, and `robots.txt` is `Disallow: /` for every agent — so
+scraping it is ruled out by this project's own rule. The official OAuth route
+needs a manually approved client and caps listings at about a thousand items,
+which does not reach a week of r/wallstreetbets in any case.
+
+Measured, per week: 788 posts and 132,052 comments on r/wallstreetbets, 270 and
+14,944 on r/stocks. Comments are 99% of it. Reddit's envelope is dropped and the
+fields that carry meaning are kept, which is roughly a third of the size.
+
+| | |
+|---|---|
+| Cost | bandwidth only. No key, no per-request price, ~2.7 GB/year of rows |
+| Cadence | `REDDIT_REFRESH_HOURS`, backfilling `REDDIT_BACKFILL_DAYS` the first time it sees a subreddit |
+| Switch | an empty `REDDIT_SUBREDDITS`; the container logs it and exits cleanly |
+
+**Do not** point the Bright Data lanes at it to go faster. The mirror does
+refuse about one page in six on the busiest subreddit, and the retry recovers
+every time — so there is no block that needs routing around, and Arctic Shift is
+run by volunteers, which makes rotating four exit addresses at a service whose
+error message asks for less traffic a different act from spreading load across a
+commercial API. `REDDIT_DELAY_MS` is the knob if they ever ask for less.
+
+**Do not** add per-item audit rows. One `ingest_run` per subreddit and kind, and
+one `audit.event` for the pass: `record()` opens a connection per call and the
+same table backs Steven's memory.
+
+---
+
+## The playground
+
+`screener.playground` — read-only SQL over the tables a second Postgres role is
+allowed to see. One engine behind two callers: the `/playground` page and
+Steven's `sql` tool.
+
+**The role is the enforcement.** The application connects as `screener`, which
+on this deployment is the cluster superuser: `pg_read_file` returns on it, and
+`COPY FROM PROGRAM` is remote code execution. So the console connects as
+`playground` instead, which holds `select` on the tables named in migration 013
+and nothing else. A role that was never granted `auth.session` cannot read it
+however the query is spelled — through a view, a CTE, a function, or a cast
+nobody thought of.
+
+| | |
+|---|---|
+| Switch | `PLAYGROUND_DB_PASSWORD`. Unset means the role has no password, cannot log in, and the page reports itself off. |
+| Bounds | 10s statement timeout, 2s lock timeout, 500 rows, 4,000 characters of SQL, a per-cell and per-response character budget. |
+| Errors | Postgres's own message, with a caret. The only place this service shows a database message rather than an exception type. |
+
+**Do not** add an application-level SQL allowlist, regex or parser beside it.
+That is the thing the role replaces, and having both means the weaker one gets
+trusted. **Do not** point `PLAYGROUND_DATABASE_URL` at the application's own
+connection; the engine checks and refuses, and the self-test reports it.
+
+Exposing a new table costs a line in migration 013 and a line in
+`tests/test_playground.py`, which is deliberate: a test asserts every table is
+either granted or explicitly denied, so a future migration cannot quietly add
+one to a SQL console.
 
 ---
 
@@ -305,7 +378,9 @@ docker compose --env-file .env -f deploy/compose.prod.yaml \
 One line per integration: database and migration count, build SHA, a direct
 fetch, a proxied fetch **and whether its exit IP actually differs**, the
 configured lanes **and whether they differ from each other**, OpenRouter, the
-Discord webhook, and the bot token. Anything unconfigured reports `SKIP`,
+Discord webhook, the bot token, the social mirror **and how far behind it
+is**, and the playground role **and that it is not a privileged one** — freshness rather than reachability, because a mirror that has quietly
+stopped keeping up still answers. Anything unconfigured reports `SKIP`,
 because switched-off is the expected state for most of it.
 
 It posts nothing. Nothing in this project has a consumer yet, so this command is

@@ -205,14 +205,14 @@ jobs:
                 # notice it crash-looping on a token that never reached
                 # Infisical. Give it a moment to fail, then insist it is up.
                 sleep 15
-                for svc in bot transcribe; do
+                for svc in bot transcribe reddit; do
                   if ! $COMPOSE ps --status running --services | grep -qx "$svc"; then
                     echo "::error::the $svc container is not running"
                     $COMPOSE logs --tail=60 "$svc"
                     exit 1
                   fi
                 done
-                echo "bot and transcribe containers are running"
+                echo "bot, transcribe and reddit containers are running"
                 # Running is not quite enough for the transcriber: its weights
                 # load before the socket opens, so an answer here is the proof
                 # that they are in the image and were read.
@@ -227,5 +227,5 @@ jobs:
               sleep 3
             done
             echo "never became ready; recent logs follow"
-            $COMPOSE logs --tail=60 api app web transcribe
+            $COMPOSE logs --tail=60 api app web transcribe reddit
             exit 1
