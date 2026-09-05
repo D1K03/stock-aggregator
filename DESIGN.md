@@ -239,6 +239,15 @@ deliberately bumped version integer rather than the git sha, which would otherwi
 unrelated commit silently suppress a night of alerts. Changing either version means backfilling
 the previous day with alerting disabled before resuming live.
 
+**Adding a data source is a logic-version bump**, which is not obvious and is the case most
+likely to be missed. A pillar score is the mean of its metric percentiles, so a new metric
+entering an existing pillar moves that pillar for *every* ticker on the night it lands, even
+though nothing about any company changed. The diff step reads a universe-wide shift as a
+universe-wide set of crossings. Onboarding a source therefore follows the same procedure as
+changing weights — bump the version, backfill the previous day with alerting disabled, then
+resume live — and the first night of a new source is the one most likely to mute the channel
+for good.
+
 ## Sentiment scoring
 
 - **VADER** — dictionary lookup, not a model. Thousands of texts/sec on any CPU. Cheap baseline

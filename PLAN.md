@@ -161,6 +161,23 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
   ~43% stable between reports, ~29% certainly daily-volatile and ~28% analyst-driven. Hashing
   per module rather than per response recovers the dedup on the stable share — about 3 GB a year
   — without giving up one request per ticker. Reasoning in `DESIGN.md`.
+- **Nothing decides which source wins when two report the same metric.** `fundamental_fact` has
+  no `source_id` — it keys on `(security_id, metric_id, period_end, period_type, observed_at)` —
+  and neither does `metric`. Source is reachable only through
+  `ingest_observation_id -> ingest_run.source_id`. The point-in-time read is
+  `distinct on (security_id, metric_id, period_end) ... order by observed_at desc`, which is
+  exactly right for restatements from one source and silently wrong for two: the winner is
+  whichever ingest ran most recently, so reordering the nightly jobs moves scores. Options are
+  one source per metric declared on `metric` (preferred — no reconciliation because no overlap),
+  a ranked fallback with the source recorded on `metric_daily` so a switch is visible, or
+  averaging across sources, which is ruled out by "every score traces back to visible raw
+  inputs". Must be settled before a second source lands.
+- **Onboarding a data source is a `scoring_logic_version` bump.** A pillar score is the mean of
+  its metric percentiles, so a new metric entering an existing pillar moves that pillar for every
+  ticker on the night it lands, and the diff step reads that as a universe-wide set of crossings.
+  Same procedure as a weight change: bump, backfill the previous day with alerting disabled, then
+  resume live. Reasoning in `DESIGN.md`. This has no regression test and cannot easily have one,
+  so it belongs in the alerting spec beside the `emits_alerts = false` skip.
 - **Payload volume: 72 MB a night raw, ~20 MB compressed, ~7 GB a year.** Enough to settle the
   open question of where payloads land, which `DESIGN.md` leaves to this spec.
 - **The crumb refresh path is correct; a natural expiry has not been seen.** A deliberately
