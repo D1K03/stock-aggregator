@@ -3,6 +3,8 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import ChatChart from "@/components/ChatChart";
+import DiscordHandoff from "@/components/DiscordHandoff";
+import MicButton from "@/components/MicButton";
 import Orb, { OrbState } from "@/components/Orb";
 import Sidebar from "@/components/Sidebar";
 import ToolTrace from "@/components/ToolTrace";
@@ -174,6 +176,14 @@ export default function StevenPage() {
                 }}
                 aria-label="Ask Steven"
               />
+              {/* Before send, because it fills the box rather than emptying
+                  it: what it hears lands in the textarea for you to read and
+                  correct, and enter is still what asks. */}
+              <MicButton
+                onTranscript={(text) =>
+                  setQuery((current) => (current ? `${current} ${text}` : text))
+                }
+              />
               <button
                 className="stv-send"
                 onClick={submit}
@@ -186,13 +196,20 @@ export default function StevenPage() {
                 </svg>
               </button>
             </div>
+            {/* Where the conversation can go next, under the box you type in:
+                a few things to ask, and the way out to Discord. The handoff sits
+                apart from the suggestions because it ends the conversation here
+                rather than continuing it. */}
             {conversing && (
-              <div className="stv-skills row">
-                {SKILLS.map((skill) => (
-                  <button key={skill.label} onClick={() => void ask(skill.prompt)}>
-                    {skill.label}
-                  </button>
-                ))}
+              <div className="stv-next">
+                <div className="stv-skills">
+                  {SKILLS.map((skill) => (
+                    <button key={skill.label} onClick={() => void ask(skill.prompt)}>
+                      {skill.label}
+                    </button>
+                  ))}
+                </div>
+                <DiscordHandoff />
               </div>
             )}
           </div>

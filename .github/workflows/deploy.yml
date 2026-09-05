@@ -61,6 +61,13 @@ jobs:
             image: stock-aggregator-web
             context: web
             file: web/Dockerfile
+          # Speech to text. The repository root again, because it installs the
+          # package — but its own Dockerfile, because it installs more of it and
+          # bakes a model in.
+          - name: transcribe
+            image: stock-aggregator-transcribe
+            context: .
+            file: deploy/Dockerfile.transcribe
     steps:
       - uses: actions/checkout@v4
 
@@ -198,16 +205,27 @@ jobs:
                 # notice it crash-looping on a token that never reached
                 # Infisical. Give it a moment to fail, then insist it is up.
                 sleep 15
-                if ! $COMPOSE ps --status running --services | grep -qx bot; then
-                  echo "::error::the bot container is not running"
-                  $COMPOSE logs --tail=60 bot
+                for svc in bot transcribe; do
+                  if ! $COMPOSE ps --status running --services | grep -qx "$svc"; then
+                    echo "::error::the $svc container is not running"
+                    $COMPOSE logs --tail=60 "$svc"
+                    exit 1
+                  fi
+                done
+                echo "bot and transcribe containers are running"
+                # Running is not quite enough for the transcriber: its weights
+                # load before the socket opens, so an answer here is the proof
+                # that they are in the image and were read.
+                if ! $COMPOSE exec -T transcribe python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8081/health').status == 200 else 1)"; then
+                  echo "::error::the transcriber is up but not answering"
+                  $COMPOSE logs --tail=60 transcribe
                   exit 1
                 fi
-                echo "bot container is running"
+                echo "transcriber has its weights"
                 exit 0
               fi
               sleep 3
             done
             echo "never became ready; recent logs follow"
-            $COMPOSE logs --tail=60 api app web
+            $COMPOSE logs --tail=60 api app web transcribe
             exit 1

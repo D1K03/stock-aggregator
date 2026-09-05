@@ -897,12 +897,21 @@ footer.site .prov {
   padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
 }
 .stv-turn.steven { color: var(--ink); }
-/* The chart keeps the 360px it was drawn at rather than filling the
-   conversation column. It is one drawing at one size — the same string the
-   palette shows and the same string Discord's PNG is rasterised from — so
-   stretching it here scales 8px axis labels and a 1.8px line up along with
-   everything else, which reads as a zoomed-in screenshot rather than a
-   bigger chart. */
+/* Wider than the 360px the card is drawn at, because a chart is the one thing
+   in the conversation worth reading closely and the column is 880px.
+
+   This overrides the choice made on main, which removed the rule so the chart
+   sat at its drawn size. That reasoning is real and worth keeping in view: the
+   SVG is one drawing at one size, the same string the palette shows and the
+   same string Discord rasterises, so stretching it scales 8px axis labels and a
+   1.8px line along with everything else. It was overridden because it was asked
+   for directly, and because 360px in an 880px column reads as an afterthought.
+
+   The honest fix for both is to draw the chat chart at a larger intrinsic size
+   rather than scale one drawn small, which means CARD_W in chart-svg.ts and
+   therefore Discord's PNG too. That is a change to the shared renderer, not to
+   a stylesheet, so it is not being smuggled in here. */
+.stv-line .cchart { max-width: 760px; width: 100%; border-radius: 14px; }
 .stv-thinking {
   display: flex; align-items: center; gap: 9px;
   font-size: 0.86rem; color: var(--ink-muted);
@@ -939,7 +948,17 @@ footer.site .prov {
 .stv-send:disabled { opacity: 0.28; cursor: default; }
 
 .stv-skills { display: flex; flex-wrap: wrap; gap: 6px; }
-.stv-skills.row { max-width: 880px; margin: 10px auto 0; }
+
+/* Under the composer: suggestions on the left, the way out to Discord on the
+   right. Its own strip rather than another chip in the row, because it does not
+   continue the conversation here, it takes it somewhere else. Aligned to the
+   top so the handoff stays put when the suggestions wrap to a second line. */
+.stv-next {
+  display: flex; align-items: flex-start; gap: 10px;
+  max-width: 880px; margin: 10px auto 0;
+}
+.stv-next .stv-skills { flex: 1; min-width: 0; }
+.stv-next .chip-discord { flex-shrink: 0; padding: 6px 12px; font-size: 0.76rem; }
 .stv-skills button {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 9999px;
   background: var(--card); color: var(--ink-muted); font: inherit; font-size: 0.76rem;
@@ -947,12 +966,37 @@ footer.site .prov {
 }
 .stv-skills button:hover { color: var(--copper); border-color: var(--copper); }
 
+/* The mic, in both composers. Quiet until it is doing something: an idle glyph
+   the same weight as the icons beside it, a pulsing dot and a running count
+   while it listens, and a slower pulse while the audio is being turned into
+   text. Failure is a title, not a banner — there is one thing to do about it
+   and it is press the button again. */
+.mic {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 7px; border: 1px solid transparent; border-radius: 9999px;
+  background: none; color: var(--ink-muted); font: inherit; font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.16s var(--ease), background 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+.mic:hover:not(:disabled) { color: var(--copper); }
+.mic:disabled { cursor: default; }
+.mic.recording { color: var(--copper); border-color: var(--copper); background: var(--cream); }
+.mic.failed { color: var(--copper-deep); }
+.mic-time { font-variant-numeric: tabular-nums; }
+.mic-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  animation: mic-pulse 1.1s var(--ease) infinite;
+}
+.mic-dot.working { animation-duration: 1.8s; }
+@keyframes mic-pulse { 50% { opacity: 0.25; } }
+
 /* The chats column is the first thing to go: on a narrow screen the
    conversation is the page, and history is still reachable from the palette. */
 @media (max-width: 900px) {
   .stv { padding: calc(var(--sp) * 2); }
   .stv-chats { display: none; }
-  .stv-inner, .stv-composer-inner, .stv-skills.row { max-width: 100%; }
+  .stv-inner, .stv-composer-inner, .stv-next { max-width: 100%; }
   .stv-inner { padding-inline: calc(var(--sp) * 4); }
   .stv-composer { padding-inline: calc(var(--sp) * 4); }
 }
@@ -1005,6 +1049,13 @@ footer.site .prov {
   .rail.bar .rail-user { padding: 6px; }
   /* Upwards, or it opens off the bottom of the screen. */
   .rail.bar .rail-menu { bottom: calc(100% + 8px); left: auto; right: calc(var(--sp) * 2); }
+
+  /* The rail is along the bottom now, so it occupies no width and the spacer
+     must occupy none either. `Sidebar` already sets that inline, but the 860px
+     rule above pins the spacer with `!important`, and an `!important` rule in a
+     stylesheet beats an inline style — so without this the bar sits at the
+     bottom while a 64px gap goes on holding every page to the right of it. */
+  .rail-spacer { width: 0 !important; }
 
   /* Nothing may end up underneath the bar. */
   .shell { padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px)); }

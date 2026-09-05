@@ -162,8 +162,9 @@ def signed_in_server(monkeypatch, db_url, fresh_db):
         thread.join(timeout=5)
 
 
-def _get(url, cookie=None, redirect=True):
-    request = urllib.request.Request(url)
+def _get(url, cookie=None, redirect=True, data=None):
+    # `data` makes it a POST, which is all urllib needs to be told.
+    request = urllib.request.Request(url, data=data)
     if cookie:
         request.add_header("Cookie", cookie)
     opener = urllib.request.build_opener()
@@ -349,15 +350,28 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         thread.join(timeout=5)
 
 
-@pytest.mark.parametrize("path", ["/status", "/api/ask?q=hi", "/api/audit", "/api/handoff"])
-def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path):
+@pytest.mark.parametrize(
+    "path,data",
+    [
+        ("/status", None),
+        ("/api/ask?q=hi", None),
+        ("/api/audit", None),
+        ("/api/handoff", None),
+        # There is no decorator on these routes — each repeats the same six
+        # lines, and forgetting them makes a route public in silence. A POST
+        # checked only by a test of its own would be one list away from being
+        # the route nobody checked.
+        ("/api/transcribe", b"not audio"),
+    ],
+)
+def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path, data):
     # This is the regression that matters. The check used to read
     # `config.enabled and login is None`, so unconfigured sign-in did not
     # refuse anyone — it stopped asking. One missing variable would have put
     # the agent, the spend figures and the Discord ids of everyone who used the
     # bot on the public internet.
     url, _ = unconfigured_server
-    status, body, _ = _get(url + path)
+    status, body, _ = _get(url + path, data=data)
     assert status == 401
     assert "sign in" in json.loads(body)["error"]
 
@@ -370,3 +384,107 @@ def test_a_session_still_works_without_github(unconfigured_server):
     status, body, _ = _get(url + "/status", cookie=f"{auth.SESSION_COOKIE}={token}")
     assert status == 200
     assert json.loads(body)["login"] == "local-dev"
+
+
+# -- uploading a recording --------------------------------------------------
+
+
+def test_an_upload_over_the_limit_is_refused_before_it_is_forwarded(
+    signed_in_server, monkeypatch
+):
+    # Refused on the Content-Length alone: the body is never sent here and the
+    # 413 comes back anyway, which is the proof that nothing was read and the
+    # transcriber was never reached. urllib cannot express this — it insists on
+    # writing the body it declared, and the server has closed by then.
+    import socket
+
+    from screener.health import server as health_server
+
+    url, conn = signed_in_server
+    reached: list[bytes] = []
+    monkeypatch.setattr(
+        "screener.transcribe.transcribe", lambda *a, **k: reached.append(b"") or None
+    )
+    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
+
+    host, port = url.removeprefix("http://").split(":")
+    with socket.create_connection((host, int(port)), timeout=10) as sock:
+        sock.sendall(
+            f"POST /api/transcribe HTTP/1.1\r\nHost: {host}\r\n"
+            f"Cookie: {auth.SESSION_COOKIE}={token}\r\n"
+            f"Content-Length: {health_server.MAX_AUDIO + 1}\r\n\r\n".encode()
+        )
+        sock.shutdown(socket.SHUT_WR)
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            head += chunk
+
+    assert head.split(b" ")[1] == b"413"
+    assert reached == []
+
+
+def test_a_post_with_no_body_is_a_bad_request_not_a_hang(signed_in_server):
+    url, conn = signed_in_server
+    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
+    status, body, _ = _get(
+        url + "/api/transcribe", cookie=f"{auth.SESSION_COOKIE}={token}", data=b""
+    )
+    assert status == 400
+    assert json.loads(body)["error"] == "no body"
+
+
+def test_an_unknown_post_path_is_a_json_not_found(signed_in_server):
+    url, _ = signed_in_server
+    status, body, _ = _get(url + "/api/nowhere", data=b"hi")
+    assert status == 404
+    assert json.loads(body)["error"] == "not found"
+
+
+def test_a_recording_comes_back_as_text(signed_in_server, monkeypatch):
+    from screener.transcribe import Transcript
+
+    url, conn = signed_in_server
+    monkeypatch.setattr(
+        "screener.transcribe.transcribe",
+        lambda *a, **k: Transcript(text="chart nvidia", seconds=2.0),
+    )
+    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
+    status, body, _ = _get(
+        url + "/api/transcribe",
+        cookie=f"{auth.SESSION_COOKIE}={token}",
+        data=b"OggS" + b"\x00" * 64,
+    )
+    assert status == 200
+    assert json.loads(body) == {"text": "chart nvidia", "seconds": 2.0}
+
+
+def test_the_transcription_row_records_a_length_rather_than_the_words(
+    signed_in_server, monkeypatch
+):
+    # This row is about what the transcription cost, so it holds a length. The
+    # text does reach the trail when it is asked as a question, on the reply
+    # row, exactly as a typed question does: that is where Steven's memory
+    # lives. What never lands anywhere is the audio.
+    from screener.transcribe import Transcript
+
+    url, conn = signed_in_server
+    monkeypatch.setattr(
+        "screener.transcribe.transcribe",
+        lambda *a, **k: Transcript(text="a secret ticker", seconds=2.0),
+    )
+    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
+    _get(
+        url + "/api/transcribe",
+        cookie=f"{auth.SESSION_COOKIE}={token}",
+        data=b"OggS" + b"\x00" * 64,
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            "select detail::text from audit.event where operation = 'steven.transcribe'"
+        )
+        rows = cur.fetchall()
+    assert rows, "the transcription was not recorded at all"
+    assert all("a secret ticker" not in row[0] for row in rows)

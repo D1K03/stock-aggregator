@@ -54,6 +54,10 @@ type Steven = {
   handoffState: Handoff;
   handoffNote: string;
   handoff: () => Promise<void>;
+  /** A recording as text. Throws with a readable message, which the mic button
+      shows; it is the only call here whose failure the user must be told
+      about, because there is no question without it. */
+  transcribe: (audio: Blob) => Promise<string>;
 };
 
 const Ctx = createContext<Steven | null>(null);
@@ -219,17 +223,39 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setHandoffState("idle"), 4000);
   }, [context, chime]);
 
+  const transcribe = useCallback(async (audio: Blob) => {
+    // Straight through the status service, which owns the session — the
+    // transcription container has no route from outside and no auth of its
+    // own. The body is the recording itself rather than a form or a base64
+    // envelope: it is one field, and encoding it would cost a third more
+    // bytes on the slowest link in the chain.
+    const response = await fetch(`${BASE}/api/transcribe`, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": audio.type || "application/octet-stream" },
+      body: audio,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error ?? "Could not transcribe that.");
+    }
+    const body = await response.json();
+    return (body.text ?? "").trim();
+  }, []);
+
   const value = useMemo<Steven>(
     () => ({
       turns, threads, threadId, thinking, settling,
       conversing: turns.length > 0 || thinking,
       seeing: context ? `${context.page} · ${context.summary}` : "",
       ask, newChat, openThread, removeThread,
-      handoffState, handoffNote, handoff,
+      handoffState, handoffNote, handoff, transcribe,
     }),
     [
       turns, threads, threadId, thinking, settling, context,
       ask, newChat, openThread, removeThread, handoffState, handoffNote, handoff,
+      transcribe,
     ]
   );
 

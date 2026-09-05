@@ -60,6 +60,12 @@ services:
       - path: local.env
         required: false
 
+  transcribe:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.transcribe
+    image: stock-aggregator-transcribe:local
+
   # Published so you can reach the database with psql while poking at things.
   postgres:
     ports:

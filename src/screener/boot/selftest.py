@@ -15,11 +15,12 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import httpx
+
 from screener.ai import complete
 from screener.ai.config import RouterConfig
 from screener.bot.config import BotConfig
-from screener.fetch import fetch
-from screener.fetch.config import ProxyConfig
+from screener.fetch import LanePool, ProxyConfig, fetch
 from screener.notify.config import DiscordConfig
 from screener.health import checks
 from screener.provenance import GIT_SHA_ENV, git_sha
@@ -81,6 +82,74 @@ def _isp_proxy(direct: Check) -> Check:
         # is configured, billed, and doing nothing.
         return Check("fetch isp_proxy", FAIL, f"exit IP {proxied} matches direct")
     return Check("fetch isp_proxy", OK, f"exit IP {proxied}")
+
+
+def _lanes(direct: Check) -> Check:
+    """Whether the configured lanes really do leave by different addresses.
+
+    `fetch isp_proxy` above compares one proxied exit against the box's own,
+    which catches a proxy that is not routing and nothing else. It cannot see
+    the failure that matters to a lane pool: several lanes that all come out of
+    the same address, which is billed, looks healthy, and puts a night's
+    requests through one IP exactly as if there were no pool at all.
+    """
+    config = ProxyConfig.from_env()
+    if not config.lane_urls():
+        return Check("fetch lanes", SKIP, "BRIGHTDATA_PROXY_IPS is not set")
+    if len(config.exit_ips) < 2:
+        return Check("fetch lanes", SKIP, "one lane configured; nothing to rotate")
+
+    seen: dict[str, str] = {}
+    with LanePool.from_env(timeout=30.0) as pool:
+        # acquire() rotates on every call, so len(pool) of them visits each once.
+        for _ in range(len(pool)):
+            lane = pool.acquire()
+            try:
+                response = lane.get(IP_ECHO_URL)
+            except httpx.ProxyError:
+                # Much the likeliest misconfiguration here, and the one whose
+                # own message is least helpful: Bright Data refuses the tunnel
+                # rather than answering, so httpx raises before there is a
+                # status to read and "ProxyError" sends you looking at the
+                # destination instead of at the flag.
+                return Check(
+                    "fetch lanes",
+                    FAIL,
+                    f"{lane.name}: the proxy refused this exit — an -ip- flag "
+                    "naming an address not allocated to this zone",
+                )
+            except Exception as exc:
+                return Check("fetch lanes", FAIL, f"{lane.name}: {type(exc).__name__}")
+            if response.status_code == 502:
+                # The same fault, when Bright Data answers instead of refusing.
+                return Check(
+                    "fetch lanes",
+                    FAIL,
+                    f"{lane.name}: 502 from the proxy — an -ip- flag naming an "
+                    "address that is not allocated to this zone",
+                )
+            if response.status_code != 200:
+                return Check(
+                    "fetch lanes", FAIL, f"{lane.name}: HTTP {response.status_code}"
+                )
+            seen[lane.name] = response.text.strip()
+
+    distinct = sorted(set(seen.values()))
+    if direct.outcome == OK and any(ip in direct.detail for ip in distinct):
+        return Check("fetch lanes", FAIL, "a lane exits from the box's own address")
+    if len(distinct) < len(seen):
+        # Pinned lanes sharing an address means the zone no longer holds one of
+        # them, which is a configuration fault rather than a quirk.
+        return Check(
+            "fetch lanes",
+            FAIL,
+            f"{len(seen)} lanes over {len(distinct)} exits: {', '.join(distinct)}",
+        )
+    return Check(
+        "fetch lanes",
+        OK,
+        f"{len(seen)} lanes, {len(distinct)} distinct exits: {', '.join(distinct)}",
+    )
 
 
 def _openrouter() -> Check:
@@ -179,6 +248,7 @@ def run() -> bool:
         _safe("build", _build),
         direct,
         _safe("fetch isp_proxy", lambda: _isp_proxy(direct)),
+        _safe("fetch lanes", lambda: _lanes(direct)),
         _safe("openrouter", _openrouter),
         _safe("discord", _discord),
         _safe("discord bot", _bot),

@@ -5,6 +5,7 @@ import json
 import logging
 import signal
 import threading
+import time
 import urllib.parse
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -42,6 +43,16 @@ MAX_QUESTION = 500
 # What the screen description may contribute. Enough for a row and its
 # filters, short of anything that could bloat every request.
 MAX_CONTEXT = 400
+
+# A recording, bounded like the question above and for the same reason, one size
+# class up. Two minutes of Opus at the bitrate the browser is told to use is
+# comfortably under this.
+MAX_AUDIO = 1_000_000
+
+# The class timeout below is five seconds, which is right for a half-open socket
+# and wrong for an upload over a mobile link. Raised for the body read alone,
+# and put straight back, rather than loosening it for every request served.
+BODY_TIMEOUT_SECONDS = 15
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -92,6 +103,51 @@ class Handler(BaseHTTPRequestHandler):
         headers += [("Set-Cookie", c) for c in cookies or []]
         self._send(HTTPStatus.FOUND, b"", headers)
 
+    def _read_body(self, limit: int) -> bytes | None:
+        """The request body, or `None` having already answered.
+
+        Under HTTP/1.1 an unread body is the next request as far as the
+        connection is concerned, so every rejection here closes rather than
+        leaving a megabyte to be parsed as a request line — the failure that
+        keep-alive makes possible and that nothing would explain.
+
+        No chunked encoding. The only client is a browser `fetch` with a Blob,
+        and it sends a length.
+        """
+        raw = self.headers.get("Content-Length")
+        if raw is None or not raw.strip().isdigit():
+            self.close_connection = True
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no body"})
+            return None
+        length = int(raw)
+        if length == 0:
+            self.close_connection = True
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no body"})
+            return None
+        if length > limit:
+            # Refused on the header, so the bytes are never read.
+            self.close_connection = True
+            self._respond(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": f"over {limit} bytes"}
+            )
+            return None
+
+        self.connection.settimeout(BODY_TIMEOUT_SECONDS)
+        try:
+            body = self.rfile.read(length)
+        except OSError:
+            self.close_connection = True
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "could not read the body"})
+            return None
+        finally:
+            self.connection.settimeout(self.timeout)
+
+        if len(body) != length:
+            self.close_connection = True
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "the upload ended early"})
+            return None
+        return body
+
     def _session_token(self) -> str | None:
         return auth.read_cookie(self.headers.get("Cookie"), auth.SESSION_COOKIE)
 
@@ -112,6 +168,102 @@ class Handler(BaseHTTPRequestHandler):
             raise auth.SessionLookupFailed(type(exc).__name__) from exc
 
     # -- routes -----------------------------------------------------------
+
+    def do_POST(self) -> None:
+        """The one route that needs a body.
+
+        Everything else here is a GET with its argument in the query string, and
+        `_ask` says why: a body means Content-Length, a read, and keeping a
+        keep-alive connection in step, which is not worth it for a short string.
+        Audio is not a short string, so this is the route that earns the handler
+        rather than one that ignores the reasons it was avoided.
+        """
+        route = urllib.parse.urlparse(self.path).path
+        config = AuthConfig.from_env()
+
+        if route == "/api/transcribe":
+            self._transcribe(config)
+        else:
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def _transcribe(self, config: AuthConfig) -> None:
+        """Turn a recording from the dashboard into text.
+
+        A session is required unconditionally, for the reason `_ask` gives at
+        length. There is no decorator on these routes and each repeats the same
+        six lines, so a route that skipped them would be public in silence.
+
+        A thin authenticated pass-through, and the session is the entire reason
+        the hop exists: the transcription container has no route from outside
+        and no authentication of its own, so this is what stands in front of it.
+        The audio is never written to disk.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        from screener.bot import budget
+
+        # Before the body is read, let alone forwarded. Transcription is a cost
+        # even though it is not a charge, and the point of a cap is that the
+        # request over it is never paid for.
+        allowance = budget.check(login, "github")
+        if not allowance.allowed:
+            self._respond(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {
+                    "error": (
+                        "That would go over the daily spend cap — "
+                        f"{budget.usd(allowance.spent)} of "
+                        f"{budget.usd(allowance.cap)} used in the last 24 hours."
+                    )
+                },
+            )
+            return
+
+        audio = self._read_body(MAX_AUDIO)
+        if audio is None:
+            return
+
+        from screener.transcribe import transcribe
+
+        started = time.monotonic()
+        spoken = transcribe(
+            audio, content_type=self.headers.get("Content-Type", "")
+        )
+        if spoken is None:
+            self._respond(
+                HTTPStatus.BAD_GATEWAY, {"error": "could not reach the transcriber"}
+            )
+            return
+
+        audit.record(
+            kind="agent",
+            operation="steven.transcribe",
+            actor=login,
+            actor_kind="github",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            # Not a charge, so not a number in the column that records charges.
+            cost_usd=0,
+            detail={
+                "surface": "web",
+                "seconds": spoken.seconds,
+                "bytes": len(audio),
+                # A length, not the words: this row is about what the
+                # transcription cost. The text reaches the trail when it is
+                # asked as a question, the same way a typed one does.
+                "chars": len(spoken.text),
+            },
+        )
+        self._respond(HTTPStatus.OK, {"text": spoken.text, "seconds": spoken.seconds})
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
