@@ -1,0 +1,43 @@
+# Run the whole stack on your own machine.
+#
+#   docker compose --env-file deploy/local.env \
+#     -f deploy/compose.prod.yaml -f deploy/compose.local.yaml up -d --build
+#
+# Then open http://localhost:8080.
+#
+# An override rather than a separate file, so the thing you run locally is the
+# same topology that runs on the VPS: same Caddy routes, same service names,
+# same origin. A bespoke local compose file drifts, and then only production
+# has the bug.
+#
+# Two differences from production, both deliberate:
+#   * images are built from this checkout instead of pulled from the registry
+#   * Caddy is published on a host port, because there is no tunnel here
+services:
+  app:
+    ports:
+      # 8080 rather than 80: nothing here should need privileges, and the port
+      # is unlikely to collide with whatever else is running.
+      - "8080:8080"
+
+  api:
+    build:
+      # Relative to THIS file's directory, not where you ran the command:
+      # compose resolves build contexts against the compose file, the same way
+      # it resolves the Caddyfile bind mount in compose.prod.yaml.
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        GIT_SHA: local
+    image: stock-aggregator:local
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    image: stock-aggregator-web:local
+
+  # Published so you can reach the database with psql while poking at things.
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"

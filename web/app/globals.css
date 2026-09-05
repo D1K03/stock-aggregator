@@ -41,65 +41,76 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 .mono { font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+.content { flex: 1; min-width: 0; }
 .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 calc(var(--sp) * 6); }
 
-/* ---- nav ------------------------------------------------------------------ */
-nav.top {
-  position: sticky; top: 0; z-index: 20;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--sand) 72%, white);
-  backdrop-filter: blur(8px);
-}
-.nav-in { display: flex; align-items: center; gap: calc(var(--sp) * 8); height: 60px; }
-.wordmark {
-  font-weight: 700; font-size: 1.14rem; letter-spacing: -0.035em;
-  background: linear-gradient(100deg, var(--ink) 55%, var(--copper) 130%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.nav-links { display: flex; gap: calc(var(--sp) * 6); font-size: 0.875rem; color: var(--ink-soft); }
-.nav-links a { position: relative; padding: 4px 0; }
-.nav-links a::after {
-  content: ""; position: absolute; left: 0; right: 100%; bottom: -2px; height: 2px;
-  background: var(--copper); border-radius: 2px; transition: right 0.28s var(--ease);
-}
-.nav-links a:hover::after, .nav-links a.on::after { right: 0; }
-.nav-links a.on { color: var(--ink); font-weight: 600; }
-.nav-right { margin-left: auto; display: flex; align-items: center; gap: calc(var(--sp) * 3); }
-.sha {
-  font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.72rem; color: var(--ink-muted);
-  background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: 3px 8px;
-}
-.user {
-  display: flex; align-items: center; gap: calc(var(--sp) * 2);
-  background: var(--card); border: 1px solid var(--line); border-radius: 9999px;
-  padding: 4px 12px 4px 4px; font-size: 0.82rem; font-weight: 500;
-  transition: box-shadow 0.25s var(--ease);
-}
-.user:hover { box-shadow: 0 4px 16px rgb(26 24 23 / 0.08); }
-.user-menu { position: relative; }
-button.user { cursor: pointer; font: inherit; color: inherit; }
-.menu {
-  position: absolute; right: 0; top: calc(100% + 8px); min-width: 190px; z-index: 40;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
-  box-shadow: 0 16px 40px rgb(26 24 23 / 0.14); overflow: hidden;
-}
-.menu-head {
-  font-size: 0.72rem; color: var(--ink-muted);
-  padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-}
-.menu-head b { color: var(--ink-soft); font-weight: 600; }
-.menu-item {
-  display: block; width: 100%; text-align: left; font-size: 0.84rem;
-  padding: 10px 12px; cursor: pointer; transition: background 0.15s var(--ease);
-}
-.menu-item:hover { background: var(--sand); }
-.menu-item.danger { color: var(--copper-deep); font-weight: 500; }
-.menu-item.danger:hover { background: var(--cream); }
+/* ---- sidebar rail --------------------------------------------------------- */
+.rail-spacer { flex: 0 0 auto; }
+.shell { display: flex; align-items: stretch; min-height: 100dvh; }
 
-.avatar {
-  width: 26px; height: 26px; border-radius: 9999px; background: var(--copper); color: #fff;
-  display: grid; place-items: center; font-size: 0.72rem; font-weight: 600;
+.rail {
+  position: fixed; inset: 0 auto 0 0; z-index: 30;
+  display: flex; flex-direction: column;
+  background: color-mix(in srgb, var(--paper) 55%, white);
+  border-right: 1px solid var(--line);
+  transition: width 0.22s var(--ease);
 }
+/* No transition while dragging, or the rail lags a frame behind the pointer
+   and the whole thing feels loose. */
+.rail.dragging { transition: none; user-select: none; }
+
+.rail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 60px; padding: 0 calc(var(--sp) * 4);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.rail.collapsed .rail-head { justify-content: center; padding: 0; }
+.rail-toggle {
+  display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: var(--r-md);
+  color: var(--ink-muted); cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.rail-toggle:hover { background: var(--card); color: var(--ink); border-color: var(--line); }
+.rail.collapsed .rail-toggle { position: absolute; top: 68px; right: -12px; background: var(--card); border-color: var(--line); }
+
+.rail-nav { display: flex; flex-direction: column; gap: 2px; padding: calc(var(--sp) * 3); flex: 1; }
+.rail-nav a {
+  display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden;
+  padding: 9px 10px; border-radius: var(--r-lg); font-size: 0.875rem; color: var(--ink-soft);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.rail.collapsed .rail-nav a { justify-content: center; padding: 9px 0; }
+.rail-nav a:hover { background: var(--card); color: var(--ink); }
+.rail-nav a.on { background: var(--cream); color: var(--copper-deep); font-weight: 550; }
+.rail-icon { display: grid; place-items: center; flex-shrink: 0; }
+.rail-label { overflow: hidden; text-overflow: ellipsis; }
+
+.rail-foot {
+  position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: calc(var(--sp) * 3); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.rail.collapsed .rail-foot { justify-content: center; }
+.rail-user {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  font: inherit; font-size: 0.82rem; font-weight: 500; color: inherit;
+  background: none; border: none; border-radius: var(--r-lg); padding: 4px; cursor: pointer;
+  transition: background 0.16s var(--ease);
+}
+.rail-user:hover { background: var(--card); }
+.rail.collapsed .rail-user { flex: 0; }
+.rail-menu { bottom: calc(100% + 6px); top: auto; left: calc(var(--sp) * 3); right: auto; min-width: 180px; }
+
+/* Wider than the line it draws: a 1px drag target is a fiddly thing to grab. */
+.rail-grip {
+  position: absolute; top: 0; bottom: 0; right: -3px; width: 7px;
+  cursor: col-resize; touch-action: none;
+}
+.rail-grip::after {
+  content: ""; position: absolute; inset: 0 3px; background: transparent;
+  transition: background 0.16s var(--ease);
+}
+.rail-grip:hover::after { background: var(--copper); }
 
 /* ---- page header + glow --------------------------------------------------- */
 .hero { position: relative; padding: calc(var(--sp) * 10) 0 calc(var(--sp) * 4); overflow: visible; }
@@ -162,8 +173,14 @@ table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 thead th {
   font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted);
   text-align: left; padding: 10px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-  background: var(--sand); position: sticky; top: 60px; z-index: 5;
+  background: var(--sand);
 }
+/* Not sticky. It used to be `sticky; top: 60px`, meaning to sit below the nav,
+   but `.card` is `overflow: hidden`, which makes the card the scroll container
+   a sticky child resolves against. The header therefore parked 60px below the
+   top of its own card rather than below the nav, which put it underneath the
+   first row on any card without a heading above the table. Tables here page at
+   fifty rows, so the header was never far away enough to be worth the trick. */
 thead th.num, td.num { text-align: right; }
 tbody td { padding: 11px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); vertical-align: middle; }
 tbody tr { cursor: pointer; transition: background 0.18s var(--ease); }
@@ -255,6 +272,17 @@ footer.site .prov {
   tbody tr.sel td:first-child { background: var(--cream); }
 }
 
+@media (max-width: 860px) {
+  /* Below this the rail is always collapsed: a 200px sidebar on a phone leaves
+     no room for the table it is meant to navigate to. */
+  .rail { width: 64px !important; }
+  .rail .rail-label, .rail .sha { display: none; }
+  .rail-head { justify-content: center; padding: 0; }
+  .rail-nav a { justify-content: center; padding: 9px 0; }
+  .rail-grip, .rail-toggle { display: none; }
+  .rail-spacer { width: 64px !important; }
+}
+
 @media (max-width: 640px) {
   .wrap { padding: 0 calc(var(--sp) * 4); }
   .nav-in { gap: calc(var(--sp) * 4); height: 54px; }
@@ -296,6 +324,32 @@ footer.site .prov {
 }
 .concept-bar b { font-weight: 600; }
 .concept-bar span { color: var(--ink-soft); }
+
+/* ---- audit --------------------------------------------------------------- */
+.kind {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  border-radius: var(--r-md); padding: 2px 7px; border: 1px solid var(--line); background: var(--paper);
+  color: var(--ink-soft);
+}
+/* The agent is the row people look for, so it is the only one that carries the
+   accent. Everything else stays neutral rather than competing with it. */
+.kind-agent { background: var(--cream); border-color: var(--amber-2); color: var(--copper-deep); }
+.outcome { font-size: 0.72rem; font-weight: 500; }
+.outcome-ok { color: var(--ink-muted); }
+.outcome-refused { color: var(--copper-deep); }
+.outcome-error { color: var(--copper); font-weight: 600; }
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: calc(var(--sp) * 4);
+  padding: calc(var(--sp) * 4); border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  font-size: 0.8rem; color: var(--ink-muted);
+}
+.pager button {
+  font: inherit; font-size: 0.82rem; background: var(--card); color: var(--ink-soft);
+  border: 1px solid var(--line); border-radius: var(--r-lg); padding: 6px 14px; cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.pager button:hover:not(:disabled) { background: var(--sand); border-color: var(--ink-muted); }
+.pager button:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- login ----------------------------------------------------------------- */
 .login-shell {

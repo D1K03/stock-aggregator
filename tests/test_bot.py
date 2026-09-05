@@ -364,10 +364,21 @@ def test_an_empty_mention_says_so_rather_than_asking_the_model(monkeypatch):
     assert "no text" in asyncio.run(agent.answer("   "))
 
 
-def test_the_footer_names_steven_the_model_and_the_build(monkeypatch):
+def test_the_presence_carries_the_build_and_model(monkeypatch):
+    # This used to be appended to every reply, which repeated the same line
+    # under every answer. As a status it is said once and always visible.
     monkeypatch.setattr(agent, "git_sha", lambda: "abcdef1234567890")
-    footer = agent.build_footer()
-    assert "Steven" in footer and "solar-pro4" in footer and "abcdef123456" in footer
+    status = agent.presence()
+    assert "abcdef1" in status and "solar-pro4" in status
+    # Discord truncates a custom status around 128 characters.
+    assert len(status) < 128
+
+
+def test_steven_is_told_he_may_describe_his_own_tools():
+    # "what do you have access to" is the obvious first question, and the tool
+    # specs are already in context, so this costs one sentence rather than a
+    # tool that exists to describe tools.
+    assert "have access to" in agent.SYSTEM_PROMPT
 
 
 def test_the_system_prompt_forbids_advice_and_invented_numbers():

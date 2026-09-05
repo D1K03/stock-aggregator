@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+deploy/local.env
 *.pem
 local.settings.json
 

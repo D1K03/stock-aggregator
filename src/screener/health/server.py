@@ -12,7 +12,7 @@ from typing import Any
 
 import psycopg
 
-from screener import auth
+from screener import audit, auth
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
 from screener.config import settings
@@ -148,6 +148,9 @@ class Handler(BaseHTTPRequestHandler):
                 [auth.clear_cookie(auth.SESSION_COOKIE, secure=self._secure(config))],
             )
 
+        elif route == "/api/audit":
+            self._audit(config, query)
+
         elif route == "/status":
             try:
                 login = self._current_login(config)
@@ -180,6 +183,89 @@ class Handler(BaseHTTPRequestHandler):
 
         else:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def _audit(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """The audit trail, paged and filtered.
+
+        Behind the session for the same reason /status is: it carries spend
+        figures and the ids of people who used the bot.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if config.enabled and login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        kind = (query.get("kind") or [""])[0] or None
+        operation = (query.get("operation") or [""])[0] or None
+        try:
+            page_number = max(1, int((query.get("page") or ["1"])[0]))
+        except ValueError:
+            page_number = 1
+
+        try:
+            with psycopg.connect(settings().database_url, connect_timeout=3) as conn:
+                events, total = audit.page(
+                    conn,
+                    kind=kind,
+                    operation=operation,
+                    offset=(page_number - 1) * audit.PAGE_SIZE,
+                )
+                totals = audit.spend(conn)
+                available = audit.operations(conn)
+        except Exception as exc:
+            logger.warning("could not read the audit trail: %s", exc)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot read the audit trail", "database": type(exc).__name__},
+            )
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "events": [
+                    {
+                        "id": e.id,
+                        "occurred_at": e.occurred_at.isoformat(),
+                        "kind": e.kind,
+                        "operation": e.operation,
+                        "actor": e.actor,
+                        "actor_kind": e.actor_kind,
+                        "outcome": e.outcome,
+                        "model": e.model,
+                        "tokens": e.total_tokens,
+                        # A float, not a Decimal: JSON has no decimal type, and
+                        # these are displayed rather than summed again.
+                        "cost_usd": float(e.cost_usd),
+                        "duration_ms": e.duration_ms,
+                        "detail": e.detail,
+                    }
+                    for e in events
+                ],
+                "page": page_number,
+                "page_size": audit.PAGE_SIZE,
+                "total": total,
+                "pages": max(1, -(-total // audit.PAGE_SIZE)),
+                "spend": {
+                    "events": totals.events,
+                    "total_cost_usd": float(totals.total_cost),
+                    "total_tokens": totals.total_tokens,
+                    "events_24h": totals.events_24h,
+                    "cost_24h_usd": float(totals.cost_24h),
+                    "tokens_24h": totals.tokens_24h,
+                },
+                "operations": [
+                    {"kind": k, "operation": o, "count": c} for k, o, c in available
+                ],
+            },
+        )
 
     def _secure(self, config: AuthConfig) -> bool:
         """Whether cookies may carry the Secure flag.

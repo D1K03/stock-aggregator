@@ -22,5 +22,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   // Everything except the login page itself, Next's own assets, and the paths
   // Caddy hands to the status service.
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|auth|health|ready|status).*)"],
+  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|auth|api|health|ready|status).*)"],
 };

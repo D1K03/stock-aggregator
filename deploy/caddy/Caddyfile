@@ -29,6 +29,11 @@
 	handle /status {
 		reverse_proxy api:8080
 	}
+	# The dashboard's data, served by the status service. Ahead of the
+	# catch-all below, which would otherwise hand it to Next.js.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
 
 	# Everything else is the dashboard.
 	handle {

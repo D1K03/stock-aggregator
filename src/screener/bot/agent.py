@@ -12,17 +12,22 @@ on tool rounds, and no conversation memory between mentions.
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from screener.ai import AiError, converse
 from screener.ai.models import SOLAR
 from screener.bot.tools import dispatch, specs
+from screener.audit import record
 from screener.config import env
 from screener.provenance import git_sha
 
 logger = logging.getLogger(__name__)
 
 NAME = "Steven"
+
+# The audit operation these replies are filed under.
+OPERATION = "steven.reply"
 
 # Discord rejects a message over 2000 characters outright, which would turn a
 # long answer into no answer.
@@ -53,9 +58,11 @@ Rules:
 3. Say when you do not know.
 4. Call a tool when one answers the question. Never guess what a tool would return.
 
-Style. Warm, direct, and short. Two or three sentences unless asked for more. Answer first. No preamble, no restating the question, no bullet lists unless asked, no sign-off. Never end by offering a menu of things you could explain instead: if something is genuinely worth adding, just add it in a clause. Refuse in one sentence and move on.
+Style. A colleague in chat, not a support desk. Casual, contractions fine, a sentence or two unless asked for more. Answer first: no preamble, no restating the question, no bullet lists unless asked, no sign-off, no hedging. Never close by listing things you could explain instead. Turn something down in one line and move on.
 
-Background you may explain if asked: percentiles are sector-relative; pillars are valuation, quality, momentum, sentiment, insider; alerts fire on a threshold crossing, not a state; every score traces to its raw inputs."""
+Asked what you can do or have access to, name your tools and what they report. You have no others.
+
+If asked: percentiles are sector-relative; pillars are valuation, quality, momentum, sentiment, insider; alerts fire on a threshold crossing, not a state; every score traces to its raw inputs."""
 
 
 def agent_model() -> str:
@@ -71,7 +78,7 @@ def _truncate(text: str) -> str:
     return f"{cut} … (truncated)"
 
 
-def _think(question: str) -> tuple[str, int, float]:
+def _think(question: str) -> tuple[str, int, float, list[str]]:
     """Run the tool loop and return (reply, tokens, cost).
 
     Synchronous, like every other call in this project. `answer` puts it on a
@@ -89,6 +96,8 @@ def _think(question: str) -> tuple[str, int, float]:
     tokens = 0
     cost = 0.0
 
+    used_tools: list[str] = []
+
     for round_number in range(MAX_TOOL_ROUNDS):
         completion = converse(
             messages=messages,
@@ -100,7 +109,7 @@ def _think(question: str) -> tuple[str, int, float]:
         cost += completion.cost_usd
 
         if not completion.tool_calls:
-            return completion.text.strip(), tokens, cost
+            return completion.text.strip(), tokens, cost, used_tools
 
         # The assistant turn goes back verbatim: a rebuilt one loses fields the
         # provider expects and the follow-up is rejected for a reason that
@@ -108,6 +117,7 @@ def _think(question: str) -> tuple[str, int, float]:
         messages.append(completion.raw_message)
         for call in completion.tool_calls:
             logger.info("round %d: %s(%s)", round_number + 1, call.name, call.arguments)
+            used_tools.append(call.name)
             messages.append(
                 {
                     "role": "tool",
@@ -118,15 +128,18 @@ def _think(question: str) -> tuple[str, int, float]:
 
     # Out of rounds. Saying so is better than a silent stop, and better than
     # another paid round that might do the same thing again.
-    return "I could not finish working that out.", tokens, cost
+    return "I could not finish working that out.", tokens, cost, used_tools
 
 
-async def answer(question: str) -> str:
+async def answer(question: str, *, actor: str = "system") -> str:
     """The reply to one message. Never raises.
 
     The model call is synchronous, so it runs on a worker thread. Calling it
     directly would block the gateway heartbeat for the length of the request
     and Discord would drop the connection as unresponsive.
+
+    `actor` is the Discord user id, carried through only so the audit row can
+    say who asked.
     """
     if not question.strip():
         return (
@@ -134,19 +147,55 @@ async def answer(question: str) -> str:
             "content may not be reaching me."
         )
 
+    started = time.perf_counter()
     try:
-        reply, tokens, cost = await asyncio.to_thread(_think, question)
+        reply, tokens, cost, used_tools = await asyncio.to_thread(_think, question)
     except AiError as exc:
         logger.warning("agent reply failed: %s", exc)
+        await asyncio.to_thread(
+            record,
+            kind="agent",
+            operation=OPERATION,
+            actor=actor,
+            actor_kind="discord",
+            outcome="error",
+            model=agent_model(),
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            detail={"error": str(exc)[:200]},
+        )
         return "I could not reach the model just now."
 
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info("replied on %s: %d tokens, $%.5f", agent_model(), tokens, cost)
+
+    # Recorded on a worker thread for the same reason the model call is: this
+    # opens a database connection, and the gateway heartbeat is on this loop.
+    await asyncio.to_thread(
+        record,
+        kind="agent",
+        operation=OPERATION,
+        actor=actor,
+        actor_kind="discord",
+        model=agent_model(),
+        # The split is not reported per turn, so the whole conversation is
+        # attributed to prompt tokens rather than invented as a ratio.
+        prompt_tokens=tokens,
+        cost_usd=cost,
+        duration_ms=elapsed_ms,
+        detail={"tools": used_tools, "chars": len(reply)},
+    )
 
     if not reply:
         return "The model returned nothing."
     return _truncate(reply)
 
 
-def build_footer() -> str:
-    """The provenance line, so an answer says what produced it."""
-    return f"— {NAME} · {agent_model()} · build {git_sha()[:12]}"
+def presence() -> str:
+    """What Steven shows as his Discord status.
+
+    The build and model used to ride on the end of every reply, which said the
+    same thing every time and made a one-line answer look like a form. It is
+    the same information, in the one place that is always visible and costs
+    nothing to repeat.
+    """
+    return f"build {git_sha()[:7]} · {agent_model().split('/')[-1]}"

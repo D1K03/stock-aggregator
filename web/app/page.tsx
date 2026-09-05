@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useMemo, useRef, useState } from "react";
-import Nav from "@/components/Nav";
+import Sidebar from "@/components/Sidebar";
 import StatTiles from "@/components/StatTiles";
 import UniverseTable from "@/components/UniverseTable";
 import ScoreChart from "@/components/ScoreChart";
@@ -33,8 +33,9 @@ export default function Page() {
   );
 
   return (
-    <>
-      <Nav />
+    <div className="shell">
+      <Sidebar active="Overview" />
+      <div className="content">
       <div className="wrap">
         <motion.header
           className="hero"
@@ -97,6 +98,7 @@ export default function Page() {
           <span className="prov">weights v3</span>
         </div>
       </footer>
-    </>
+      </div>
+    </div>
   );
 }
