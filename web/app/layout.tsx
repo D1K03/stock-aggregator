@@ -9,7 +9,10 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Screener — morning snapshot",
+  // One word, on every page. A tab strip is read at a glance and a title that
+  // changes per route is harder to find again, not easier — and "morning
+  // snapshot" described the overview, which is now one page of several.
+  title: "Screener",
   description:
     "Multi-signal equity screener. Transparent, sector-relative pillar scores; alerts on threshold crossings.",
 };
