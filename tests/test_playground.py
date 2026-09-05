@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+import threading
+
 import psycopg
 import pytest
 from psycopg.conninfo import make_conninfo
@@ -15,8 +17,6 @@ from screener.playground import (
     ensure_password,
     run,
 )
-
-from tests.test_auth import SECRET, signed_in_server  # noqa: F401  (fixture)
 
 MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "013_playground.sql"
 PASSWORD = "throwaway-for-this-test"
@@ -38,6 +38,39 @@ def granted_in_migration() -> set[str]:
     body = text.split("grant select on", 1)[1].split("to playground", 1)[0]
     body = re.sub(r"--[^\n]*", "", body)
     return {"public." + name.strip() for name in body.split(",") if name.strip()}
+
+
+# A session secret for this file alone. No other test module is imported to get
+# one: `tests` is not a package, so a cross-module import collects locally and
+# fails in CI, and every other test file here is self-contained for that reason.
+SECRET = "playground-tests-session-secret"
+
+
+@pytest.fixture
+def signed_in(fresh_db, db_url, monkeypatch):
+    """A server with sign-in configured, and a live session cookie for it."""
+    from screener import auth
+    from screener.health import build_server
+
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "sec")
+    monkeypatch.setenv("SESSION_SECRET", SECRET)
+    monkeypatch.setenv("ALLOWED_GITHUB_LOGINS", "ellis")
+
+    server = build_server("127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    token = auth.create_session(fresh_db, github_id=1, login="ellis", secret=SECRET)
+    try:
+        yield (
+            f"http://127.0.0.1:{server.server_address[1]}",
+            f"{auth.SESSION_COOKIE}={token}",
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 @pytest.fixture
@@ -299,23 +332,17 @@ def http(server_url, path, cookie=None, data=None):
 
 
 def test_the_page_is_told_the_playground_is_off_rather_than_shown_an_error(
-    signed_in_server, monkeypatch
+    signed_in, monkeypatch
 ):
-    from screener import auth
-
+    # A feature deliberately not configured here should render a card saying so,
+    # not a red box saying the server broke.
     monkeypatch.delenv("PLAYGROUND_DATABASE_URL", raising=False)
-    url, conn = signed_in_server
-    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
-    status, body = http(url, "/api/playground", f"{auth.SESSION_COOKIE}={token}")
+    url, cookie = signed_in
+    status, body = http(url, "/api/playground", cookie)
     assert status == 200 and body["enabled"] is False and body["schemas"] == []
 
 
-def test_a_bad_body_is_a_bad_request_rather_than_a_traceback(signed_in_server):
-    from screener import auth
-
-    url, conn = signed_in_server
-    token = auth.create_session(conn, github_id=1, login="ellis", secret=SECRET)
-    status, _ = http(
-        url, "/api/playground/query", f"{auth.SESSION_COOKIE}={token}", b"not json"
-    )
+def test_a_bad_body_is_a_bad_request_rather_than_a_traceback(signed_in):
+    url, cookie = signed_in
+    status, _ = http(url, "/api/playground/query", cookie, b"not json")
     assert status == 400
