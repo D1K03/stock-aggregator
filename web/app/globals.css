@@ -1040,6 +1040,13 @@ footer.site .prov {
   /* Upwards, or it opens off the bottom of the screen. */
   .rail.bar .rail-menu { bottom: calc(100% + 8px); left: auto; right: calc(var(--sp) * 2); }
 
+  /* The rail is along the bottom now, so it occupies no width and the spacer
+     must occupy none either. `Sidebar` already sets that inline, but the 860px
+     rule above pins the spacer with `!important`, and an `!important` rule in a
+     stylesheet beats an inline style — so without this the bar sits at the
+     bottom while a 64px gap goes on holding every page to the right of it. */
+  .rail-spacer { width: 0 !important; }
+
   /* Nothing may end up underneath the bar. */
   .shell { padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px)); }
   .stv { height: calc(100dvh - var(--bar-h) - env(safe-area-inset-bottom, 0px)); }
