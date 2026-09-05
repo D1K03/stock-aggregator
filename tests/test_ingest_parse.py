@@ -199,3 +199,38 @@ def test_a_split_entry_that_is_not_a_dict_is_dropped_not_raised():
     assert len(bars) == 1
     assert len(actions) == 1
     assert actions[0].action_type == "split"
+
+
+def test_a_nan_price_drops_the_bar_rather_than_storing_a_nan():
+    # Python's json encoder writes the bare `NaN` token and its decoder reads it
+    # back, `Decimal("NaN")` is a valid Decimal, and Postgres `numeric` stores
+    # 'NaN' happily — so without a guard a NaN close lands in a not-null column
+    # and poisons every momentum metric derived from it.
+    payload = chart(
+        [1758585600],
+        {
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [float("nan")],
+            "volume": [1],
+        },
+    )
+    assert "NaN" in payload.decode()
+    bars, _ = parse(payload)
+    assert bars == []
+
+
+def test_an_infinite_price_drops_the_bar_too():
+    payload = chart(
+        [1758585600],
+        {
+            "open": [float("inf")],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+            "volume": [1],
+        },
+    )
+    bars, _ = parse(payload)
+    assert bars == []

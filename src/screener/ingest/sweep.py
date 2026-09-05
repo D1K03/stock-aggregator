@@ -20,7 +20,7 @@ import psycopg
 
 from screener.ingest.load import BAR_FIELDS, Change
 from screener.ingest.parse import parse
-from screener.ingest.window import BACKFILL_START
+from screener.ingest.window import BACKFILL_START, settling_cutoff
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,11 @@ def run_sweep(
 ) -> SweepReport:
     report = SweepReport()
     counts: Counter[str] = Counter()
+    # Bars inside the settling window are *expected* to be revised (D5) and the
+    # nightly run absorbs them, so comparing them here would count normal
+    # settling as a correction and inflate the very number D8's decision hangs
+    # on. The question is whether Yahoo corrects bars it has already settled.
+    cutoff = settling_cutoff(today)
 
     for security_id, symbol in securities:
         # ChartClient.fetch already swallows httpx.HTTPError into a None return,
@@ -73,6 +78,10 @@ def run_sweep(
             existing = held.get(bar.trade_date)
             if existing is None:
                 # We simply do not hold it. That is a gap, not a correction.
+                continue
+            if bar.trade_date >= cutoff:
+                # Skipped before `compared` is incremented, so the denominator
+                # describes settled bars only.
                 continue
             report.compared += 1
             for name, old in zip(BAR_FIELDS, existing):

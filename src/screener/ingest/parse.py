@@ -40,7 +40,16 @@ def _decimal(value: object) -> Decimal | None:
         return None
     # str() first: Decimal(float) preserves the binary error rather than the
     # number the provider meant.
-    return Decimal(str(value))
+    number = Decimal(str(value))
+    if not number.is_finite():
+        # Python's json decoder accepts the bare `NaN` and `Infinity` tokens,
+        # `Decimal("NaN")` is a perfectly good Decimal, and Postgres `numeric`
+        # stores 'NaN' happily — so without this a NaN close lands in a
+        # not-null column and poisons every momentum metric derived from it.
+        # None, so the caller's null check drops the bar like any other
+        # unusable one.
+        return None
+    return number
 
 
 def parse(payload: bytes) -> tuple[list[Bar], list[Action]]:

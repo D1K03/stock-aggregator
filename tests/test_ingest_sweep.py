@@ -99,3 +99,64 @@ def test_one_symbol_raising_does_not_take_down_the_sweep(
     # The raising security is skipped; the other security's bar is still compared.
     assert report.compared == 1
     assert report.by_field == {}
+
+
+def _two_bars(first, second, volumes):
+    """A chart response carrying two bars. `chart_bytes` only makes one."""
+    import json
+    from datetime import datetime, timezone
+
+    def stamp(day):
+        return int(
+            datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp()
+        )
+
+    return json.dumps(
+        {
+            "chart": {
+                "result": [
+                    {
+                        "meta": {"currency": "USD"},
+                        "timestamp": [stamp(first), stamp(second)],
+                        "indicators": {
+                            "quote": [
+                                {
+                                    "open": [100.0, 100.0],
+                                    "high": [100.0, 100.0],
+                                    "low": [100.0, 100.0],
+                                    "close": [100.0, 100.0],
+                                    "volume": list(volumes),
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+    ).encode()
+
+
+def test_the_sweep_ignores_the_settling_window_and_counts_only_settled_bars(
+    fresh_db, ingest_ctx, FakeClient
+):
+    # D5 says bars inside the settling window are *expected* to be revised, and
+    # the nightly run absorbs them. Counting them here would inflate exactly the
+    # number D8's decision — whether `price_daily` becomes bitemporal — hangs on.
+    sid, obs = ingest_ctx
+    settled = date(2026, 5, 1)              # long outside the window
+    unsettled = date(2026, 9, 3)            # inside it: cutoff is 2026-08-29
+    for day in (settled, unsettled):
+        fresh_db.execute(
+            """insert into price_daily
+               (security_id, trade_date, open, high, low, close, volume,
+                observed_at, ingest_observation_id)
+               values (%s, %s, 100, 100, 100, 100, 10, now(), %s)""",
+            (sid, day, obs),
+        )
+
+    # Both held bars come back revised; only the settled one is a finding.
+    client = FakeClient({"AAA": _two_bars(settled, unsettled, (99, 99))})
+    report = run_sweep(fresh_db, client=client, today=TODAY, securities=[(sid, "AAA")])
+    assert report.compared == 1
+    assert report.by_field == {"volume": 1}
+    assert [change.on for change in report.mismatches] == [settled]

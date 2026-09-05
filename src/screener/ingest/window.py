@@ -55,6 +55,14 @@ def windows(
             held[security_id] = latest
     return {
         security_id: (
+            # `min`, not the `max` D4 of the spec writes. Taken literally the
+            # spec's formula is wrong at exactly the ordinary case: a security
+            # held to yesterday would start at *today*, the settling window
+            # would never be re-requested, and D5's upsert — the one path
+            # allowed to absorb Yahoo's revisions to recent sessions — would
+            # have nothing to work on. The window has to reach back to the
+            # earlier of "where we stopped" and "the settling cutoff". The
+            # spec carries an erratum note on D4 saying the same.
             min(held[security_id] + timedelta(days=1), cutoff)
             if security_id in held
             else BACKFILL_START
