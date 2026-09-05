@@ -108,6 +108,38 @@ each URL as an independent call, so there is no jar to keep.
 
 ---
 
+## The payload store
+
+`screener.blobs` — two verbs against one bucket.
+
+```python
+from screener.blobs import blob_path, store
+
+path = blob_path("yahoo", "chart", date.today(), security_id)
+store().put(path, gzip.compress(payload))
+```
+
+`BLOB_BACKEND=local` is a directory and what the test suite uses. `BLOB_BACKEND=s3`
+is Cloudflare R2, whose free tier covers this comfortably — prices are about
+1 GB a year across roughly 45,000 writes a month.
+
+SigV4 is hand-rolled in `blobs/sigv4.py` rather than pulled from `boto3`, which
+would add five packages and a third HTTP stack for two verbs. That is tractable
+only because the case is narrow: static credentials, one bucket, no session
+tokens, no presigning, no multipart. It is verified against AWS's published
+conformance vector.
+
+**Nothing here prunes, expires or deletes.** `ingest_observation.blob_path` is
+`not null` and every score has to trace back to a stored response, so a pruning
+job would make that a promise the database cannot keep. This is evidence, not
+cache.
+
+**Do not** reach for the `s3` backend in tests. `local` is the default and keeps
+the suite offline. R2 wants `auto` as its region, and clock skew on the box
+presents as a 403 rather than as a clock problem.
+
+---
+
 ## Speech to text
 
 `screener.transcribe` — faster-whisper on CPU, in a container of its own,
