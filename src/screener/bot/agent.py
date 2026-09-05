@@ -18,6 +18,7 @@ from typing import Any
 
 from screener.ai import AiError, converse
 from screener.ai.models import SOLAR
+from screener.bot import budget
 from screener.bot.tools import Chart, collecting, dispatch, specs
 from screener.audit import record
 from screener.config import env
@@ -233,6 +234,38 @@ async def respond(
     `actor` is the Discord user id, carried through only so the audit row can
     say who asked. `can_draw` says whether the caller can render a chart.
     """
+    # Checked before the model is called, not after: the point of a cap is
+    # that the request over it is never paid for. On a worker thread because it
+    # opens a database connection and this may be the gateway's event loop.
+    allowance = await asyncio.to_thread(budget.check, actor, actor_kind)
+    if not allowance.allowed:
+        logger.warning(
+            "%s/%s is over the daily cap: $%s of $%s",
+            actor_kind, actor, allowance.spent, allowance.cap,
+        )
+        await asyncio.to_thread(
+            record,
+            kind="agent",
+            operation=OPERATION,
+            actor=actor,
+            actor_kind=actor_kind,
+            outcome="refused",
+            detail={
+                "reason": "daily spend cap",
+                "spent_usd": float(allowance.spent),
+                "cap_usd": float(allowance.cap),
+                "surface": surface,
+            },
+        )
+        return Reply(
+            text=(
+                "That would go over the daily spend cap — "
+                f"{budget.usd(allowance.spent)} of {budget.usd(allowance.cap)} "
+                "used in the last 24 hours. It frees up as those charges age "
+                "out, or someone can raise DAILY_SPEND_CAP_USD."
+            )
+        )
+
     if not question.strip():
         return Reply(
             text=(

@@ -11,6 +11,7 @@ nothing here is a fact or a score, and the trail outlives the data it describes.
 from screener.audit.models import (
     KINDS, ActorKind, ActorSpend, Event, Kind, Outcome, Spend,
 )
+from screener.audit.people import Person, avatar, fold
 from screener.audit.reader import PAGE_SIZE, by_actor, operations, page, spend
 from screener.audit.writer import record
 
@@ -22,8 +23,11 @@ __all__ = [
     "Kind",
     "Outcome",
     "PAGE_SIZE",
+    "Person",
     "Spend",
+    "avatar",
     "by_actor",
+    "fold",
     "operations",
     "page",
     "record",

@@ -1035,11 +1035,18 @@ footer.site .prov {
 /* ---- spend by person ------------------------------------------------------ */
 .who { margin-top: calc(var(--sp) * 5); }
 .who h2 { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
+/* `.card` carries no padding of its own — its children pad themselves, so a
+   table can run edge to edge. These are not a table, so they pad to the same
+   inset `.card h2` uses; without it the avatars sat against the border and the
+   costs ran off the right edge. */
 .who-lede {
-  margin-top: 4px; font-size: 0.78rem; line-height: 1.5; color: var(--ink-muted);
-  max-width: 68ch;
+  margin-top: 4px; padding: 0 calc(var(--sp) * 5); max-width: 72ch;
+  font-size: 0.78rem; line-height: 1.5; color: var(--ink-muted);
 }
-.who-rows { margin-top: calc(var(--sp) * 4); display: grid; gap: calc(var(--sp) * 4); }
+.who-rows {
+  margin-top: calc(var(--sp) * 4); padding: 0 calc(var(--sp) * 5) calc(var(--sp) * 5);
+  display: grid; gap: calc(var(--sp) * 4);
+}
 .who-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .who-name { font-size: 0.9rem; font-weight: 600; display: flex; align-items: baseline; gap: 7px; }
 .who-name em {
@@ -1050,6 +1057,8 @@ footer.site .prov {
 .who-cost {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  /* Six decimal places at these prices; wrapping it would read as two numbers. */
+  white-space: nowrap; flex-shrink: 0;
 }
 .who-bar {
   margin-top: 7px; height: 7px; border-radius: 9999px; background: var(--paper);
@@ -1060,3 +1069,19 @@ footer.site .prov {
   background: linear-gradient(90deg, var(--copper), var(--amber-4));
 }
 .who-meta { margin-top: 6px; font-size: 0.73rem; color: var(--ink-muted); }
+
+/* Avatar and cap states on the spend panel. The bar changes colour rather than
+   only length, so "nearly out" is legible without reading the figure. */
+.who-head { align-items: center; }
+.who-pic {
+  width: 28px; height: 28px; border-radius: 9999px; flex-shrink: 0;
+  border: 1px solid var(--line); background: var(--paper); object-fit: cover;
+}
+.who-pic.as-initials {
+  display: grid; place-items: center; background: var(--ink-muted); color: #fff;
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; border: none;
+}
+.who-name { flex: 1; min-width: 0; flex-wrap: wrap; }
+.who-surface { opacity: 0.75; }
+.who-bar.near i { background: linear-gradient(90deg, var(--amber-4), var(--amber-5)); }
+.who-bar.spent i { background: var(--copper-deep); }

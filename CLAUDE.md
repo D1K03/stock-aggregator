@@ -117,6 +117,10 @@ nothing outside imports a submodule directly.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
   `/health` and `/ready` stay open because the container healthcheck and the
   deploy smoke test cannot hold a session; `/status` requires one.
+- `screener.bot.budget` — the daily spend cap, per person, from `DAILY_SPEND_CAP_USD`
+  (default $0.10). Checked before the model is called, folds Discord onto GitHub through
+  `DISCORD_USER_MAP` so it cannot be doubled by switching surface, and **fails open** when the
+  trail cannot be read — refusing everyone because Postgres blinked is the worse failure.
 - `screener.concept` — invented, schema-shaped sample data mirroring
   `web/lib/data.ts`, so the dashboard and the chart tool draw the same line. A
   test parses the TypeScript and fails when the two drift. Delete it when
