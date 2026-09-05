@@ -237,16 +237,31 @@ and nothing else. A role that was never granted `auth.session` cannot read it
 however the query is spelled — through a view, a CTE, a function, or a cast
 nobody thought of.
 
-**`skybird` is denied too, and that one is a feature rather than a precaution.**
-Steven's `sql` tool runs on this role, and he is deliberately built to start and
-stop captures without being able to read one back; a grant here would hand him
-that through the side door. `tests/test_playground.py` holds the deny list with
-the reason for each entry, so a future migration's tables have to be argued
-about before the suite is green again.
+**There are two roles, and they differ in one schema.** The console reads
+skybird — a transcript is worth querying — and Steven does not, because he is
+built to work a capture's controls and be unable to read one back. One role
+could not hold both, which is what migration 016 discovered by having to deny
+the schema to the console in order to deny it to the bot; 017 splits them.
+
+The split is a **credential, not a branch**. Neither role is chosen in Python:
+both processes read `PLAYGROUND_DATABASE_URL`, and compose gives the api
+container a URL for `playground` and the bot container one for
+`playground_bot`, each with its own password. A bug in the bot cannot reach the
+console's role because that credential is not in that process — which is the
+difference between an enforcement and a check, and why
+`PLAYGROUND_BOT_DB_PASSWORD` exists rather than one secret serving both.
+
+What stays shared is the engine, and so every bound: the timeouts, the row and
+cell caps, the single-statement rule and the named cursor are identical, because
+a SQL tool that answered differently depending on which surface asked is the
+failure the one-engine design exists to prevent.
+`tests/test_playground.py` holds the deny list with the reason for each entry,
+so a future migration's tables have to be argued about before the suite is
+green again.
 
 | | |
 |---|---|
-| Switch | `PLAYGROUND_DB_PASSWORD`. Unset means the role has no password, cannot log in, and the page reports itself off. |
+| Switch | `PLAYGROUND_DB_PASSWORD` for the page, `PLAYGROUND_BOT_DB_PASSWORD` for Steven's `sql` tool. Either unset means that role has no password, cannot log in, and its caller reports itself off — so the two switch off independently. |
 | Bounds | 10s statement timeout, 2s lock timeout, 500 rows, 4,000 characters of SQL, a per-cell and per-response character budget. |
 | Errors | Postgres's own message, with a caret. The only place this service shows a database message rather than an exception type. |
 

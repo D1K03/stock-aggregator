@@ -6,8 +6,10 @@ import signal
 import sys
 
 import discord
+import psycopg
 
 from screener.bot.config import BotConfig
+from screener.config import settings
 from screener.secrets import SecretsError, load_into_environ
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,46 @@ async def _serve(config: BotConfig) -> None:
 
     async with client:
         await client.start(config.token)
+
+
+def _check_database() -> bool:
+    """Say once, at boot, whether the database is reachable.
+
+    Not fatal, and deliberately not: the spend cap already fails open when the
+    trail cannot be read, on the grounds that refusing everyone because Postgres
+    blinked is the worse failure. Exiting here would be that same refusal moved
+    earlier.
+
+    What it is for is the difference between a blink and never having been
+    configured at all. Every database-backed thing this process does degrades
+    quietly -- the cap opens, memory comes back empty, the audit trail simply
+    has no Discord in it -- so a missing DATABASE_URL produced a bot that looked
+    entirely healthy while enforcing nothing and remembering nothing. One line
+    at startup is what makes that state legible, and `docker logs bot` is where
+    somebody would look.
+    """
+    try:
+        with psycopg.connect(
+            settings().database_url, connect_timeout=3
+        ) as conn:
+            conn.execute("select 1 from audit.event limit 1")
+    except RuntimeError:
+        # `settings()` raising is the misconfiguration case, and the only one
+        # worth naming the variable in.
+        logger.error(
+            "DATABASE_URL is not set: the spend cap will not be enforced, "
+            "Steven will not remember anything, nothing will reach the audit "
+            "trail, and the skybird tools will fail"
+        )
+        return False
+    except Exception as exc:
+        logger.error(
+            "cannot reach the database (%s): the spend cap will not be "
+            "enforced and Steven will not remember anything",
+            type(exc).__name__,
+        )
+        return False
+    return True
 
 
 class _NoVoiceWarning(logging.Filter):
@@ -69,6 +111,7 @@ def main() -> int:
     if not config.enabled:
         logger.error("DISCORD_BOT_TOKEN is not set; nothing to run")
         return 1
+    _check_database()
     if not config.allowed_user_ids:
         # Not fatal: the bot connects and refuses everyone, which is a safe
         # state and a legible one. Silently accepting everybody would not be.

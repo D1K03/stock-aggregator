@@ -152,12 +152,15 @@ nothing outside imports a submodule directly.
   the web container, which rasterises the same string to PNG for Discord. One renderer, so the
   two surfaces cannot drift — do not add a second way to draw a chart.
 - `screener.playground` — read-only SQL from the dashboard and from Steven's `sql` tool, over
-  one engine so the two cannot allow different things. **The enforcement is a Postgres role, not
+  one engine so the bounds cannot differ between them. **The enforcement is a Postgres role, not
   a check in Python**: the app connects as the cluster superuser, on which a SQL box would be
-  `pg_read_file` and `COPY FROM PROGRAM`, so queries go through `playground`, which holds `select`
-  on the tables listed in `migrations/013_playground.sql` and nothing else — not sign-in, not the
-  audit trail, and not skybird, which is what keeps Steven's `sql` tool from reading back a
-  transcript his own tools deliberately cannot reach. Every query goes through a *named* cursor, because psycopg uses the simple protocol
+  `pg_read_file` and `COPY FROM PROGRAM`, so queries go through a read-only role holding `select`
+  on the tables listed in `migrations/013_playground.sql` and nothing else — not sign-in and not
+  the audit trail. **Two roles, differing in one schema**: the dashboard connects as `playground`,
+  which can read skybird, and Steven as `playground_bot`, which cannot — he works a capture's
+  controls and cannot read a transcript back. Neither is chosen in Python; both processes read
+  `PLAYGROUND_DATABASE_URL` and compose hands them different ones, so the split is a credential
+  rather than a branch, and the bot container never holds the console's password. Every query goes through a *named* cursor, because psycopg uses the simple protocol
   when a query has no parameters and a plain execute would run `select 1; drop table security`.
   Unset `PLAYGROUND_DB_PASSWORD` is the off switch and the page says so.
 - `screener.reddit` — social ingest for the Sentiment pillar, in a container that wakes every

@@ -2,7 +2,12 @@
 
 from screener.config import env
 
+# The dashboard's console. Steven's `sql` tool connects as `playground_bot`,
+# which is this role minus the skybird schema -- see `017_a_role_for_steven.sql`.
+# Neither is chosen here: both processes read `PLAYGROUND_DATABASE_URL` and are
+# handed a different one, so the difference is a credential rather than a branch.
 ROLE = "playground"
+BOT_ROLE = "playground_bot"
 
 # What the page asks for when it does not say, and the ceiling it is clamped to.
 DEFAULT_ROWS = 200

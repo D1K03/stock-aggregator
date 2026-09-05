@@ -30,15 +30,17 @@ DENIED = {
     "auth.app_user": "who may sign in",
     "auth.session": "token_hash is authentication material",
     "audit.event": "identities, conversation transcripts and spend",
-    # Skybird, all three, and the argument is the same one `audit.event` loses
-    # on: a captured transcript is somebody's words, and `requested_by` is a
-    # GitHub login. It is also the deciding one — Steven's `sql` tool runs on
-    # this role, and he is deliberately built to start and stop captures without
-    # being able to read one back. A grant here would hand him that through the
-    # side door.
-    "skybird.platform": "the schema is denied whole, so its lookup table is too",
-    "skybird.stream_session": "requested_by is an identity",
-    "skybird.transcript_segment": "captured speech, and what Steven must not read",
+}
+
+# Denied to Steven and granted to the console, which is the one asymmetry
+# between the two roles and the reason there are two. Ellis wants transcripts
+# queryable on /playground; Steven is built to work skybird's controls and be
+# unable to read one back. One role cannot hold both, which is what 016
+# discovered the hard way and what 017 resolves.
+SKYBIRD = {
+    "skybird.platform",
+    "skybird.stream_session",
+    "skybird.transcript_segment",
 }
 
 
@@ -90,8 +92,22 @@ def playground(fresh_db, db_url, monkeypatch):
     is the thing that ships and not something that resembles it.
     """
     monkeypatch.setenv("PLAYGROUND_DB_PASSWORD", PASSWORD)
+    monkeypatch.setenv("PLAYGROUND_BOT_DB_PASSWORD", PASSWORD)
     ensure_password(fresh_db)
     url = make_conninfo(db_url, user="playground", password=PASSWORD)
+    monkeypatch.setenv("PLAYGROUND_DATABASE_URL", url)
+    return url
+
+
+@pytest.fixture
+def steven(playground, db_url, monkeypatch):
+    """The same engine, connecting as the role Steven's `sql` tool is given.
+
+    Built on `playground` rather than beside it, so the two differ by exactly
+    the variable a deployment differs by: same engine, same bounds, same
+    `PLAYGROUND_DATABASE_URL`, a different role behind it.
+    """
+    url = make_conninfo(db_url, user="playground_bot", password=PASSWORD)
     monkeypatch.setenv("PLAYGROUND_DATABASE_URL", url)
     return url
 
@@ -113,8 +129,8 @@ def test_the_playground_cannot_read_what_it_was_never_granted(playground, table)
     assert "permission denied" in refuse(f"select * from {table}").message
 
 
-def test_skybird_stays_denied_even_where_the_conditional_grant_fired(
-    playground, fresh_db
+def test_skybird_stays_denied_to_steven_even_where_the_conditional_grant_fired(
+    steven, fresh_db
 ):
     # The test above passes for skybird by accident of ordering. Migration 013
     # grants the schema when it already exists, and on a fresh database it does
@@ -126,17 +142,82 @@ def test_skybird_stays_denied_even_where_the_conditional_grant_fired(
     # Without this, whether Steven's `sql` tool can read a transcript depends on
     # the order two migrations happened to arrive in, which is not a thing
     # anyone would think to check.
-    fresh_db.execute("grant usage on schema skybird to playground")
-    fresh_db.execute("grant select on all tables in schema skybird to playground")
+    fresh_db.execute("grant usage on schema skybird to playground_bot")
+    fresh_db.execute("grant select on all tables in schema skybird to playground_bot")
     assert "permission denied" not in _tried("select * from skybird.stream_session")
 
-    revoke = MIGRATION.parent / "016_skybird_out_of_the_playground.sql"
-    for statement in revoke.read_text().split(";"):
-        if statement.strip() and not statement.strip().startswith("--"):
-            fresh_db.execute(statement)
+    fresh_db.execute("revoke select on all tables in schema skybird from playground_bot")
+    fresh_db.execute("revoke all on schema skybird from playground_bot")
 
     for table in ("platform", "stream_session", "transcript_segment"):
         assert "permission denied" in refuse(f"select * from skybird.{table}").message
+
+
+# -- two roles, one engine ---------------------------------------------------
+
+
+@pytest.mark.parametrize("table", sorted(SKYBIRD))
+def test_the_console_can_read_skybird(playground, table):
+    # What Ellis asked for: live transcripts queryable on /playground.
+    assert "permission denied" not in _tried(f"select * from {table}")
+
+
+@pytest.mark.parametrize("table", sorted(SKYBIRD))
+def test_steven_cannot_read_skybird(steven, table):
+    # And the constraint that has held since the tools were written: he starts,
+    # pauses and stops a capture and cannot read one back. Enforced twice over —
+    # there is no tool that returns transcript text, and the role his `sql` tool
+    # connects as holds no `usage` on the schema, so there is no spelling of a
+    # query that reaches it either.
+    assert "permission denied" in refuse(f"select * from {table}").message
+
+
+@pytest.mark.parametrize("table", sorted(DENIED))
+def test_steven_is_denied_everything_the_console_is(steven, table):
+    # The second role is the first one minus skybird, not a different idea
+    # about what a read-only console may see.
+    assert "permission denied" in refuse(f"select * from {table}").message
+
+
+def test_the_two_roles_agree_on_everything_else(playground, steven, db_url):
+    # The engine is shared and the bounds are the engine's, so the only thing
+    # two roles may differ on is which tables they can see. A second role that
+    # had quietly lost a grant on `security` would be a SQL tool that answers
+    # differently depending on which surface asked, which is the failure the
+    # single-engine design exists to prevent.
+    def visible(user: str) -> set[str]:
+        url = make_conninfo(db_url, user=user, password=PASSWORD)
+        with psycopg.connect(url) as conn:
+            rows = conn.execute(
+                """
+                select table_schema || '.' || table_name
+                from information_schema.role_table_grants
+                where grantee = current_user and privilege_type = 'SELECT'
+                """
+            ).fetchall()
+        return {r[0] for r in rows}
+
+    assert visible("playground") - visible("playground_bot") == SKYBIRD
+    assert visible("playground_bot") - visible("playground") == set()
+
+
+def test_steven_cannot_authenticate_as_the_console_role(steven, db_url):
+    # The split is a credential, not a branch, so it only holds while the two
+    # passwords differ. This is the test that fails if someone ever "simplifies"
+    # the deployment by pointing both roles at one secret.
+    #
+    # Here they are deliberately the same string, because a test fixture has to
+    # provision both. So this asserts the shape that keeps them apart in
+    # production instead: `tests/test_compose.py` is where the passwords are
+    # checked, and this is where the roles are proven to be genuinely two.
+    with psycopg.connect(
+        make_conninfo(db_url, user="playground_bot", password=PASSWORD)
+    ) as conn:
+        row = conn.execute("select current_user, usesuper from pg_user "
+                           "where usename = current_user").fetchone()
+    assert row is not None
+    assert row[0] == "playground_bot"
+    assert row[1] is False
 
 
 def _tried(sql: str) -> str:
@@ -323,7 +404,19 @@ def test_a_not_a_number_does_not_make_the_response_invalid_json(playground):
 
 
 def test_the_catalogue_lists_exactly_what_the_migration_grants(playground):
-    assert {f"{t.schema}.{t.name}" for t in catalog()} == granted_in_migration()
+    # The console's, so skybird is in it: the catalogue is the schema browser
+    # beside the editor, and a transcript you may query should be a transcript
+    # you can see the shape of.
+    listed = {f"{t.schema}.{t.name}" for t in catalog()}
+    assert listed == granted_in_migration() | SKYBIRD
+
+
+def test_the_catalogue_shows_steven_a_smaller_database(steven):
+    # The same call, the same code, one role along — and skybird is simply not
+    # there. He is not told it exists and refused; he cannot see it.
+    listed = {f"{t.schema}.{t.name}" for t in catalog()}
+    assert listed == granted_in_migration()
+    assert listed.isdisjoint(SKYBIRD)
 
 
 def test_the_catalogue_never_mentions_sign_in_or_the_audit_trail(playground):
@@ -356,7 +449,7 @@ def test_every_table_is_either_granted_or_deliberately_denied(playground, fresh_
           and n.nspname not like 'pg\\_%'
         """
     ).fetchall()
-    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED)
+    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | SKYBIRD
 
 
 # -- over HTTP ---------------------------------------------------------------
