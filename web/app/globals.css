@@ -1085,3 +1085,7 @@ footer.site .prov {
 .who-surface { opacity: 0.75; }
 .who-bar.near i { background: linear-gradient(90deg, var(--amber-4), var(--amber-5)); }
 .who-bar.spent i { background: var(--copper-deep); }
+
+/* The signed-in user's own GitHub picture, in place of their initials. Same
+   circle, so the rail does not shift when it loads or fails to. */
+.avatar.as-picture { background: var(--paper); object-fit: cover; }

@@ -100,6 +100,12 @@ def fold(
     return people
 
 
+# The pseudo-login `/auth/local` issues. Not a GitHub account — except that
+# somebody holds github.com/local-dev, so asking for their picture puts a
+# stranger's face on the spend panel during local development.
+LOCAL_LOGIN = "local-dev"
+
+
 def avatar(person: Person) -> str | None:
     """Their GitHub picture, or `None` when there is no GitHub identity.
 
@@ -108,4 +114,6 @@ def avatar(person: Person) -> str | None:
     browser tells GitHub who it is looking at; that is a dashboard listing
     GitHub logins, so it is not learning much.
     """
-    return f"https://github.com/{person.login}.png?size=80" if person.known else None
+    if not person.known or person.login == LOCAL_LOGIN:
+        return None
+    return f"https://github.com/{person.login}.png?size=80"
