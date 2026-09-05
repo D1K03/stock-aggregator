@@ -48,20 +48,63 @@ Two behaviours worth knowing before you write a source:
 `.attempts` records what was tried first — worth logging, because a run that
 quietly fell back to a proxy is a fact about the source.
 
+### When one session has to outlive the request
+
+`fetch()` builds a client per call, so anything whose authorisation lives in a
+cookie cannot use it: the jar is gone before the next request needs it. That is
+what `LanePool` is for.
+
+```python
+from screener.fetch import LanePool
+
+with LanePool.from_env(headers=BROWSER, timeout=25.0) as pool:
+    lane = pool.acquire()          # rotates on every call
+    response = lane.get(url)       # never raises on status
+```
+
+A **lane** is one client, one cookie jar, one exit address, held for the length
+of a run. A pool hands them out round-robin, so a long job leaves by every
+address the zone holds instead of piling onto one. `park(seconds)` takes a lane
+out of rotation after a 429 and `acquire()` skips it until it frees.
+
+Three things it deliberately is not. It is **not a strategy** — it does not
+appear in the table above and `fetch()` cannot reach it. It is **not
+concurrency**: a lane changes which address a request leaves by, never how many
+are in flight, and callers stay sequential. And it is **not a rate limiter** —
+the pool never sleeps and never retries, so the waiting and the numbers stay
+with the caller, which is where D6 puts them.
+
+Yahoo is the only caller today, through `screener.universe.sources.yahoo`.
+
 ### Bright Data specifically
 
 An ISP proxy zone with **four UK exit IPs**, on a flat monthly plan that a
 sibling project already pays for. That is the whole reason it is available here:
 the marginal cost of *having* it is zero.
 
-Each request draws a fresh session, which is how a different exit IP is
-selected. With four addresses that rotation is real; the self-test asserts the
-proxied exit IP differs from the box's own, and fails if it does not.
+There are two ways to reach them, and they are not interchangeable. `isp_proxy`
+draws a **fresh random session per request**, which is right for a one-off
+request that got blocked — but it is a draw, not a rotation: twelve draws
+against the live zone came back 5/3/2/2 across the four addresses. `LanePool`
+**pins** one lane per address with an `-ip-` flag, which is the only way to get
+four addresses used evenly, and the only form that can hold a cookie. Set
+`BRIGHTDATA_PROXY_IPS` to the addresses; leave it unset and there are no lanes.
+
+The self-test checks both: that a proxied exit differs from the box's own, and
+that the configured lanes differ **from each other** — four lanes quietly
+sharing one address is billed, looks healthy, and spreads nothing.
 
 **Do not** reach for it because a source is slow, or intermittently 500s, or
-because you are not sure. Reach for it when you have seen a block. The Web
-Unlocker is a separate product billed per successful request and should be
-treated as spending money every time it runs.
+because you are not sure. Reach for it when you have seen a block — with one
+exception, written down because it is an exception. Yahoo starts on the lanes
+rather than falling back to them, since a night's ingest is ~3,000 requests off
+a single VPS address and a pinned lane measured 1.07x direct latency, so
+spreading them costs about twenty seconds. Clearing `BRIGHTDATA_PROXY_IPS` is
+how that is switched off.
+
+The Web Unlocker is a separate product billed per successful request and should
+be treated as spending money every time it runs. It cannot be a lane: it POSTs
+each URL as an independent call, so there is no jar to keep.
 
 ---
 
@@ -218,8 +261,9 @@ docker compose --env-file .env -f deploy/compose.prod.yaml \
 ```
 
 One line per integration: database and migration count, build SHA, a direct
-fetch, a proxied fetch **and whether its exit IP actually differs**, OpenRouter,
-the Discord webhook, and the bot token. Anything unconfigured reports `SKIP`,
+fetch, a proxied fetch **and whether its exit IP actually differs**, the
+configured lanes **and whether they differ from each other**, OpenRouter, the
+Discord webhook, and the bot token. Anything unconfigured reports `SKIP`,
 because switched-off is the expected state for most of it.
 
 It posts nothing. Nothing in this project has a consumer yet, so this command is

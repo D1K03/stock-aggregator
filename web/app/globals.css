@@ -897,7 +897,11 @@ footer.site .prov {
   padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
 }
 .stv-turn.steven { color: var(--ink); }
-.stv-line .cchart { max-width: 620px; width: 100%; border-radius: 14px; }
+/* Wider than the 360px the card is drawn at, and wider than the palette shows
+   it: the conversation column is 880px and a chart is the one thing in it worth
+   reading closely, so it takes most of that rather than sitting in the middle of
+   its own whitespace. The SVG scales, so this costs no sharpness. */
+.stv-line .cchart { max-width: 760px; width: 100%; border-radius: 14px; }
 .stv-thinking {
   display: flex; align-items: center; gap: 9px;
   font-size: 0.86rem; color: var(--ink-muted);
@@ -934,7 +938,17 @@ footer.site .prov {
 .stv-send:disabled { opacity: 0.28; cursor: default; }
 
 .stv-skills { display: flex; flex-wrap: wrap; gap: 6px; }
-.stv-skills.row { max-width: 880px; margin: 10px auto 0; }
+
+/* Under the composer: suggestions on the left, the way out to Discord on the
+   right. Its own strip rather than another chip in the row, because it does not
+   continue the conversation here, it takes it somewhere else. Aligned to the
+   top so the handoff stays put when the suggestions wrap to a second line. */
+.stv-next {
+  display: flex; align-items: flex-start; gap: 10px;
+  max-width: 880px; margin: 10px auto 0;
+}
+.stv-next .stv-skills { flex: 1; min-width: 0; }
+.stv-next .chip-discord { flex-shrink: 0; padding: 6px 12px; font-size: 0.76rem; }
 .stv-skills button {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 9999px;
   background: var(--card); color: var(--ink-muted); font: inherit; font-size: 0.76rem;
@@ -947,7 +961,7 @@ footer.site .prov {
 @media (max-width: 900px) {
   .stv { padding: calc(var(--sp) * 2); }
   .stv-chats { display: none; }
-  .stv-inner, .stv-composer-inner, .stv-skills.row { max-width: 100%; }
+  .stv-inner, .stv-composer-inner, .stv-next { max-width: 100%; }
   .stv-inner { padding-inline: calc(var(--sp) * 4); }
   .stv-composer { padding-inline: calc(var(--sp) * 4); }
 }

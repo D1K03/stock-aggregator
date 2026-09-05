@@ -89,3 +89,41 @@ def test_a_username_that_already_pins_a_session_is_left_alone(monkeypatch):
     assert ProxyConfig.from_env().proxy_url(session="beef") == (
         "http://user-session-fixed:pass@host:1"
     )
+
+
+def test_an_exit_ip_is_pinned_on_the_username_alongside_a_session(monkeypatch):
+    # -ip- names one address out of the zone's allocation; -session- only draws
+    # from it. They ride the same username and must not collide.
+    monkeypatch.setenv("BRIGHTDATA_PROXY", "host:1:user:pass")
+    assert ProxyConfig.from_env().proxy_url(session="beef", exit_ip="1.2.3.4") == (
+        "http://user-ip-1.2.3.4-session-beef:pass@host:1"
+    )
+
+
+def test_a_username_that_already_pins_an_exit_is_left_alone(monkeypatch):
+    monkeypatch.setenv("BRIGHTDATA_PROXY", "host:1:user-ip-9.9.9.9:pass")
+    assert ProxyConfig.from_env().proxy_url(exit_ip="1.2.3.4") == (
+        "http://user-ip-9.9.9.9:pass@host:1"
+    )
+
+
+def test_each_configured_exit_becomes_its_own_named_lane(monkeypatch):
+    monkeypatch.setenv("BRIGHTDATA_PROXY", "host:1:user:pass")
+    monkeypatch.setenv("BRIGHTDATA_PROXY_IPS", "1.1.1.1, 2.2.2.2 ,3.3.3.3")
+    assert ProxyConfig.from_env().lane_urls() == (
+        ("lane-1", "http://user-ip-1.1.1.1:pass@host:1"),
+        ("lane-2", "http://user-ip-2.2.2.2:pass@host:1"),
+        ("lane-3", "http://user-ip-3.3.3.3:pass@host:1"),
+    )
+
+
+def test_lanes_are_empty_without_addresses_and_without_credentials(monkeypatch):
+    # Two ways to be unconfigured, and both have to read as "no lanes" rather
+    # than as one lane pointing at nothing.
+    monkeypatch.setenv("BRIGHTDATA_PROXY", "host:1:user:pass")
+    monkeypatch.delenv("BRIGHTDATA_PROXY_IPS", raising=False)
+    assert ProxyConfig.from_env().lane_urls() == ()
+
+    monkeypatch.delenv("BRIGHTDATA_PROXY", raising=False)
+    monkeypatch.setenv("BRIGHTDATA_PROXY_IPS", "1.1.1.1")
+    assert ProxyConfig.from_env().lane_urls() == ()

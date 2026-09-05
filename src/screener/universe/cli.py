@@ -11,8 +11,10 @@ import logging
 from datetime import date
 from pathlib import Path
 
+from screener.fetch import LanePool
 from screener.universe.load import DepartureCeilingExceeded, load
 from screener.universe.refresh import refresh
+from screener.universe.sources.yahoo import BROWSER, TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="load: date to stamp changes with (default: today)")
     parser.add_argument("--delay", type=float, default=0.0,
                         help="refresh: seconds to pause between symbols")
+    parser.add_argument("--no-proxy", action="store_true",
+                        help="refresh: one direct lane, ignoring BRIGHTDATA_PROXY_IPS")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.command == "refresh":
-        report = refresh(args.data_dir, delay=args.delay)
+        # Yahoo starts on the proxy, so the flag is the way out rather than the
+        # way in. `LanePool.direct()` reads no credentials at all, which is why
+        # it is built here instead of unsetting something.
+        lanes = LanePool.direct(headers=BROWSER, timeout=TIMEOUT) if args.no_proxy else None
+        report = refresh(args.data_dir, delay=args.delay, lanes=lanes)
         logger.info("refresh: %d written, %d unresolved", report.written, report.unresolved)
         return 0
 

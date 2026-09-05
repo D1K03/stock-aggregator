@@ -15,6 +15,7 @@ from typing import Protocol
 
 import httpx
 
+from screener.fetch import LanePool
 from screener.universe.rows import UniverseRow, write_rows
 from screener.universe.sources.sec import cik_by_symbol
 from screener.universe.sources.wikipedia import constituents
@@ -44,6 +45,7 @@ def refresh(
     delay: float = 0.0,
     client: ProfileSource | None = None,
     sleep: Callable[[float], None] | None = None,
+    lanes: LanePool | None = None,
 ) -> RefreshReport:
     """Write `universe.csv` and `universe-unresolved.csv` into `out_dir`.
 
@@ -56,7 +58,7 @@ def refresh(
     # Only a client we opened is ours to close; a caller's is the caller's.
     owned: YahooClient | None = None
     if client is None:
-        owned = YahooClient(transport=transport)
+        owned = YahooClient(transport=transport, lanes=lanes)
         yahoo: ProfileSource = owned
     else:
         yahoo = client

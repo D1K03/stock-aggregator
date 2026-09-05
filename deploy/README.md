@@ -88,18 +88,32 @@ forward with a fix instead.
 ```bash
 docker compose --env-file .env \
   -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml \
-  exec -T app python -m screener.boot selftest
+  exec -T api python -m screener.boot selftest
 ```
 
 This exercises each integration against the real world and reports one line
 each: the database and its migration count, the build SHA, a direct fetch, a
-proxied fetch and whether its exit IP actually differs from the direct one,
-and an OpenRouter round trip with its cost. Anything unconfigured reports
+proxied fetch and whether its exit IP actually differs from the direct one, the
+configured exit lanes and whether they differ from each other, and an OpenRouter
+round trip with its cost. Anything unconfigured reports
 `SKIP` rather than failing, because switched-off is the expected state for
 most of it.
 
 It does not post to Discord. Sending a message into a real channel is an
 outward-facing action, and a self-test should not make one.
+
+### Turning the Yahoo exit lanes on
+
+`BRIGHTDATA_PROXY_IPS` in Infisical, comma separated, one address per lane. It
+is the only Bright Data setting that changes behaviour by existing: with it set,
+Yahoo's requests are spread across those addresses, and with it unset they go out
+from the box. Nothing else needs changing, and the containers pick it up on their
+next start.
+
+Set it, restart, then run the self-test: `fetch lanes` reports one line naming
+every distinct exit it saw, and fails if two lanes share an address or if one
+comes out of the box's own. That failing is the whole point of the check, because
+lanes quietly sharing an exit are billed, look healthy and spread nothing.
 
 Nothing in the infrastructure layer has a consumer yet — ingest, scoring and
 alerting are all unwritten — so this command is the only thing that would
