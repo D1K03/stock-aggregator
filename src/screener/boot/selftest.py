@@ -216,6 +216,33 @@ def _reddit() -> Check:
     return Check("reddit", FAIL if hours > 24 else OK, detail)
 
 
+
+def _playground() -> Check:
+    """Whether the read-only role is reachable, and that it is not privileged.
+
+    The privilege half is the point. Nothing stops someone setting
+    `PLAYGROUND_DATABASE_URL` to the application's own connection, and every
+    test would still pass because the tests build their own — so this is the
+    check that would notice a SQL console wired to the superuser.
+    """
+    from screener import playground
+
+    if not playground.enabled():
+        return Check("playground", SKIP, "PLAYGROUND_DATABASE_URL is not set")
+    try:
+        tables = playground.catalog()
+    except playground.Misconfigured as exc:
+        return Check("playground", FAIL, str(exc))
+    except Exception as exc:
+        return Check("playground", FAIL, f"{type(exc).__name__}: {exc}")
+    schemas = sorted({t.schema for t in tables})
+    return Check(
+        "playground",
+        OK,
+        f"{len(tables)} readable table(s) across {', '.join(schemas) or 'nothing'}",
+    )
+
+
 def _safe(name: str, check: Callable[[], Check]) -> Check:
     """Run one check, turning any unexpected exception into a FAIL.
 
@@ -290,6 +317,7 @@ def run() -> bool:
         _safe("discord", _discord),
         _safe("discord bot", _bot),
         _safe("reddit", _reddit),
+        _safe("playground", _playground),
     ]
 
     width = max(len(c.name) for c in results)

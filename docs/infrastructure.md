@@ -191,6 +191,38 @@ same table backs Steven's memory.
 
 ---
 
+## The playground
+
+`screener.playground` — read-only SQL over the tables a second Postgres role is
+allowed to see. One engine behind two callers: the `/playground` page and
+Steven's `sql` tool.
+
+**The role is the enforcement.** The application connects as `screener`, which
+on this deployment is the cluster superuser: `pg_read_file` returns on it, and
+`COPY FROM PROGRAM` is remote code execution. So the console connects as
+`playground` instead, which holds `select` on the tables named in migration 013
+and nothing else. A role that was never granted `auth.session` cannot read it
+however the query is spelled — through a view, a CTE, a function, or a cast
+nobody thought of.
+
+| | |
+|---|---|
+| Switch | `PLAYGROUND_DB_PASSWORD`. Unset means the role has no password, cannot log in, and the page reports itself off. |
+| Bounds | 10s statement timeout, 2s lock timeout, 500 rows, 4,000 characters of SQL, a per-cell and per-response character budget. |
+| Errors | Postgres's own message, with a caret. The only place this service shows a database message rather than an exception type. |
+
+**Do not** add an application-level SQL allowlist, regex or parser beside it.
+That is the thing the role replaces, and having both means the weaker one gets
+trusted. **Do not** point `PLAYGROUND_DATABASE_URL` at the application's own
+connection; the engine checks and refuses, and the self-test reports it.
+
+Exposing a new table costs a line in migration 013 and a line in
+`tests/test_playground.py`, which is deliberate: a test asserts every table is
+either granted or explicitly denied, so a future migration cannot quietly add
+one to a SQL console.
+
+---
+
 ## Ingress: the Cloudflare Tunnel
 
 `cloudflared` runs in the stack and **dials outward**. Nothing listens on the
@@ -346,8 +378,8 @@ docker compose --env-file .env -f deploy/compose.prod.yaml \
 One line per integration: database and migration count, build SHA, a direct
 fetch, a proxied fetch **and whether its exit IP actually differs**, the
 configured lanes **and whether they differ from each other**, OpenRouter, the
-Discord webhook, the bot token, and the social mirror **and how far behind it
-is** — freshness rather than reachability, because a mirror that has quietly
+Discord webhook, the bot token, the social mirror **and how far behind it
+is**, and the playground role **and that it is not a privileged one** — freshness rather than reachability, because a mirror that has quietly
 stopped keeping up still answers. Anything unconfigured reports `SKIP`,
 because switched-off is the expected state for most of it.
 

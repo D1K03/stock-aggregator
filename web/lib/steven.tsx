@@ -158,6 +158,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
             // as data and re-rendered from history rather than rebuilt from
             // text.
             charts: body.charts ?? [],
+            rows: body.rows ?? [],
           },
         ]);
       } catch {

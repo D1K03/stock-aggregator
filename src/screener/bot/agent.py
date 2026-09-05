@@ -29,7 +29,7 @@ import psycopg
 from screener.ai import AiError, converse
 from screener.ai.models import SOLAR
 from screener.bot import budget
-from screener.bot.tools import Chart, collecting, dispatch, specs
+from screener.bot.tools import Chart, Rows, collecting, collecting_rows, dispatch, specs
 from screener.audit import recent_turns, record
 from screener.config import env, settings
 from screener.provenance import git_sha
@@ -86,6 +86,8 @@ Style. A colleague in chat, not a support desk. Casual, contractions fine, a sen
 
 For a ticker's history, high, low, biggest surge or drop, or a crossing: call `chart` with that mark. Where it draws, the point is marked and dated for them, so answer in one sentence rather than listing figures.
 
+For anything actually in the database — counts, dates, stored rows — call `sql` with one SELECT. Read-only, and it cannot see sign-in or the audit trail.
+
 Asked what you can do or have access to, name your tools and what they report. You have no others.
 
 If asked: percentiles are sector-relative; pillars are valuation, quality, momentum, sentiment, insider; alerts fire on a threshold crossing, not a state; every score traces to its raw inputs."""
@@ -116,6 +118,9 @@ class Reply:
     cost_usd: float = 0.0
     tools: tuple[ToolRun, ...] = field(default_factory=tuple)
     charts: tuple[Chart, ...] = field(default_factory=tuple)
+    # Result sets, same idea and for the same reason: they never entered the
+    # conversation, so they cost nothing per round.
+    rows: tuple[Rows, ...] = field(default_factory=tuple)
 
 
 def agent_model() -> str:
@@ -156,6 +161,7 @@ def _think(
     question: str,
     context: str = "",
     can_draw: bool = False,
+    can_table: bool = False,
     history: Sequence[tuple[str, str]] = (),
 ) -> Reply:
     """Run the tool loop and return (reply, tokens, cost).
@@ -168,7 +174,8 @@ def _think(
     only part of this prompt that grows with use — which is why what goes in it
     is capped in count, in age and in length rather than trimmed later.
 
-    `can_draw` says whether the caller can render a chart. Discord cannot, and
+    `can_draw` says whether the caller can render a chart, and `can_table`
+    whether it can render a result set. Discord can do neither, and
     a tool that announced one anyway would have Steven point at something that
     is not there.
     """
@@ -203,14 +210,15 @@ def _think(
 
     # One code path either way: with `can_draw` false the context collects
     # nothing and the tool sees that, so no chart is drawn and none is claimed.
-    with collecting(can_draw) as drawn:
-        return _rounds(messages, used_tools, drawn, tokens, cost)
+    with collecting(can_draw) as drawn, collecting_rows(can_table) as selected:
+        return _rounds(messages, used_tools, drawn, selected, tokens, cost)
 
 
 def _rounds(
     messages: list[dict[str, Any]],
     used_tools: list[ToolRun],
     drawn: list[Chart],
+    selected: list[Rows],
     tokens: int,
     cost: float,
 ) -> Reply:
@@ -232,6 +240,7 @@ def _rounds(
                 cost_usd=cost,
                 tools=tuple(used_tools),
                 charts=tuple(drawn),
+                rows=tuple(selected),
             )
 
         # The assistant turn goes back verbatim: a rebuilt one loses fields the
@@ -257,6 +266,7 @@ def _rounds(
         cost_usd=cost,
         tools=tuple(used_tools),
         charts=tuple(drawn),
+        rows=tuple(selected),
     )
 
 
@@ -278,6 +288,7 @@ async def respond(
     surface: str = "discord",
     context: str = "",
     can_draw: bool = False,
+    can_table: bool = False,
     fresh: bool = False,
     voice: bool = False,
     allowance: budget.Budget | None = None,
@@ -360,7 +371,9 @@ async def respond(
 
     started = time.perf_counter()
     try:
-        reply = await asyncio.to_thread(_think, question, context, can_draw, history)
+        reply = await asyncio.to_thread(
+            _think, question, context, can_draw, can_table, history
+        )
     except AiError as exc:
         logger.warning("agent reply failed: %s", exc)
         await asyncio.to_thread(

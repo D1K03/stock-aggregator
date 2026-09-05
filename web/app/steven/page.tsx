@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import ChatChart from "@/components/ChatChart";
+import ChatRows from "@/components/ChatRows";
 import DiscordHandoff from "@/components/DiscordHandoff";
 import MicButton from "@/components/MicButton";
 import Orb, { OrbState } from "@/components/Orb";
@@ -143,6 +144,9 @@ export default function StevenPage() {
                       </div>
                       {turn.charts?.map((spec, c) => (
                         <ChatChart key={`${i}-${c}`} spec={spec} />
+                      ))}
+                      {turn.rows?.map((spec, c) => (
+                        <ChatRows key={`r${i}-${c}`} spec={spec} />
                       ))}
                     </motion.div>
                   ))}

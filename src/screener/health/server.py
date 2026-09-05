@@ -44,6 +44,10 @@ MAX_QUESTION = 500
 # filters, short of anything that could bloat every request.
 MAX_CONTEXT = 400
 
+# A pasted analytical query with a couple of CTEs, comfortably. Bounded on the
+# Content-Length so an oversized one is refused before any of it is read.
+MAX_SQL_BODY = 4_500
+
 # A recording, bounded like the question above and for the same reason, one size
 # class up. Two minutes of Opus at the bitrate the browser is told to use is
 # comfortably under this.
@@ -183,6 +187,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if route == "/api/transcribe":
             self._transcribe(config)
+        elif route == "/api/playground/query":
+            self._playground_query(config)
         else:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -265,6 +271,164 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._respond(HTTPStatus.OK, {"text": spoken.text, "seconds": spoken.seconds})
 
+    def _playground(self, config: AuthConfig) -> None:
+        """What the read-only role may read, and the bounds it runs under.
+
+        Behind the session like everything else here. Switched off is a 200
+        saying so rather than an error: a feature deliberately not configured on
+        this deployment should render a card explaining that, not a red box
+        saying the server broke.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        from screener import playground
+
+        if not playground.enabled():
+            self._respond(
+                HTTPStatus.OK,
+                {
+                    "enabled": False,
+                    "schemas": [],
+                    "reason": "no read-only database role is configured on this deployment",
+                },
+            )
+            return
+
+        try:
+            tables = playground.catalog()
+        except Exception as exc:
+            logger.warning("could not read the playground catalogue: %s", exc)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {
+                    "error": "cannot reach the playground database",
+                    "database": type(exc).__name__,
+                },
+            )
+            return
+
+        schemas: dict[str, list[dict[str, Any]]] = {}
+        for table in tables:
+            schemas.setdefault(table.schema, []).append(
+                {
+                    "name": table.name,
+                    "kind": table.kind,
+                    "columns": [
+                        {"name": c.name, "type": c.type, "nullable": c.nullable}
+                        for c in table.columns
+                    ],
+                }
+            )
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "enabled": True,
+                "schemas": [
+                    {"name": name, "tables": tables_}
+                    for name, tables_ in sorted(schemas.items())
+                ],
+                "limits": {
+                    "max_rows": playground.MAX_ROWS,
+                    "default_rows": playground.DEFAULT_ROWS,
+                    "max_sql": playground.MAX_SQL,
+                    "timeout_ms": playground.STATEMENT_TIMEOUT_MS,
+                },
+            },
+        )
+
+    def _playground_query(self, config: AuthConfig) -> None:
+        """Run one read-only query.
+
+        A POST rather than a GET, which inverts this server's usual reasoning
+        for a reason: `_ask` uses a query string because a question is a short
+        string, and a pasted analytical query is routinely past the practical
+        URL length. A query in a URL also lands in access logs and browser
+        history, and the audit trail is the right place for it.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        body = self._read_body(MAX_SQL_BODY)
+        if body is None:
+            return
+        try:
+            payload = json.loads(body)
+            statement = str(payload["sql"])
+            limit = int(payload.get("limit") or 0)
+        except Exception:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "expected {\"sql\": ...}"})
+            return
+
+        from screener import playground
+
+        try:
+            result = playground.run(statement, limit or playground.DEFAULT_ROWS)
+        except playground.QueryError as exc:
+            # The one place this service returns a database message rather than
+            # an exception type. It is about SQL the reader just typed, and
+            # "UndefinedColumn" with no position is a riddle.
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                {
+                    "error": exc.message,
+                    "sqlstate": exc.sqlstate,
+                    "position": exc.position,
+                    "detail": exc.detail,
+                    "hint": exc.hint,
+                },
+            )
+            return
+        except playground.NotConfigured:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "the playground is not configured on this deployment"},
+            )
+            return
+        except Exception as exc:
+            logger.warning("playground query failed: %s", type(exc).__name__)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {
+                    "error": "cannot reach the playground database",
+                    "database": type(exc).__name__,
+                },
+            )
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                # Arrays rather than objects: `select 1 as a, 2 as a` is legal
+                # SQL, and an object would silently lose a column.
+                "columns": [{"name": c.name, "type": c.type} for c in result.columns],
+                "rows": [list(row) for row in result.rows],
+                "row_count": result.row_count,
+                "truncated": result.truncated,
+                "shortened": result.shortened,
+                "ms": result.ms,
+                "limit": result.limit,
+            },
+        )
+
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         route, query = parsed.path, urllib.parse.parse_qs(parsed.query)
@@ -324,6 +488,9 @@ class Handler(BaseHTTPRequestHandler):
 
         elif route == "/api/audit":
             self._audit(config, query)
+
+        elif route == "/api/playground":
+            self._playground(config)
 
         elif route == "/status":
             try:
@@ -435,6 +602,7 @@ class Handler(BaseHTTPRequestHandler):
                     # allowed to draw one. Discord gets the same agent with
                     # this off.
                     can_draw=True,
+                    can_table=True,
                 )
             )
         except Exception as exc:
@@ -451,6 +619,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Drawn by a tool and passed straight through. None of this was
                 # in the conversation, so none of it was paid for per round.
                 "charts": [c.payload() for c in reply.charts],
+                "rows": [r.payload() for r in reply.rows],
             },
         )
 

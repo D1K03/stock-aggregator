@@ -362,6 +362,8 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         # checked only by a test of its own would be one list away from being
         # the route nobody checked.
         ("/api/transcribe", b"not audio"),
+        ("/api/playground", None),
+        ("/api/playground/query", b'{"sql":"select 1"}'),
     ],
 )
 def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path, data):

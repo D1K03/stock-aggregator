@@ -80,6 +80,12 @@ services:
       INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      # The read-only role the playground connects as. One variable is the whole
+      # switch: `:+` expands to nothing when the password is unset, and the app
+      # already treats an empty variable as absent, so leaving it out means the
+      # role has no password, cannot log in, and the page says it is off.
+      PLAYGROUND_DB_PASSWORD: ${PLAYGROUND_DB_PASSWORD:-}
+      PLAYGROUND_DATABASE_URL: ${PLAYGROUND_DB_PASSWORD:+postgresql://playground:${PLAYGROUND_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-screener}}
 
     healthcheck:
       # /health, not /ready: a readiness probe here would restart a perfectly

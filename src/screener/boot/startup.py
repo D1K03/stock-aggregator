@@ -12,6 +12,7 @@ from screener.config import settings
 from screener.health import serve
 from screener.migrate import apply_migrations
 from screener.partitions import ensure_partitions
+from screener.playground import ensure_password
 from screener.secrets import SecretsError, load_into_environ
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,15 @@ def prepare_database() -> None:
             logger.info(
                 "partitions: %s", ", ".join(created) if created else "already current"
             )
+            # The read-only role for the playground, given its password from the
+            # environment. Wrapped because a failure here should not stop the
+            # process serving: refusing /health because a SQL console could not
+            # be provisioned is the wrong trade, and an unset password simply
+            # means the playground is switched off.
+            try:
+                ensure_password(conn)
+            except Exception as exc:
+                logger.warning("could not provision the playground role: %s", exc)
         finally:
             conn.execute("select pg_advisory_unlock(%s)", (MIGRATION_LOCK_ID,))
 
