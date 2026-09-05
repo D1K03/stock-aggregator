@@ -133,7 +133,14 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
         const seeing = describe(context);
         const response = await fetch(
           `${BASE}/api/ask?q=${encodeURIComponent(question)}` +
-            (seeing ? `&context=${encodeURIComponent(seeing)}` : ""),
+            (seeing ? `&context=${encodeURIComponent(seeing)}` : "") +
+            /* Steven remembers the last couple of exchanges, read back per
+               person on the server rather than sent up with every question —
+               so it also survives the walk over to Discord. The one thing the
+               server cannot know is which conversation this is, so an empty
+               transcript says so and New chat clears his memory as well as the
+               screen. */
+            (turns.length === 0 ? "&fresh=1" : ""),
           { credentials: "include", cache: "no-store" }
         );
         const body = await response.json();
@@ -161,7 +168,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => setSettling(false), 2600);
       }
     },
-    [thinking, context, chime]
+    [thinking, context, chime, turns.length]
   );
 
   const newChat = useCallback(() => {

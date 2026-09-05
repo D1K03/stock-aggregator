@@ -13,8 +13,8 @@ from screener.audit.models import (
 )
 from screener.audit.people import Person, avatar, fold
 from screener.audit.reader import (
-    HANDOFF_WINDOW_MINUTES, PAGE_SIZE, by_actor, last_handoff_context, operations,
-    page, spend,
+    HANDOFF_WINDOW_MINUTES, MEMORY_EXCHANGES, MEMORY_WINDOW_MINUTES, PAGE_SIZE,
+    by_actor, last_handoff_context, operations, page, recent_turns, spend,
 )
 from screener.audit.writer import record
 
@@ -25,6 +25,8 @@ __all__ = [
     "Event",
     "KINDS",
     "Kind",
+    "MEMORY_EXCHANGES",
+    "MEMORY_WINDOW_MINUTES",
     "Outcome",
     "PAGE_SIZE",
     "Person",
@@ -35,6 +37,7 @@ __all__ = [
     "last_handoff_context",
     "operations",
     "page",
+    "recent_turns",
     "record",
     "spend",
 ]
