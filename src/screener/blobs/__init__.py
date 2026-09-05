@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Protocol
 
 from screener.blobs.config import BlobConfig
-from screener.blobs.local import BlobWriteFailed, LocalStore
+from screener.blobs.errors import BlobWriteFailed
+from screener.blobs.local import LocalStore
 from screener.blobs.paths import blob_path, check
 
 
