@@ -12,9 +12,10 @@ the schema, the pipeline and CI/CD.
 
 ## Status
 
-The database schema and the infrastructure layer are built and tested; no ingest, scoring or
-alerting code exists yet. Runtime dependencies are `psycopg` and `httpx`, and nothing else —
-check `pyproject.toml` before assuming a library is available.
+The database schema, the infrastructure layer and daily **price** ingest are built and tested;
+fundamentals are the next ingest cycle, and no scoring or alerting code exists yet. Runtime
+dependencies are `psycopg` and `httpx`, and nothing else — check `pyproject.toml` before
+assuming a library is available.
 
 ## What it does
 

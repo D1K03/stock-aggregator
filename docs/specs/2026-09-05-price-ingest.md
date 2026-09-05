@@ -76,6 +76,14 @@ select security_id, max(trade_date) from price_daily group by security_id
 
 Then `start = max(held + 1 day, today − settling window)`, and **no rows at all → 2020-01-01**.
 
+> **Erratum (2026-09-05, added during the branch review).** That formula should read
+> `min`, not `max`, and the code implements `min`. With `max`, a security held to
+> yesterday would start at *today*: the settling window would never be re-requested,
+> and D5's upsert — the one path permitted to absorb Yahoo's revisions to recent
+> sessions — would have nothing to work on. The window has to reach back to the
+> *earlier* of "where we stopped" and "the settling cutoff". The decision itself is
+> unchanged; only the formula was written the wrong way round.
+
 Deriving it from the last successful `ingest_run` instead was the original design and is wrong at
 the edges: failures are per ticker but a run's status is per run, so a `partial` night leaves
 some securities behind and a run-level window never returns for them. Three properties fall out
