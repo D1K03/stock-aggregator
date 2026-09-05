@@ -24,7 +24,9 @@ def store(config: BlobConfig | None = None) -> BlobStore:
     if config.backend == "local":
         return LocalStore(Path(config.local_dir))
     if config.backend == "s3":
-        raise RuntimeError("BLOB_BACKEND=s3 arrives in Task 3")
+        from screener.blobs.s3 import S3Store
+
+        return S3Store(config)
     raise RuntimeError(f"BLOB_BACKEND must be 'local' or 's3', got {config.backend!r}")
 
 
