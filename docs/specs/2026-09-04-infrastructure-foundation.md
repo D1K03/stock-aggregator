@@ -106,10 +106,14 @@ pipeline run.
 **D12. Sync, not async.** The sibling is async throughout. This repo is entirely synchronous
 psycopg, and porting the async colouring would introduce an event loop for no benefit.
 
-**D13. Discord is a webhook behind a channel protocol; no bot.** `DESIGN.md` says "a single HTTP
-POST to a webhook. No OAuth, no bot hosting." A gateway bot means an always-connected process and
-a token with real scopes, for a payload that is one message a day. *Deferred, not rejected:* a bot
-arrives later as another `NotificationChannel` and nothing above it changes.
+**D13. Discord is a webhook for delivery, and separately a gateway bot for commands.** Alert
+delivery is still a single webhook POST: one secret, no connection, and an alert is one message a
+day. The bot is a different thing that happens to share a vendor — a command surface, run as its
+own process in `screener.bot`. *Superseded:* this decision previously said "no bot", and expected
+one to arrive as another `NotificationChannel`. That framing was wrong. A bot is not a delivery
+channel; nothing about it implements `send(alert)`, and modelling it as one would have forced an
+event loop into a layer that has no use for it. *Rejected:* HTTP interactions, which need no extra
+process but can only ever see a command someone typed.
 
 **D14. Spend limits are set at the provider.** A credit cap on the OpenRouter key, a spend cap on
 the Bright Data zone. *Rejected:* a budget/accounting module — it would need its own table, and it

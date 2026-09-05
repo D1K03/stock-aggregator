@@ -21,12 +21,13 @@ COLOURS = {"info": 0x5865F2, "warning": 0xE67E22}
 
 
 class DiscordWebhook:
-    """A webhook POST. No bot, no gateway connection, no OAuth.
+    """A webhook POST. No gateway connection, no OAuth.
 
-    A gateway bot would mean an always-connected process and a token with real
-    scopes, for a payload that is one message a day. If one is ever wanted —
-    slash commands, reactions on an alert — it arrives as another
-    `NotificationChannel` and nothing above this changes.
+    Still a webhook because an alert is one message a day: one secret, nothing
+    to keep connected, and nothing to reconnect. `screener.bot` does run a
+    gateway, but for taking commands rather than delivering alerts, and it
+    deliberately does not implement this protocol — nothing about a bot is a
+    `send(alert)`.
     """
 
     name = "discord"

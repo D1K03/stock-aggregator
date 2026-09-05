@@ -105,6 +105,32 @@ services:
     environment:
       NODE_ENV: production
 
+  # The Discord gateway. Same image as `api` with a different command rather
+  # than a second Dockerfile: one dependency set, one build, and the only thing
+  # that differs is which module runs. The cost is that the api image carries
+  # discord.py without importing it, which is a few megabytes and is not worth
+  # a second image to avoid.
+  bot:
+    image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "screener.bot"]
+
+    # No ports and no Caddy route: the gateway dials outward, exactly as
+    # cloudflared does, so nothing needs to reach it.
+    #
+    # No healthcheck either. discord.py reconnects on its own with backoff, and
+    # a check that cannot tell "reconnecting" from "wedged" would restart a bot
+    # that was about to recover.
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+
   postgres:
     # Same major version as the test suite and CI. A schema that leans on range
     # partitioning and GiST exclusion constraints should not first meet a

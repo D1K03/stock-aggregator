@@ -57,8 +57,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Python. Data: yfinance, Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
 - Sentiment: VADER for a cheap baseline, FinBERT (ONNX via `onnxruntime`) for the real score.
   CPU only — no GPU, no CUDA. Never use an LLM to emit a sentiment number.
-- LLMs are for narrative extraction only (transcript summaries, guidance changes, risk-section
-  flags), via OpenRouter with a cheap model.
+- LLMs do narrative extraction (transcript summaries, guidance changes, risk-section flags) and
+  answer questions in the Discord server, via OpenRouter. Never a sentiment number and never a
+  score. The bot's system prompt forbids investment advice and forbids inventing a figure the
+  screener does not have.
 - Everything runs on one VPS: the always-on job, and Postgres in the same compose stack on a
   named volume. Serverless was considered and downgraded — too weak for the scoring job. Where
   raw payloads land is still open; `DESIGN.md` says why.
@@ -98,7 +100,11 @@ nothing outside imports a submodule directly.
 - `screener.secrets` — Infisical into `os.environ`, stdlib `urllib` only.
 - `screener.fetch` — `fetch(url, strategies)` over a `direct -> isp_proxy -> unlocker` chain.
 - `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
-- `screener.notify` — a `NotificationChannel` protocol and a Discord webhook.
+- `screener.notify` — a `NotificationChannel` protocol and a Discord webhook. Delivery only.
+- `screener.bot` — the Discord gateway bot, its own process (`python -m screener.bot`) and its
+  own container. A command surface, not a delivery channel: `/ping`, and a reply when mentioned.
+  The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
+  blocking the event loop stalls the gateway heartbeat rather than just one command.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
