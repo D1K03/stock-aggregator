@@ -247,7 +247,7 @@ def test_a_permitted_login_is_given_a_session(signed_in_server, monkeypatch):
         redirect=False,
     )
     assert status == 302
-    assert headers["Location"] == "/status"
+    assert headers["Location"] == "/"
     with conn.cursor() as cur:
         cur.execute("select login, github_id from auth.app_user")
         assert cur.fetchone() == ("D1K03", 7)

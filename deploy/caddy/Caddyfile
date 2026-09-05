@@ -1,0 +1,37 @@
+# One origin for the dashboard and the status service, so the session cookie is
+# same-site and there is no CORS surface at all.
+#
+# Cloudflare terminates TLS at its edge and the tunnel dials outward, so this
+# speaks plain HTTP on the compose network and is never reachable from the host.
+:8080 {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# The status service owns sign-in and the probes. /health and /ready stay
+	# reachable without a session because the container healthcheck and the
+	# deploy smoke test have no cookie to present.
+	handle /auth/* {
+		reverse_proxy api:8080
+	}
+	handle /health {
+		reverse_proxy api:8080
+	}
+	handle /ready {
+		reverse_proxy api:8080
+	}
+	handle /status {
+		reverse_proxy api:8080
+	}
+
+	# Everything else is the dashboard.
+	handle {
+		reverse_proxy web:3000
+	}
+}

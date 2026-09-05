@@ -8,13 +8,44 @@
 # the tree would silently pick up production configuration.
 #
 # Postgres runs here, on the VPS, with a named volume. The `compose.yaml` at
-# the repository root is a different thing entirely — it is the throwaway
-# database the test suite drops and recreates, and it deliberately has no
-# volume.
+# the repository root is a different thing entirely: the throwaway database the
+# test suite drops and recreates.
 name: stock-aggregator
 
 services:
+  # Caddy, and it is called `app` on purpose.
+  #
+  # The Cloudflare tunnel's public hostname points at `app:8080`. That mapping
+  # lives in the Zero Trust dashboard rather than in this repository, so
+  # renaming this service would mean editing the tunnel by hand to match, and
+  # a stale route fails as a 502 with nothing here to explain it. Keeping the
+  # name means the router can be introduced without touching Cloudflare at all.
   app:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      # Relative to THIS file's directory, not the working directory: compose
+      # resolves bind mounts against the compose file, so a `deploy/` prefix
+      # here would look for deploy/deploy/caddy on the box.
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # The status service: sign-in, probes, migrations, provenance.
+  api:
     image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
     restart: unless-stopped
 
@@ -25,9 +56,9 @@ services:
         # reason that has nothing to do with the release.
         condition: service_healthy
 
-    # No `ports:`. The tunnel dials outward and reaches this over the compose
-    # network, so nothing new listens on the host, no firewall rule is needed,
-    # and there is no port to collide with the other stack on this box.
+    # No `ports:`. Caddy reaches this over the compose network, and the tunnel
+    # reaches Caddy, so nothing new listens on the host and there is no port to
+    # collide with the other stack on this box.
     expose:
       - "8080"
 
@@ -40,7 +71,7 @@ services:
 
     environment:
       # Composed here rather than fetched, because the password has to be in
-      # the env file anyway for the postgres service below — a second copy in
+      # the env file anyway for the postgres service below: a second copy in
       # Infisical would be a second thing to rotate and a chance to disagree.
       DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
       # The only other credentials stored on this server. Everything else is
@@ -64,6 +95,16 @@ services:
       retries: 3
       start_period: 20s
 
+  # The dashboard. Static and unwired: it renders illustrative data and reads
+  # nothing from Postgres, so it needs no credentials of its own.
+  web:
+    image: ghcr.io/d1k03/stock-aggregator-web:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+
   postgres:
     # Same major version as the test suite and CI. A schema that leans on range
     # partitioning and GiST exclusion constraints should not first meet a
@@ -72,8 +113,8 @@ services:
     restart: unless-stopped
 
     # Not published to the host. Reachable only from the compose network, which
-    # means the database has no public attack surface at all and needs no
-    # firewall rule of its own.
+    # means the database has no public attack surface and needs no firewall
+    # rule of its own.
     expose:
       - "5432"
 
@@ -95,3 +136,5 @@ volumes:
   # Named rather than a bind mount, so `docker compose down` cannot delete the
   # database by accident and the data does not depend on a host path.
   pg_data:
+  caddy_data:
+  caddy_config:

@@ -144,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Postgres blinked is worse.
                     logger.warning("could not delete the session row: %s", exc)
             self._redirect(
-                "/status",
+                "/login",
                 [auth.clear_cookie(auth.SESSION_COOKIE, secure=self._secure(config))],
             )
 
@@ -263,8 +263,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         logger.info("signed in %s", user.login)
         secure = self._secure(config)
+        # The dashboard, not /status. Both are served from one origin, so a
+        # signed-in browser should land on the page a person came for rather
+        # than on the JSON a probe came for.
         self._redirect(
-            "/status",
+            "/",
             [
                 auth.session_cookie(session, days=config.session_days, secure=secure),
                 auth.clear_cookie(auth.STATE_COOKIE, secure=secure),
