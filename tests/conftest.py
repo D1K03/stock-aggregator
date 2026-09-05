@@ -104,7 +104,7 @@ def two_securities(fresh_db):
     return out[0], out[1]
 
 
-def chart_bytes(day, close="100", volume=10, split=None):
+def _chart_bytes(day, close="100", volume=10, split=None):
     """A minimal chart response. Used by the run and sweep tests."""
     import json
     from datetime import datetime, timezone
@@ -138,7 +138,15 @@ def chart_bytes(day, close="100", volume=10, split=None):
     return json.dumps(body).encode()
 
 
-class FakeClient:
+@pytest.fixture
+def chart_bytes():
+    """A test module cannot import a plain function from conftest, so the
+    module-level helper (`_chart_bytes`) is handed out through a fixture —
+    the same shape as `an_observation` above."""
+    return _chart_bytes
+
+
+class _FakeClient:
     """A ChartClient-shaped stub, keyed by symbol so one can fail."""
 
     def __init__(self, bodies):
@@ -148,3 +156,10 @@ class FakeClient:
     def fetch(self, symbol, start, end):
         self.asked.append((symbol, start, end))
         return self.bodies.get(symbol)
+
+
+@pytest.fixture
+def FakeClient():
+    """Hands out the stub class itself, for the same reason as `chart_bytes`:
+    a test module cannot import a plain name from conftest."""
+    return _FakeClient
