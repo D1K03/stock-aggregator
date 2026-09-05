@@ -54,6 +54,8 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 | One test | `pytest tests/test_identity.py::test_a_retired_symbol_can_be_reissued_to_another_security -v` |
 | Typecheck | `pyright` — must report zero errors |
 | Apply migrations | `python -m screener.boot migrate` |
+| Refresh universe CSV | `python -m screener.universe refresh` |
+| Load universe | `python -m screener.universe load --dry-run` |
 | Run the status service | `python -m screener.boot` |
 | Check every integration | `python -m screener.boot selftest` |
 | Stop the database | `docker compose down` |
