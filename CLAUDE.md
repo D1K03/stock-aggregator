@@ -131,6 +131,14 @@ nothing outside imports a submodule directly.
   `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
   the web container, which rasterises the same string to PNG for Discord. One renderer, so the
   two surfaces cannot drift — do not add a second way to draw a chart.
+- `screener.transcribe` — speech to text, in a container of its own. The client half is
+  `httpx` and nothing else and is what the bot and the status service import; the server half
+  holds faster-whisper and is the only thing that installs the `voice` extra, so the three
+  runtime dependencies are unchanged. Not WhisperX: its forced alignment and diarization are
+  what need torch, and neither means anything for one person talking into a phone. A Discord
+  voice message is transcribed and answered as though it had been typed; the dashboard's mic
+  button puts the transcript in the composer so a misheard ticker is fixed before it is paid
+  for. The transcript is never written to the audit trail or to disk.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.

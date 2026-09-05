@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import ChatChart from "@/components/ChatChart";
 import DiscordHandoff from "@/components/DiscordHandoff";
+import MicButton from "@/components/MicButton";
 import Orb, { OrbState } from "@/components/Orb";
 import Sidebar from "@/components/Sidebar";
 import ToolTrace from "@/components/ToolTrace";
@@ -174,6 +175,14 @@ export default function StevenPage() {
                   }
                 }}
                 aria-label="Ask Steven"
+              />
+              {/* Before send, because it fills the box rather than emptying
+                  it: what it hears lands in the textarea for you to read and
+                  correct, and enter is still what asks. */}
+              <MicButton
+                onTranscript={(text) =>
+                  setQuery((current) => (current ? `${current} ${text}` : text))
+                }
               />
               <button
                 className="stv-send"

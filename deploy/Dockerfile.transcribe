@@ -1,0 +1,47 @@
+# The transcription service. Its own image, not a command override on the api
+# one like the bot: the bot shares a dependency set with the status service and
+# this does not. ctranslate2, onnxruntime and PyAV together are larger than
+# everything else in this repository, and neither of the other two containers
+# has any use for them.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+# The `voice` extra, which exists so this is the only image that takes it.
+# No system ffmpeg: PyAV ships the libraries in its wheel.
+RUN pip install --no-cache-dir ".[voice]"
+
+# The weights, baked in rather than fetched at startup. A runtime download means
+# a deploy that fails when huggingface.co is unwell, a first voice message that
+# waits ninety seconds, a volume to reason about during a rollback, and a
+# container that reports healthy while holding nothing. Pinned to a revision for
+# the same reason postgres is pinned to 16.
+ARG MODEL_REPO=Systran/faster-whisper-base.en
+ARG MODEL_REVISION=3d3d5dee26484f91867d81cb899cfcf72b96be6c
+ENV WHISPER_MODEL_PATH=/opt/models/faster-whisper-base.en
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('${MODEL_REPO}', revision='${MODEL_REVISION}', local_dir='${WHISPER_MODEL_PATH}')" \
+ && rm -rf /opt/models/*/.cache /root/.cache
+
+# Nothing reaches the hub at runtime. With the weights already here that turns
+# an observation into a guarantee.
+ENV HF_HUB_OFFLINE=1 \
+    OMP_NUM_THREADS=2 \
+    WHISPER_THREADS=2
+
+# Non-root, and the same uid the other two images use. Nothing here writes to
+# disk: audio is held in memory for one request and dropped.
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin screener
+USER 10001
+
+EXPOSE 8081
+
+CMD ["python", "-m", "screener.transcribe"]

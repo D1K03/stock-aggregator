@@ -224,6 +224,8 @@ async def respond(
     surface: str = "discord",
     context: str = "",
     can_draw: bool = False,
+    voice: bool = False,
+    allowance: budget.Budget | None = None,
 ) -> Reply:
     """The reply to one message. Never raises.
 
@@ -232,12 +234,24 @@ async def respond(
     and Discord would drop the connection as unresponsive.
 
     `actor` is the Discord user id, carried through only so the audit row can
-    say who asked. `can_draw` says whether the caller can render a chart.
+    say who asked. `can_draw` says whether the caller can render a chart, and
+    `voice` whether the question was spoken rather than typed — which lands in
+    the audit trail and changes nothing else, because Steven answering a spoken
+    question differently would be a behaviour nobody asked for, paid for on
+    every request forever.
+
+    `allowance` is for a caller that had to check the cap earlier than this. The
+    voice path does: it must decide before spending a core on transcription, and
+    checking again here would mean two connections and two sums for one turn. A
+    refused allowance is passed straight through, so the refusal sentence and
+    its audit row keep living in the one place they already do — which works
+    because that check sits above the empty-question guard below, and a spoken
+    turn refused before transcription arrives here with nothing to say.
     """
     # Checked before the model is called, not after: the point of a cap is
     # that the request over it is never paid for. On a worker thread because it
     # opens a database connection and this may be the gateway's event loop.
-    allowance = await asyncio.to_thread(budget.check, actor, actor_kind)
+    allowance = allowance or await asyncio.to_thread(budget.check, actor, actor_kind)
     if not allowance.allowed:
         logger.warning(
             "%s/%s is over the daily cap: $%s of $%s",
@@ -255,6 +269,7 @@ async def respond(
                 "spent_usd": float(allowance.spent),
                 "cap_usd": float(allowance.cap),
                 "surface": surface,
+                "voice": voice,
             },
         )
         return Reply(
@@ -315,6 +330,10 @@ async def respond(
             # Which surface the conversation happened on. The actor kind says
             # what sort of identity asked; this says where they were.
             "surface": surface,
+            # How the question arrived. The transcript itself is never recorded:
+            # audio is more sensitive than typed text, not less, and `chars` is
+            # the whole of what the trail needs to know about what was said.
+            "voice": voice,
             "tools": [t.name for t in reply.tools],
             "charts": [c.ticker for c in reply.charts],
             "chars": len(reply.text),

@@ -108,6 +108,42 @@ each URL as an independent call, so there is no jar to keep.
 
 ---
 
+## Speech to text
+
+`screener.transcribe` — faster-whisper on CPU, in a container of its own,
+reached over the compose network the way the chart renderer is.
+
+```python
+from screener.transcribe import transcribe
+
+spoken = transcribe(audio_bytes)     # Transcript | None, never raises
+```
+
+A Discord voice message in a DM is transcribed and answered as though it had
+been typed, with what was heard quoted above the reply. The dashboard's mic
+button puts the transcript in the composer instead, so a misheard ticker is
+corrected before a model call is paid for.
+
+| | |
+|---|---|
+| Cost | CPU only. No per-minute billing, and no audio leaves the box. |
+| Model | `base.en`, int8, baked into the image. `initial_prompt` biases it toward tickers. |
+| Cap | two minutes, enforced by the callers before anything is downloaded |
+
+**It is the first service here with a resource limit**, which contradicts the
+absence of one everywhere else: two cores and a gigabyte. Everything else in
+this stack is idle until asked a question, and this saturates a core for as long
+as the clip is, on a box shared with four other compose projects. The limit and
+`WHISPER_THREADS` have to agree, or ctranslate2 spawns one thread per core it can
+see and spends its time being descheduled inside the quota.
+
+**Do not** reach for a bigger model first when it mishears a ticker. The
+`initial_prompt` in `transcribe/server.py` is free and `small.en` costs roughly
+three times the CPU. The transcript is never recorded — not in the audit trail,
+not on disk — because audio is more sensitive than typed text, not less.
+
+---
+
 ## Ingress: the Cloudflare Tunnel
 
 `cloudflared` runs in the stack and **dials outward**. Nothing listens on the

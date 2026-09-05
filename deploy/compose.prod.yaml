@@ -131,6 +131,51 @@ services:
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
+  # Speech to text, for voice messages in Discord and the mic button on the
+  # dashboard. Its own image rather than a command override on `api` like the
+  # bot above: the bot shares a dependency set with the status service and this
+  # does not, and ctranslate2, onnxruntime and PyAV together are larger than
+  # everything else in this repository.
+  #
+  # No env_file and no Infisical trio. It holds no credentials, opens no
+  # database connection and calls nothing outside this network. The only thing
+  # it could be told is where its weights are, and those are in the image.
+  #
+  # No route in the Caddyfile either. `/transcribe` matches the catch-all, which
+  # goes to the dashboard, so nothing on the internet resolves here — the same
+  # arrangement that keeps /api/render private. The browser reaches it through
+  # the status service, which is what holds the session.
+  transcribe:
+    image: ghcr.io/d1k03/stock-aggregator-transcribe:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "8081"
+
+    healthcheck:
+      # The weights load before the socket opens, so a container answering here
+      # is one that has them. start_period covers that load.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen("http://localhost:8081/health")
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+    # The first resource limit in this stack, on the first service to earn one.
+    # Everything else here is idle until asked a question; this saturates a core
+    # for as long as the clip is, on a box shared with four other compose
+    # projects. Two cores is also what WHISPER_THREADS is set to in the image,
+    # and the two have to agree: ctranslate2 otherwise spawns one thread per
+    # core it can see and spends its time being descheduled inside the quota.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+
   postgres:
     # Same major version as the test suite and CI. A schema that leans on range
     # partitioning and GiST exclusion constraints should not first meet a

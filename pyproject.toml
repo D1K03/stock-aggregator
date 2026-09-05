@@ -27,6 +27,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Speech to text, installed by exactly one image and by nothing else. The three
+# runtime dependencies above are unchanged: `screener.transcribe.client`, which
+# is what the bot and the status service import to ask for a transcript, needs
+# httpx and nothing more. Only the container that holds the model takes these.
+#
+# faster-whisper rather than openai-whisper or WhisperX, both of which need
+# torch. WhisperX is this plus wav2vec2 forced alignment and pyannote
+# diarization, which give word-level timestamps and speaker labels — neither of
+# which means anything for one person talking into their phone, and both of
+# which are what the torch dependency is for.
+#
+# No `apt-get install ffmpeg` anywhere: PyAV ships the FFmpeg libraries in its
+# wheel, and that is what decodes Discord's Opus and Safari's AAC alike.
+#
+# Upper bound for the reason discord.py has one: this sits on a Python API
+# rather than on a stable request and response shape.
+voice = [
+    "faster-whisper>=1.2,<2",
+]
 dev = [
     "pytest>=8.0",
     "pyright>=1.1.400",

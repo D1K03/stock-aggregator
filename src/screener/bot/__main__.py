@@ -40,10 +40,13 @@ async def _serve(config: BotConfig) -> None:
 class _NoVoiceWarning(logging.Filter):
     """Drops discord.py's startup complaint about voice support.
 
-    It warns that voice will not work because an optional audio library is
-    missing. This bot has no voice feature and never will, so the line is
-    misleading rather than useful, and `docker logs bot` should open on
-    something that matters.
+    It warns that voice will not work because PyNaCl is missing. That is about
+    streaming audio into a voice *channel*, which this bot does not do and has
+    no plans to. It does now answer voice messages, but a voice message is an
+    attachment fetched over HTTPS and transcribed in another container, which
+    needs none of what the warning is about — so the line is still misleading
+    rather than useful, and `docker logs bot` should open on something that
+    matters.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:

@@ -94,6 +94,15 @@ jobs:
           load: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+      - uses: docker/build-push-action@v6
+        name: Build the transcription image
+        with:
+          context: .
+          file: deploy/Dockerfile.transcribe
+          push: false
+          load: false
+          cache-from: type=gha,scope=transcribe
+          cache-to: type=gha,mode=max,scope=transcribe
 
   # A single stable check for branch protection to require. Requiring the matrix
   # jobs by name is brittle: change the matrix and the old name never reports

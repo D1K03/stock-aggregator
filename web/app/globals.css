@@ -956,6 +956,31 @@ footer.site .prov {
 }
 .stv-skills button:hover { color: var(--copper); border-color: var(--copper); }
 
+/* The mic, in both composers. Quiet until it is doing something: an idle glyph
+   the same weight as the icons beside it, a pulsing dot and a running count
+   while it listens, and a slower pulse while the audio is being turned into
+   text. Failure is a title, not a banner — there is one thing to do about it
+   and it is press the button again. */
+.mic {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 7px; border: 1px solid transparent; border-radius: 9999px;
+  background: none; color: var(--ink-muted); font: inherit; font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.16s var(--ease), background 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+.mic:hover:not(:disabled) { color: var(--copper); }
+.mic:disabled { cursor: default; }
+.mic.recording { color: var(--copper); border-color: var(--copper); background: var(--cream); }
+.mic.failed { color: var(--copper-deep); }
+.mic-time { font-variant-numeric: tabular-nums; }
+.mic-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  animation: mic-pulse 1.1s var(--ease) infinite;
+}
+.mic-dot.working { animation-duration: 1.8s; }
+@keyframes mic-pulse { 50% { opacity: 0.25; } }
+
 /* The chats column is the first thing to go: on a narrow screen the
    conversation is the page, and history is still reachable from the palette. */
 @media (max-width: 900px) {

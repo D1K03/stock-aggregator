@@ -3,6 +3,9 @@
 import asyncio
 import io
 import logging
+import time
+from collections.abc import Sequence
+from typing import Literal
 
 import discord
 import psycopg
@@ -10,11 +13,12 @@ from discord import app_commands
 
 from screener import audit
 from screener.audit import record
-from screener.bot import agent, render
+from screener.bot import agent, budget, render
 from screener.bot.checks import NotPermitted
 from screener.bot.commands import COMMANDS
 from screener.bot.config import BotConfig
 from screener.config import settings
+from screener.transcribe import MAX_SECONDS, transcribe
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,67 @@ def wants_reply(*, direct: bool, mentioned: bool) -> bool:
     without a gateway.
     """
     return direct or mentioned
+
+
+Hearing = Literal["nothing", "transcribe", "too_long"]
+
+# What a voice message costs to answer, recorded as an operation of its own so
+# `duration_ms` on it is where you would watch the CPU this feature spends.
+TRANSCRIBE_OPERATION = "steven.transcribe"
+
+# Discord's subtext marker. Small and grey, so the transcript reads as a receipt
+# for what was heard rather than as part of what Steven said.
+QUOTE = "-# "
+MAX_QUOTE = 200
+
+
+def hearing(durations: Sequence[float | None], *, cap: float = MAX_SECONDS) -> Hearing:
+    """What to do with the voice messages attached to a Discord message.
+
+    `durations` is `Attachment.duration` for each attachment that
+    `is_voice_message()` claims is one. `None` should not reach here, since
+    Discord sets duration and waveform together, and is treated as unknown
+    rather than as zero.
+
+    Three answers rather than a boolean, for the same reason `Budget` carries
+    the numbers behind its own: "there is nothing to listen to" and "there is,
+    and it is longer than we will pay to hear" want different replies. Collapsed
+    into a boolean the second falls through to the empty-question guard, and
+    Steven answers that message content may not be reaching him — which is
+    wrong, and is the exact sentence that sends somebody off to check an intent.
+
+    A function rather than an inline condition because it is the whole decision,
+    and a `discord.Message` cannot be built in a test without a gateway.
+    """
+    if not durations:
+        return "nothing"
+    first = durations[0]
+    if first is None or first <= 0 or first > cap:
+        return "too_long"
+    return "transcribe"
+
+
+def with_transcript(transcript: str, answer: str, *, limit: int = agent.MAX_REPLY) -> str:
+    """The answer, with what was heard above it.
+
+    Discord rejects a message over 2000 characters outright, and `agent.respond`
+    has already cut the answer to exactly that — so the quote cannot simply be
+    prefixed on, or a long answer becomes no message at all, which is the one
+    failure `MAX_REPLY` exists to prevent.
+
+    The answer is what was asked for, so the quote gives way first: it is cut to
+    `MAX_QUOTE`, and dropped entirely if even that would not fit. Newlines
+    collapse to spaces because the subtext marker only styles its own line.
+    """
+    heard = " ".join(transcript.split())
+    if not heard:
+        return answer
+    if len(heard) > MAX_QUOTE:
+        heard = heard[: MAX_QUOTE - 1].rstrip() + "\u2026"
+    line = f'{QUOTE}Heard: \u201c{heard}\u201d\n'
+    if len(line) + len(answer) > limit:
+        return answer
+    return line + answer
 
 
 class ScreenerBot(discord.Client):
@@ -131,9 +196,38 @@ class ScreenerBot(discord.Client):
             )
             return
 
+        voices = [a for a in message.attachments if a.is_voice_message()]
+        if hearing([a.duration for a in voices]) == "too_long":
+            # Declined before the download, not after. The cap is about what
+            # this box will spend a core on, and it has already been spent by
+            # the time the bytes are here. No budget check either: refusing on
+            # length costs nothing, and a database round trip to say so would
+            # be silly.
+            await message.reply(
+                f"That is over {int(MAX_SECONDS)} seconds, which is longer than "
+                "I will sit and listen to. Send a shorter one, or type it.",
+                mention_author=False,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+
         # Strip the mention itself so the model sees the question rather than
         # a raw <@id> token. A DM has none, and this is a no-op there.
-        question = message.content.replace(f"<@{self.user.id}>", "").strip()
+        typed = message.content.replace(f"<@{self.user.id}>", "").strip()
+
+        transcript, allowance = "", None
+        if voices:
+            transcript, allowance, refusal = await self._listen(message, voices[0])
+            if refusal is not None:
+                await message.reply(
+                    refusal,
+                    mention_author=False,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+                return
+
+        # A caption alongside a voice note is still part of the question.
+        question = " ".join(part for part in (typed, transcript) if part)
 
         # Only in a DM, and only shortly after one: the handoff message says
         # "ask me here and I will pick it up", and this is what picking it up
@@ -155,6 +249,11 @@ class ScreenerBot(discord.Client):
                 # Discord cannot draw, but it can display what the web service
                 # drew, so the chart tool is allowed to produce one.
                 can_draw=True,
+                voice=bool(transcript),
+                # Already checked, before a core was spent on transcription.
+                # Passing it on rather than asking again keeps one turn to one
+                # sum, and keeps the refusal wording where it lives.
+                allowance=allowance,
             )
             # Rasterising is a HTTP call and a few milliseconds of work in
             # another container, so it goes on a worker thread like everything
@@ -164,7 +263,72 @@ class ScreenerBot(discord.Client):
         files = [
             discord.File(io.BytesIO(png), filename=name) for name, png in images
         ]
-        await message.reply(reply.text, files=files, mention_author=False)
+        await message.reply(
+            with_transcript(transcript, reply.text) if transcript else reply.text,
+            files=files,
+            mention_author=False,
+            # `mention_author=False` suppresses the reply ping and nothing else.
+            # Text that arrived as speech should not be able to ping a channel:
+            # Whisper will not emit an <@id>, but "it cannot happen" is not a
+            # reason to let it.
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def _listen(
+        self, message: discord.Message, voice: discord.Attachment
+    ) -> tuple[str, "budget.Budget | None", str | None]:
+        """Transcribe a voice message, or say why not.
+
+        Returns the transcript, the allowance already spent checking, and a
+        sentence to send instead when there is nothing to answer. The budget is
+        checked before a byte is downloaded: transcription is a cost even though
+        it is not a charge, and the point of a cap is that the request over it is
+        never paid for.
+
+        A refused allowance is not a refusal here — it is handed back so
+        `agent.respond` produces the sentence and the audit row, which is where
+        both already live.
+        """
+        actor = str(message.author.id)
+        allowance = await asyncio.to_thread(budget.check, actor, "discord")
+        if not allowance.allowed:
+            return "", allowance, None
+
+        started = time.perf_counter()
+        async with message.channel.typing():
+            # A coroutine over discord.py's own session, so it is awaited
+            # rather than put on a worker thread. The transcription behind it
+            # is synchronous httpx, and is.
+            audio = await voice.read()
+            spoken = await asyncio.to_thread(
+                transcribe, audio, content_type=voice.content_type or ""
+            )
+        if spoken is None:
+            return "", allowance, "I could not turn that into text just now."
+        if not spoken.text:
+            return "", allowance, "That came through empty. Nothing I could make out."
+
+        await asyncio.to_thread(
+            record,
+            kind="agent",
+            operation=TRANSCRIBE_OPERATION,
+            actor=actor,
+            actor_kind="discord",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            # Zero, and not because a core for twenty seconds is free. It is not
+            # a charge, and this column is what was billed; an invented number
+            # here would be a fiction in the one place that must not hold one.
+            cost_usd=0,
+            detail={
+                "surface": "discord",
+                "seconds": spoken.seconds,
+                "bytes": len(audio),
+                # The transcript itself is never recorded. Audio is more
+                # sensitive than typed text, not less.
+                "chars": len(spoken.text),
+            },
+        )
+        return spoken.text, allowance, None
 
     @staticmethod
     def _handoff_context(discord_user_id: int) -> str:

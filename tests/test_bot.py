@@ -507,3 +507,110 @@ def test_a_direct_message_needs_no_mention():
     # other participant in a two-person conversation reads as broken, and the
     # handoff sends people straight into exactly that DM.
     assert client.wants_reply(direct=True, mentioned=False) is True
+
+
+# -- what the bot hears -----------------------------------------------------
+
+
+def test_a_message_with_no_voice_attachment_is_answered_the_way_it_always_was():
+    assert client.hearing([]) == "nothing"
+
+
+def test_a_voice_message_short_enough_to_hear_is_picked_up():
+    assert client.hearing([4.2]) == "transcribe"
+
+
+def test_a_voice_message_over_the_cap_is_declined_rather_than_transcribed():
+    # Declined on the duration Discord already told us, so the decision is made
+    # before anything is downloaded and before a core is spent.
+    assert client.hearing([client.MAX_SECONDS + 1]) == "too_long"
+
+
+def test_a_voice_message_of_unknown_length_is_declined_rather_than_guessed():
+    # Discord sets duration and waveform together, so this should not happen —
+    # and if it does, refusing is cheaper than decoding something unbounded.
+    assert client.hearing([None]) == "too_long"
+    assert client.hearing([0.0]) == "too_long"
+
+
+def test_the_first_voice_message_wins_when_someone_sends_two():
+    assert client.hearing([3.0, client.MAX_SECONDS + 1]) == "transcribe"
+
+
+def test_a_transcript_is_quoted_above_the_answer():
+    out = client.with_transcript("what did nvidia do", "It rose 8%.")
+    assert out.startswith(client.QUOTE)
+    assert "what did nvidia do" in out
+    assert out.endswith("It rose 8%.")
+
+
+def test_a_quote_gives_way_to_the_answer_when_both_will_not_fit():
+    # Discord rejects anything over 2000 characters outright, and the answer is
+    # the thing that was asked for. Losing the receipt beats losing the reply.
+    answer = "x" * agent.MAX_REPLY
+    assert client.with_transcript("something said out loud", answer) == answer
+
+
+def test_a_long_transcript_is_cut_rather_than_the_answer():
+    out = client.with_transcript("word " * 200, "Short answer.")
+    assert out.endswith("Short answer.")
+    assert len(out.splitlines()[0]) <= client.MAX_QUOTE + len(client.QUOTE) + 10
+
+
+def test_a_transcript_of_only_whitespace_leaves_the_answer_alone():
+    assert client.with_transcript("   ", "Answer.") == "Answer."
+
+
+def test_an_allowance_the_caller_already_checked_is_not_checked_again(monkeypatch):
+    # The voice path has to check before it spends a core on transcription, and
+    # checking again here would be two connections and two sums for one turn.
+    from decimal import Decimal
+
+    from screener.bot import budget
+
+    def explode(*args, **kwargs):
+        raise AssertionError("the cap was checked twice for one turn")
+
+    monkeypatch.setattr(budget, "check", explode)
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="Fine."))
+    monkeypatch.setattr(agent, "record", lambda **kw: None)
+
+    allowance = budget.Budget(spent=Decimal("0"), cap=Decimal("1"), allowed=True)
+    reply = asyncio.run(agent.respond("hi", allowance=allowance, actor="1", actor_kind="discord"))
+    assert reply.text == "Fine."
+
+
+def test_an_allowance_the_caller_already_refused_produces_the_same_refusal(monkeypatch):
+    # Refused before transcription, so the question arrives empty — and the
+    # refusal sentence still has to come from the one place it lives, not from
+    # the empty-question guard below it.
+    from decimal import Decimal
+
+    from screener.bot import budget
+
+    monkeypatch.setattr(agent, "record", lambda **kw: None)
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="unreachable"))
+
+    refused = budget.Budget(spent=Decimal("1"), cap=Decimal("1"), allowed=False)
+    reply = asyncio.run(agent.respond("", allowance=refused, actor="1", actor_kind="discord"))
+    assert "daily spend cap" in reply.text
+
+
+def test_a_spoken_turn_is_marked_as_one_in_the_audit_detail(monkeypatch):
+    rows: list[dict] = []
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="Sure."))
+    monkeypatch.setattr(agent, "record", lambda **kw: rows.append(kw))
+    monkeypatch.setattr(
+        "screener.bot.budget.check",
+        lambda a, k: __import__("screener.bot.budget", fromlist=["Budget"]).Budget(
+            spent=__import__("decimal").Decimal("0"),
+            cap=__import__("decimal").Decimal("1"),
+            allowed=True,
+        ),
+    )
+
+    asyncio.run(agent.respond("chart nvidia", voice=True, actor="1", actor_kind="discord"))
+    assert rows and rows[-1]["detail"]["voice"] is True
+    # And the transcript itself is not in there. Audio is more sensitive than
+    # typed text, not less.
+    assert "chart nvidia" not in str(rows[-1]["detail"])

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import ChatChart from "@/components/ChatChart";
 import DiscordHandoff from "@/components/DiscordHandoff";
+import MicButton from "@/components/MicButton";
 import Orb, { OrbState } from "@/components/Orb";
 import ToolTrace from "@/components/ToolTrace";
 import { renderMarkdown } from "@/lib/markdown";
@@ -161,6 +162,11 @@ export default function Palette() {
             if (e.key === "Enter") submit();
           }}
           aria-label="Search or ask Steven"
+        />
+        <MicButton
+          onTranscript={(text) =>
+            setQuery((current) => (current ? `${current} ${text}` : text))
+          }
         />
         <button
           className={`pal-icon${showHistory ? " on" : ""}`}
