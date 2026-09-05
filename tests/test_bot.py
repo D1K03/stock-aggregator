@@ -3,6 +3,7 @@ import types
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
+import httpx
 import pytest
 from discord import app_commands
 
@@ -395,5 +396,98 @@ def test_the_prompt_stays_small_enough_to_send_on_every_message():
     # a decision worth making on purpose.
     import json
 
+    # Raised from 1200 when the chart tool landed: a second tool, its
+    # enumerated `mark` argument, and two lines of prompt telling Steven when to
+    # reach for it. That is roughly 600 characters and it bought a feature.
+    # Left as tight as the old one — about 40 characters of headroom — so the
+    # next thing that grows the prompt is also a decision and not a drift.
     overhead = len(agent.SYSTEM_PROMPT) + len(json.dumps(specs(), separators=(",", ":")))
-    assert overhead < 1200
+    assert overhead < 1800
+
+
+# -- the Discord handoff ---------------------------------------------------
+
+
+def test_the_user_map_is_parsed_and_case_folded(monkeypatch):
+    # GitHub logins are case-insensitive and a session carries whatever casing
+    # the owner chose, so the lookup has to fold both sides.
+    monkeypatch.setenv("DISCORD_USER_MAP", "ehewes:280752191059263488, D1K03:401071550331355146")
+    config = BotConfig.from_env()
+    assert config.discord_id_for("EHEWES") == 280752191059263488
+    assert config.discord_id_for("d1k03") == 401071550331355146
+
+
+def test_an_unmapped_login_has_no_discord_account(monkeypatch):
+    monkeypatch.setenv("DISCORD_USER_MAP", "ehewes:280752191059263488")
+    assert BotConfig.from_env().discord_id_for("someone-else") is None
+
+
+def test_a_malformed_user_map_entry_raises(monkeypatch):
+    # Dropping it silently would mean one person's handoff button quietly does
+    # nothing, reported as "it doesn't work".
+    monkeypatch.setenv("DISCORD_USER_MAP", "ehewes:280752191059263488,daniel")
+    with pytest.raises(RuntimeError, match="login:discord_id"):
+        BotConfig.from_env()
+
+
+def test_no_discord_account_ids_are_written_into_the_repository():
+    # The map lives in Infisical. This is the test that notices if someone
+    # pastes an id into a config file to make something work.
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    snowflake = re.compile(r"\b\d{17,20}\b")
+    checked = 0
+    for path in [*root.glob("src/**/*.py"), *(root / "deploy").glob("*.y*ml"), root / ".env.example"]:
+        if not path.is_file():
+            continue
+        checked += 1
+        found = snowflake.findall(path.read_text())
+        assert not found, f"{path.name} contains what looks like a Discord id: {found}"
+    assert checked > 5
+
+
+def test_a_handoff_without_a_mapped_account_says_so(monkeypatch):
+    from screener.bot.handoff import HandoffError, send_dm
+
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-token")
+    monkeypatch.setenv("DISCORD_USER_MAP", "")
+    with pytest.raises(HandoffError, match="no Discord account is mapped"):
+        send_dm(login="nobody", text="hello")
+
+
+def test_a_handoff_opens_a_dm_then_posts_to_it(monkeypatch):
+    # Discord needs a DM channel to exist before anything can be posted to it,
+    # so this is two calls and the order matters.
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-token")
+    monkeypatch.setenv("DISCORD_USER_MAP", "ehewes:280752191059263488")
+    from screener.bot.handoff import send_dm
+
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if request.url.path.endswith("/channels") and "users" in request.url.path:
+            return httpx.Response(200, json={"id": "chan-1"})
+        return httpx.Response(200, json={"id": "msg-1"})
+
+    assert send_dm(login="ehewes", text="hi", transport=httpx.MockTransport(handler)) == 280752191059263488
+    assert seen[0].endswith("/users/@me/channels")
+    assert seen[1].endswith("/channels/chan-1/messages")
+
+
+def test_direct_messages_being_closed_is_reported_plainly(monkeypatch):
+    # A 403 here is almost always "DMs from server members are off", which is
+    # a thing the person can fix if they are told.
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-token")
+    monkeypatch.setenv("DISCORD_USER_MAP", "ehewes:280752191059263488")
+    from screener.bot.handoff import HandoffError, send_dm
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "users" in request.url.path:
+            return httpx.Response(200, json={"id": "chan-1"})
+        return httpx.Response(403, json={})
+
+    with pytest.raises(HandoffError, match="switched off"):
+        send_dm(login="ehewes", text="hi", transport=httpx.MockTransport(handler))

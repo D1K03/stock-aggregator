@@ -117,14 +117,16 @@ Then <http://localhost:8080>. Same Caddy routes and service names as the VPS,
 because it is the production compose file with an override rather than a
 separate one that could drift.
 
-With the Infisical trio unset the app reads `local.env` as-is, which also
-switches GitHub sign-in off, so `/status` and `/api/audit` are open. The
-dashboard's own middleware still wants a session cookie though, and it is
-presence-only by design, so give it one from the browser console:
+With the Infisical trio unset the app reads `local.env` as-is, which switches
+GitHub sign-in off. `/login` then offers **Continue without GitHub**, which
+issues a real session for a `local-dev` user so the rest of the site behaves
+exactly as it does in production.
 
-```js
-document.cookie = "screener_session=local; path=/"
-```
+That shortcut cannot leak into a deployment. The status service refuses
+`/auth/local` whenever GitHub sign-in is configured, which it always is on the
+VPS because those credentials come from Infisical, and the button itself is a
+build argument that only `compose.local.yaml` sets, so it is not compiled into
+the image CI builds. Neither lock depends on remembering a flag.
 
 `docker compose ... down -v` removes the containers and the local volume.
 

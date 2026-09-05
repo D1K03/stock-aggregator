@@ -106,11 +106,18 @@ nothing outside imports a submodule directly.
   own container. A command surface, not a delivery channel: `/ping`, and a reply when mentioned.
   The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
   blocking the event loop stalls the gateway heartbeat rather than just one command.
+  Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
+  `collecting()` so a 60-point series never enters the model's context, and the point it marks
+  is computed from the data rather than chosen by the model.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
   `/health` and `/ready` stay open because the container healthcheck and the
   deploy smoke test cannot hold a session; `/status` requires one.
+- `screener.concept` — invented, schema-shaped sample data mirroring
+  `web/lib/data.ts`, so the dashboard and the chart tool draw the same line. A
+  test parses the TypeScript and fails when the two drift. Delete it when
+  ingest lands.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.

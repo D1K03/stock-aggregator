@@ -112,7 +112,9 @@ class ScreenerBot(discord.Client):
         question = message.content.replace(f"<@{self.user.id}>", "").strip()
 
         async with message.channel.typing():
-            reply = await agent.answer(question, actor=str(message.author.id))
+            reply = await agent.answer(
+                question, actor=str(message.author.id), actor_kind="discord"
+            )
 
         await message.reply(reply, mention_author=False)
 

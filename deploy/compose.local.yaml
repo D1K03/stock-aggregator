@@ -21,6 +21,14 @@ services:
       - "8080:8080"
 
   api:
+    # Locally there is no Infisical, so the values it would have fetched are
+    # injected straight from local.env. `--env-file` alone does not do this: it
+    # substitutes ${VARIABLES} in the compose file and nothing more.
+    #
+    # Path is relative to this file, like every other path in it.
+    env_file:
+      - path: local.env
+        required: false
     build:
       # Relative to THIS file's directory, not where you ran the command:
       # compose resolves build contexts against the compose file, the same way
@@ -35,7 +43,22 @@ services:
     build:
       context: ../web
       dockerfile: Dockerfile
+      args:
+        # Adds the "continue without GitHub" button to /login. Only ever set
+        # here; the image CI builds does not contain it.
+        NEXT_PUBLIC_LOCAL_LOGIN: "1"
     image: stock-aggregator-web:local
+
+  bot:
+    # Locally the Discord token is usually blank, and the bot exits saying so.
+    # `restart: unless-stopped` from the production file would then retry that
+    # for ever, filling `docker compose logs` with the same line every minute.
+    # Production keeps the restart policy, because there an unset token is a
+    # misconfiguration worth recovering from.
+    restart: "no"
+    env_file:
+      - path: local.env
+        required: false
 
   # Published so you can reach the database with psql while poking at things.
   postgres:

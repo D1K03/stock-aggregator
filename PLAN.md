@@ -18,6 +18,48 @@ Build this and nothing else first:
 Additive once the spine works, in no fixed order: web UI, backtesting harness, LLM
 summarisation, 13F ingestion, expanded universe, forecaster-consensus aggregation.
 
+### Steven draws charts — built on concept data
+
+Built, on the explicit understanding that the numbers are invented. Ask when
+something happened, how a ticker has moved, or when it crossed the threshold,
+and the `chart` tool draws the 60-day line under the reply with that point
+marked and dated.
+
+Two decisions are worth keeping when this meets real data:
+
+- **The series never enters the model's context.** Sixty points exceed the whole
+  tool-result budget and a tool result is re-sent on every following round, so
+  the data would be paid for repeatedly to tell the model something it reads
+  worse than a reader does. The tool returns one sentence; the chart travels
+  beside the reply through `tools.collecting()`. Cost is flat in the size of
+  the series.
+- **The model picks the question, the data answers it.** `mark` names *what* to
+  find — `peak`, `low`, `surge`, `drop`, `crossing`, `latest` — and the index is
+  computed from the series in `bot/tools/charts.py`. A model supplying
+  coordinates would be inventing where the marker goes, which is the same
+  failure as inventing a number and worse for being drawn precisely.
+
+`screener.concept` holds the invented data, mirroring `web/lib/data.ts` because
+the two live in separate Docker build contexts and neither can import the
+other's copy. `tests/test_charts.py` parses the TypeScript and fails if they
+disagree, and pins `series()` against values from the original walk — so the
+duplication is checked rather than trusted. Delete the package when ingest
+lands; the tool then reads `score_snapshot` and nothing else about it changes.
+
+Still not built, and still blocked on ingest:
+
+- **Real data.** Everything above draws fiction. Every surface says so — the
+  chart footer, the tool result, and the system prompt — and that wording is
+  load-bearing until there are real snapshots behind it.
+- **A tool over the snapshot tables**, replacing `screener.concept`, so the same
+  analysis works from Discord where there is no screen to look at.
+- **Structured multi-series context.** `web/lib/screen-context.tsx` publishes a
+  prose summary, which is enough for "what am I looking at" and not enough to
+  compare two tickers or reason across pillars.
+- **The constraints do not move.** "Crossed 75 on the 3rd, driven by Momentum"
+  is analysis; "looks like it is about to run" is not. Adding real data is
+  exactly the change that would tempt the second.
+
 ## Done
 
 **Database schema** — merged in #1. Nine migrations, ~20 tables across identity, a bitemporal
