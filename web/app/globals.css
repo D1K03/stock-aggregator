@@ -897,7 +897,12 @@ footer.site .prov {
   padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
 }
 .stv-turn.steven { color: var(--ink); }
-.stv-line .cchart { max-width: 620px; width: 100%; border-radius: 14px; }
+/* The chart keeps the 360px it was drawn at rather than filling the
+   conversation column. It is one drawing at one size — the same string the
+   palette shows and the same string Discord's PNG is rasterised from — so
+   stretching it here scales 8px axis labels and a 1.8px line up along with
+   everything else, which reads as a zoomed-in screenshot rather than a
+   bigger chart. */
 .stv-thinking {
   display: flex; align-items: center; gap: 9px;
   font-size: 0.86rem; color: var(--ink-muted);
