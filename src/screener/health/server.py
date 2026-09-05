@@ -257,8 +257,9 @@ class Handler(BaseHTTPRequestHandler):
                 "surface": "web",
                 "seconds": spoken.seconds,
                 "bytes": len(audio),
-                # The transcript never enters the trail. Audio is more sensitive
-                # than typed text, not less.
+                # A length, not the words: this row is about what the
+                # transcription cost. The text reaches the trail when it is
+                # asked as a question, the same way a typed one does.
                 "chars": len(spoken.text),
             },
         )
@@ -409,6 +410,13 @@ class Handler(BaseHTTPRequestHandler):
         # for on every message.
         context = (query.get("context") or [""])[0].strip()[:MAX_CONTEXT]
 
+        # Steven remembers the last couple of exchanges, read back from the
+        # trail per person rather than sent up with the question. This flag is
+        # the one thing the server cannot know: whether the button pressed was
+        # New chat or carry on. Default false, so a dropped parameter loses the
+        # memory rather than carrying the wrong conversation into a new thread.
+        fresh = (query.get("fresh") or [""])[0] == "1"
+
         from screener.bot import agent
 
         try:
@@ -422,6 +430,7 @@ class Handler(BaseHTTPRequestHandler):
                     actor_kind="github",
                     surface="web",
                     context=context,
+                    fresh=fresh,
                     # The dashboard can render a chart, so the chart tool is
                     # allowed to draw one. Discord gets the same agent with
                     # this off.

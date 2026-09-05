@@ -7,6 +7,7 @@ import httpx
 import pytest
 from discord import app_commands
 
+from screener import audit
 from screener.ai import AiError
 from screener.ai.models import MODELS, resolve_model
 from screener.bot import agent, client
@@ -318,17 +319,75 @@ def test_a_tool_loop_that_never_settles_stops_rather_than_billing_forever(monkey
     assert "could not finish" in asyncio.run(agent.answer("loop please"))
 
 
-def test_conversations_carry_no_history_between_mentions(monkeypatch):
-    # The largest token saving available, and honest: Steven has no memory, and
-    # silently accumulating context gets more expensive every message.
-    seen: list[int] = []
+def test_the_conversation_so_far_is_re_sent_so_a_follow_up_has_an_antecedent(monkeypatch):
+    # Without this, "chart it" is answered with "which ticker?" — the exchange
+    # that named the ticker is the whole reason the second message parses.
+    seen: list[list[dict]] = []
     monkeypatch.setattr(
         agent, "converse",
-        lambda **kw: seen.append(len(kw["messages"])) or fake_completion(text="ok"),
+        lambda **kw: seen.append(kw["messages"]) or fake_completion(text="ok"),
     )
-    asyncio.run(agent.answer("first"))
-    asyncio.run(agent.answer("second"))
-    assert seen == [2, 2]  # system + user, every time
+    monkeypatch.setattr(
+        agent, "_recall", lambda actor, kind: [("how is NVDA doing", "82, top quartile.")]
+    )
+    asyncio.run(agent.answer("chart it", actor="2807"))
+    assert [m["role"] for m in seen[0]] == ["system", "user", "assistant", "user"]
+    assert seen[0][-1]["content"] == "chart it"
+
+
+def test_only_the_last_couple_of_exchanges_are_remembered(monkeypatch):
+    # The memory is the one part of this prompt that grows with use, and a
+    # remembered turn is re-sent on every round of every message after it. Two
+    # exchanges is the cap; the query, not the model, enforces it.
+    assert audit.MEMORY_EXCHANGES == 2
+
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(
+        agent, "converse",
+        lambda **kw: seen.append(kw["messages"]) or fake_completion(text="ok"),
+    )
+    monkeypatch.setattr(agent, "_recall", lambda actor, kind: [("a", "b"), ("c", "d")])
+    asyncio.run(agent.answer("and now", actor="2807"))
+    assert len(seen[0]) == 1 + 2 * audit.MEMORY_EXCHANGES + 1
+
+
+def test_a_new_conversation_does_not_inherit_the_last_one(monkeypatch):
+    # New chat on the dashboard has to clear what Steven remembers as well as
+    # what is on screen, or the button is a lie and the next thread is billed
+    # for the previous one.
+    def never(actor, kind):
+        raise AssertionError("a fresh conversation must not recall anything")
+
+    monkeypatch.setattr(agent, "_recall", never)
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="ok"))
+    reply = asyncio.run(
+        agent.respond("hello", actor="ehewes", actor_kind="github", fresh=True)
+    )
+    assert reply.text == "ok"
+
+
+def test_what_is_remembered_is_truncated_before_it_is_stored(monkeypatch):
+    # Stored short rather than trimmed at recall, because one long answer would
+    # otherwise be paid for on every round of every message that remembers it.
+    recorded: list[dict] = []
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="word " * 900))
+    monkeypatch.setattr(agent, "_recall", lambda actor, kind: [])
+    monkeypatch.setattr(agent, "record", lambda **kw: recorded.append(kw))
+    asyncio.run(agent.respond("go on then " * 90, actor="2807", actor_kind="discord"))
+    detail = recorded[0]["detail"]
+    assert len(detail["reply"]) == agent.MEMORY_CHARS
+    assert len(detail["question"]) == agent.MEMORY_CHARS
+
+
+def test_a_reply_nobody_asked_for_is_not_remembered(monkeypatch):
+    # Scheduled work is not a conversation, and recalling one would put the
+    # platform's own questions in front of the next person who asks something.
+    def never(actor, kind):
+        raise AssertionError("system work has no conversation to recall")
+
+    monkeypatch.setattr(agent, "_recall", never)
+    monkeypatch.setattr(agent, "converse", lambda **kw: fake_completion(text="ok"))
+    assert asyncio.run(agent.respond("nightly check")).text == "ok"
 
 
 def test_the_agent_answers_on_solar_by_default(monkeypatch):
@@ -611,6 +670,7 @@ def test_a_spoken_turn_is_marked_as_one_in_the_audit_detail(monkeypatch):
 
     asyncio.run(agent.respond("chart nvidia", voice=True, actor="1", actor_kind="discord"))
     assert rows and rows[-1]["detail"]["voice"] is True
-    # And the transcript itself is not in there. Audio is more sensitive than
-    # typed text, not less.
-    assert "chart nvidia" not in str(rows[-1]["detail"])
+    # The question is in the row, because that is where Steven's memory lives
+    # and a spoken question is a question. The flag is what tells it from a
+    # typed one when reading the trail back, which is the whole point of it.
+    assert rows[-1]["detail"]["question"] == "chart nvidia"

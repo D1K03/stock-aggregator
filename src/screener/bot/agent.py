@@ -7,21 +7,31 @@ the system prompt lets him claim.
 Everything here is written for token cost. A mention is cheap in isolation and
 expensive in aggregate, and the levers that matter are: a short system prompt,
 short tool descriptions, short tool results, a small reply budget, a hard cap
-on tool rounds, and no conversation memory between mentions.
+on tool rounds, and a memory that is two exchanges deep and truncated.
+
+That memory is the one thing here that grows the prompt, so it is bounded on
+every axis at once: two exchanges, 300 characters each, final text only, half
+an hour, and nothing at all when the dashboard says the conversation is new. It
+is read back from the audit trail rather than held in a variable, because the
+bot and the status service are two processes and a conversation started on one
+has to be findable from the other.
 """
 
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+import psycopg
 
 from screener.ai import AiError, converse
 from screener.ai.models import SOLAR
 from screener.bot import budget
 from screener.bot.tools import Chart, collecting, dispatch, specs
-from screener.audit import record
-from screener.config import env
+from screener.audit import recent_turns, record
+from screener.config import env, settings
 from screener.provenance import git_sha
 
 logger = logging.getLogger(__name__)
@@ -45,6 +55,16 @@ MAX_TOOL_ROUNDS = 6
 # Small on purpose. Discord messages are short, the prompt asks for brevity, and
 # an unbounded budget is how a chatty model turns a one-line answer into a page.
 MAX_REPLY_TOKENS = 400
+
+# How much of a remembered turn is carried forward. Replies are short by
+# construction and a question is bounded at the door, so this rarely bites; it
+# is the ceiling that stops one long answer from being re-sent in full on every
+# round of every message after it.
+MEMORY_CHARS = 300
+
+# Short, because a reply is already waiting on this. A memory that cannot be
+# read costs a clarifying question; one that hangs costs the answer.
+CONNECT_TIMEOUT = 3
 
 # Solar Pro 4: cheaper than the DeepSeek default and a 524k context, which is
 # the property that matters once a reply has to hold a transcript. Overridable,
@@ -111,16 +131,42 @@ def _truncate(text: str) -> str:
     return f"{cut} … (truncated)"
 
 
-def _think(question: str, context: str = "", can_draw: bool = False) -> Reply:
+def _recall(actor: str, actor_kind: str) -> list[tuple[str, str]]:
+    """The last couple of exchanges with this person, oldest first.
+
+    Folded across identities by `budget.identities`, the same mapping the cap
+    uses, so the conversation you were having on the dashboard is the one that
+    continues in a DM after you press Continue in Discord. Without the fold it
+    would be two people talking to Steven and neither of them you.
+
+    Never raises. Forgetting costs a clarifying question; an exception here
+    would cost the reply.
+    """
+    try:
+        with psycopg.connect(
+            settings().database_url, connect_timeout=CONNECT_TIMEOUT
+        ) as conn:
+            return recent_turns(conn, budget.identities(actor, actor_kind))
+    except Exception as exc:
+        logger.warning("could not read the conversation so far: %s", exc)
+        return []
+
+
+def _think(
+    question: str,
+    context: str = "",
+    can_draw: bool = False,
+    history: Sequence[tuple[str, str]] = (),
+) -> Reply:
     """Run the tool loop and return (reply, tokens, cost).
 
     Synchronous, like every other call in this project. `answer` puts it on a
     worker thread.
 
-    No history is carried between mentions. That is the single largest token
-    saving available and it is also honest: Steven has no memory, and a
-    conversation that silently accumulated context would get more expensive
-    every message until someone noticed the bill.
+    `history` is the conversation so far as plain turns, already bounded by
+    `recent_turns`. It is what lets "chart it" mean something, and it is the
+    only part of this prompt that grows with use — which is why what goes in it
+    is capped in count, in age and in length rather than trimmed later.
 
     `can_draw` says whether the caller can render a chart. Discord cannot, and
     a tool that announced one anyway would have Steven point at something that
@@ -141,6 +187,14 @@ def _think(question: str, context: str = "", can_draw: bool = False) -> Reply:
                 ),
             }
         )
+    # The conversation so far, before the question that continues it. Only
+    # what was said: the tool calls and results that produced these answers
+    # were paid for once and re-sending them buys nothing the answer does not
+    # already say.
+    for asked, said in history:
+        messages.append({"role": "user", "content": asked})
+        messages.append({"role": "assistant", "content": said})
+
     messages.append({"role": "user", "content": question})
     tokens = 0
     cost = 0.0
@@ -224,6 +278,7 @@ async def respond(
     surface: str = "discord",
     context: str = "",
     can_draw: bool = False,
+    fresh: bool = False,
     voice: bool = False,
     allowance: budget.Budget | None = None,
 ) -> Reply:
@@ -233,10 +288,14 @@ async def respond(
     directly would block the gateway heartbeat for the length of the request
     and Discord would drop the connection as unresponsive.
 
-    `actor` is the Discord user id, carried through only so the audit row can
-    say who asked. `can_draw` says whether the caller can render a chart, and
-    `voice` whether the question was spoken rather than typed — which lands in
-    the audit trail and changes nothing else, because Steven answering a spoken
+    `actor` is the Discord user id or the signed-in login: who asked, for the
+    audit row and for what Steven remembers of them. `can_draw` says whether
+    the caller can render a chart. `fresh` is the dashboard saying this starts
+    a new conversation, so New chat clears what he remembers and not only what
+    is on screen — the one fact about the thread the server cannot infer.
+
+    `voice` says the question was spoken rather than typed. It lands in the
+    audit trail and changes nothing else, because Steven answering a spoken
     question differently would be a behaviour nobody asked for, paid for on
     every request forever.
 
@@ -244,8 +303,8 @@ async def respond(
     voice path does: it must decide before spending a core on transcription, and
     checking again here would mean two connections and two sums for one turn. A
     refused allowance is passed straight through, so the refusal sentence and
-    its audit row keep living in the one place they already do — which works
-    because that check sits above the empty-question guard below, and a spoken
+    its audit row keep living in the one place they already do, which works
+    because that check sits above the empty-question guard below and a spoken
     turn refused before transcription arrives here with nothing to say.
     """
     # Checked before the model is called, not after: the point of a cap is
@@ -289,9 +348,19 @@ async def respond(
             )
         )
 
+    # On a worker thread for the same reason the budget check is: it opens a
+    # database connection, and this may be the gateway's event loop. Skipped
+    # outright for a fresh conversation and for work nobody asked for, which
+    # saves the query rather than throwing its answer away.
+    history = (
+        []
+        if fresh or actor_kind == "system" or actor == "system"
+        else await asyncio.to_thread(_recall, actor, actor_kind)
+    )
+
     started = time.perf_counter()
     try:
-        reply = await asyncio.to_thread(_think, question, context, can_draw)
+        reply = await asyncio.to_thread(_think, question, context, can_draw, history)
     except AiError as exc:
         logger.warning("agent reply failed: %s", exc)
         await asyncio.to_thread(
@@ -330,13 +399,20 @@ async def respond(
             # Which surface the conversation happened on. The actor kind says
             # what sort of identity asked; this says where they were.
             "surface": surface,
-            # How the question arrived. The transcript itself is never recorded:
-            # audio is more sensitive than typed text, not less, and `chars` is
-            # the whole of what the trail needs to know about what was said.
+            # How the question arrived. Worth recording precisely because the
+            # question is stored below for Steven to remember: this is what
+            # tells a spoken sentence from a typed one when reading the trail
+            # back, and a transcription error from a typo.
             "voice": voice,
             "tools": [t.name for t in reply.tools],
             "charts": [c.ticker for c in reply.charts],
             "chars": len(reply.text),
+            # What the next message reads back as the conversation so far.
+            # Truncated here rather than at recall, because this is re-sent on
+            # every round of every message that remembers it, and because an
+            # audit trail is not a transcript store.
+            "question": question[:MEMORY_CHARS],
+            "reply": reply.text[:MEMORY_CHARS],
         },
     )
 

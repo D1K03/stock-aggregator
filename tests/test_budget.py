@@ -164,6 +164,14 @@ def test_only_a_github_identity_gets_a_picture():
     assert avatar(unknown) is None
 
 
+def test_the_local_development_login_does_not_borrow_a_strangers_face():
+    # /auth/local issues "local-dev", which is not a GitHub account — except
+    # that somebody holds github.com/local-dev, so the picture loaded happily
+    # and belonged to a person with no connection to this at all.
+    (local,) = fold([spend("local-dev", "github", "0.01")], {})
+    assert avatar(local) is None
+
+
 @pytest.mark.parametrize("kind", ["github", "discord"])
 def test_folding_an_empty_trail_is_an_empty_list(kind):
     assert fold([], {"2807": "ehewes"}) == []

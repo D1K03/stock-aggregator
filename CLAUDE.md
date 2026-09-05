@@ -7,6 +7,8 @@ read it before design work. `PLAN.md` holds current scope and the task in flight
 live in `docs/specs/`; the database schema is
 `docs/specs/2026-09-04-database-schema-design.md`. `docs/infrastructure.md` says what tooling
 exists and when to reach for it — read it before adding a proxy, a secret or a model call.
+`docs/architecture.md` draws the same system: containers and their edges, the package graph,
+the schema, the pipeline and CI/CD.
 
 ## Status
 
@@ -55,7 +57,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 
 ## Stack decisions
 
-- Python. Data: yfinance, Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
+- Python. Data: Yahoo Finance **called directly, never yfinance** — a payload stored from the
+  library is its DataFrame reshaping rather than the response, which breaks the content-hash
+  restatement detector. Then Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
 - Sentiment: VADER for a cheap baseline, FinBERT (ONNX via `onnxruntime`) for the real score.
   CPU only — no GPU, no CUDA. Never use an LLM to emit a sentiment number.
 - LLMs do narrative extraction (transcript summaries, guidance changes, risk-section flags) and
@@ -123,6 +127,11 @@ nothing outside imports a submodule directly.
   A DM shortly after a handoff picks up what the person was looking at, read back from the
   audit trail rather than held in memory: the handoff is sent by the status service and answered
   by the bot, and those are two processes.
+  He remembers the conversation the same way — the last two exchanges, read back per person
+  with Discord folded onto GitHub, so a dashboard thread carries over when you press Continue
+  in Discord. Bounded on every axis at once (two exchanges, `MEMORY_CHARS`, final text only,
+  half an hour, and nothing when the dashboard sends `fresh=1` for a new chat) because a
+  remembered turn is re-sent on every round of every message after it.
   The reply runs through `asyncio.to_thread`, because every other layer here is synchronous and
   blocking the event loop stalls the gateway heartbeat rather than just one command.
   Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
@@ -138,7 +147,10 @@ nothing outside imports a submodule directly.
   what need torch, and neither means anything for one person talking into a phone. A Discord
   voice message is transcribed and answered as though it had been typed; the dashboard's mic
   button puts the transcript in the composer so a misheard ticker is fixed before it is paid
-  for. The transcript is never written to the audit trail or to disk.
+  for. The audio is never written anywhere: it is held for one request and dropped, and
+  the transcription's own audit row records a length rather than the words. The question
+  itself does reach the trail on the reply row, exactly as a typed one does, because that
+  is where Steven's memory lives; the `voice` flag is what tells the two apart.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.

@@ -323,8 +323,10 @@ class ScreenerBot(discord.Client):
                 "surface": "discord",
                 "seconds": spoken.seconds,
                 "bytes": len(audio),
-                # The transcript itself is never recorded. Audio is more
-                # sensitive than typed text, not less.
+                # A length, not the words. The question does reach the trail
+                # on the reply row below, because that is where Steven's
+                # memory lives and a spoken question is a question — but it
+                # gets there once, as text, rather than twice.
                 "chars": len(spoken.text),
             },
         )

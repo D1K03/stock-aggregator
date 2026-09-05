@@ -139,8 +139,14 @@ see and spends its time being descheduled inside the quota.
 
 **Do not** reach for a bigger model first when it mishears a ticker. The
 `initial_prompt` in `transcribe/server.py` is free and `small.en` costs roughly
-three times the CPU. The transcript is never recorded — not in the audit trail,
-not on disk — because audio is more sensitive than typed text, not less.
+three times the CPU.
+
+**The audio is never written anywhere**, on disk or otherwise: it is held for one
+request and dropped, and the transcription's own audit row records how long the
+clip was rather than what was in it. The question does reach the trail on the
+reply row, exactly as a typed question does, because that is where Steven's
+memory lives, and a spoken question is a question. The `voice` flag on that row
+is what tells a transcription error from a typo when reading it back.
 
 ---
 

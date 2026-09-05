@@ -461,9 +461,13 @@ def test_a_recording_comes_back_as_text(signed_in_server, monkeypatch):
     assert json.loads(body) == {"text": "chart nvidia", "seconds": 2.0}
 
 
-def test_no_transcript_is_written_into_the_audit_trail(signed_in_server, monkeypatch):
-    # Audio is more sensitive than typed text, not less, so the trail records
-    # that something was said and how long it took, never what it was.
+def test_the_transcription_row_records_a_length_rather_than_the_words(
+    signed_in_server, monkeypatch
+):
+    # This row is about what the transcription cost, so it holds a length. The
+    # text does reach the trail when it is asked as a question, on the reply
+    # row, exactly as a typed question does: that is where Steven's memory
+    # lives. What never lands anywhere is the audio.
     from screener.transcribe import Transcript
 
     url, conn = signed_in_server

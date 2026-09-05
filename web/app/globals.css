@@ -897,10 +897,20 @@ footer.site .prov {
   padding: 11px 16px; border-radius: var(--r-2xl); border-bottom-right-radius: 7px;
 }
 .stv-turn.steven { color: var(--ink); }
-/* Wider than the 360px the card is drawn at, and wider than the palette shows
-   it: the conversation column is 880px and a chart is the one thing in it worth
-   reading closely, so it takes most of that rather than sitting in the middle of
-   its own whitespace. The SVG scales, so this costs no sharpness. */
+/* Wider than the 360px the card is drawn at, because a chart is the one thing
+   in the conversation worth reading closely and the column is 880px.
+
+   This overrides the choice made on main, which removed the rule so the chart
+   sat at its drawn size. That reasoning is real and worth keeping in view: the
+   SVG is one drawing at one size, the same string the palette shows and the
+   same string Discord rasterises, so stretching it scales 8px axis labels and a
+   1.8px line along with everything else. It was overridden because it was asked
+   for directly, and because 360px in an 880px column reads as an afterthought.
+
+   The honest fix for both is to draw the chat chart at a larger intrinsic size
+   rather than scale one drawn small, which means CARD_W in chart-svg.ts and
+   therefore Discord's PNG too. That is a change to the shared renderer, not to
+   a stylesheet, so it is not being smuggled in here. */
 .stv-line .cchart { max-width: 760px; width: 100%; border-radius: 14px; }
 .stv-thinking {
   display: flex; align-items: center; gap: 9px;
@@ -1131,3 +1141,7 @@ footer.site .prov {
 .who-surface { opacity: 0.75; }
 .who-bar.near i { background: linear-gradient(90deg, var(--amber-4), var(--amber-5)); }
 .who-bar.spent i { background: var(--copper-deep); }
+
+/* The signed-in user's own GitHub picture, in place of their initials. Same
+   circle, so the rail does not shift when it loads or fails to. */
+.avatar.as-picture { background: var(--paper); object-fit: cover; }

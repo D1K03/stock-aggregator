@@ -294,3 +294,74 @@ def test_the_newest_handoff_wins(fresh_db):
 def test_no_handoff_is_an_empty_string_not_an_error(fresh_db):
     # Most messages to the bot continue nothing, so this is the normal path.
     assert audit.last_handoff_context(fresh_db, "2807") == ""
+
+
+# -- what Steven remembers --------------------------------------------------
+
+
+def said(conn, asked, answered, **overrides):
+    """One remembered exchange, as `agent.respond` stores it."""
+    insert(conn, detail={"question": asked, "reply": answered}, **overrides)
+
+
+def test_the_last_exchanges_come_back_in_the_order_they_happened(fresh_db):
+    # They are re-sent as a conversation, so newest-first would have Steven
+    # reading it backwards.
+    said(fresh_db, "how is NVDA doing", "82, top quartile.")
+    said(fresh_db, "and its momentum", "Ninetieth percentile in its sector.")
+    assert audit.recent_turns(fresh_db, [("42", "discord")]) == [
+        ("how is NVDA doing", "82, top quartile."),
+        ("and its momentum", "Ninetieth percentile in its sector."),
+    ]
+
+
+def test_a_dashboard_conversation_is_picked_up_in_discord(fresh_db):
+    # What Continue in Discord promises. The trail has the dashboard turn under
+    # a GitHub login and the DM arrives under a Discord id, so without folding
+    # the identities the conversation would restart.
+    said(fresh_db, "what is NVDA on", "82.", actor="ehewes", actor_kind="github")
+    carried = audit.recent_turns(fresh_db, [("2807", "discord"), ("ehewes", "github")])
+    assert carried == [("what is NVDA on", "82.")]
+
+
+def test_older_exchanges_are_left_behind_so_the_prompt_stays_bounded(fresh_db):
+    # A remembered turn is re-sent on every round of every message after it, so
+    # the cap is what keeps the cost of memory flat rather than growing.
+    for n in range(5):
+        said(fresh_db, f"question {n}", f"answer {n}")
+    remembered = audit.recent_turns(fresh_db, [("42", "discord")])
+    assert remembered == [("question 3", "answer 3"), ("question 4", "answer 4")]
+
+
+def test_a_stale_conversation_is_not_carried_on(fresh_db):
+    # Answering this morning's question against last night's conversation is
+    # worse than asking which ticker.
+    fresh_db.execute(
+        """
+        insert into audit.event (kind, operation, actor, actor_kind, detail, occurred_at)
+        values ('agent', 'steven.reply', '42', 'discord',
+                '{"question": "how is NVDA doing", "reply": "82."}'::jsonb,
+                now() - interval '3 hours')
+        """
+    )
+    assert audit.recent_turns(fresh_db, [("42", "discord")]) == []
+
+
+def test_someone_elses_conversation_is_not_recalled(fresh_db):
+    said(fresh_db, "how is NVDA doing", "82.", actor="4010")
+    assert audit.recent_turns(fresh_db, [("42", "discord")]) == []
+
+
+def test_a_refusal_is_not_remembered_as_something_he_said(fresh_db):
+    # A row over the spend cap or a failed model call has no answer in it, and
+    # feeding one back would have Steven continue a conversation that never
+    # happened.
+    insert(fresh_db, outcome="refused", detail={"reason": "daily spend cap"})
+    insert(fresh_db, outcome="error", detail={"error": "upstream is down"})
+    assert audit.recent_turns(fresh_db, [("42", "discord")]) == []
+
+
+def test_recalling_for_nobody_asks_the_database_nothing(fresh_db):
+    # An empty identity list would otherwise compose an `or` of no conditions,
+    # which is a syntax error rather than an empty answer.
+    assert audit.recent_turns(fresh_db, []) == []
