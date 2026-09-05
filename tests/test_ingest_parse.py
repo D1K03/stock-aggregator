@@ -1,0 +1,236 @@
+import json
+from datetime import date
+from decimal import Decimal
+
+from screener.ingest.parse import Action, Bar, parse
+
+
+def chart(timestamps, quote, events=None):
+    body = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {"currency": "USD", "symbol": "AAPL"},
+                    "timestamp": timestamps,
+                    "indicators": {"quote": [quote]},
+                }
+            ],
+            "error": None,
+        }
+    }
+    if events is not None:
+        body["chart"]["result"][0]["events"] = events
+    return json.dumps(body).encode()
+
+
+def test_bars_come_back_as_decimals_and_a_date():
+    payload = chart(
+        [1758585600],  # 2025-09-23T00:00:00Z
+        {
+            "open": [100.5],
+            "high": [101.0],
+            "low": [99.5],
+            "close": [100.0],
+            "volume": [1234567],
+        },
+    )
+    bars, _ = parse(payload)
+    assert bars == [
+        Bar(
+            trade_date=date(2025, 9, 23),
+            open=Decimal("100.5"),
+            high=Decimal("101.0"),
+            low=Decimal("99.5"),
+            close=Decimal("100.0"),
+            volume=1234567,
+        )
+    ]
+
+
+def test_a_bar_with_a_null_field_is_dropped_not_zero_filled():
+    # Yahoo pads its quote arrays with nulls. price_daily's columns are not
+    # null, and a zero-filled bar is a fabricated -100% return.
+    payload = chart(
+        [1758585600, 1758672000],
+        {
+            "open": [100.0, None],
+            "high": [101.0, None],
+            "low": [99.0, None],
+            "close": [100.0, None],
+            "volume": [10, None],
+        },
+    )
+    bars, _ = parse(payload)
+    assert len(bars) == 1
+    assert bars[0].trade_date == date(2025, 9, 23)
+
+
+def test_splits_and_dividends_are_both_read():
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+        events={
+            "splits": {
+                "1758585600": {
+                    "date": 1758585600,
+                    "numerator": 2,
+                    "denominator": 1,
+                    "splitRatio": "2:1",
+                }
+            },
+            "dividends": {"1758585600": {"date": 1758585600, "amount": 0.24}},
+        },
+    )
+    _, actions = parse(payload)
+    assert Action(date(2025, 9, 23), "split", Decimal("2"), None) in actions
+    assert Action(date(2025, 9, 23), "dividend", None, Decimal("0.24")) in actions
+
+
+def test_no_events_block_means_no_actions_not_an_error():
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+    )
+    bars, actions = parse(payload)
+    assert len(bars) == 1
+    assert actions == []
+
+
+def test_an_error_response_yields_nothing_rather_than_raising():
+    payload = json.dumps({"chart": {"result": None, "error": {"code": "Not Found"}}}).encode()
+    assert parse(payload) == ([], [])
+
+
+def test_malformed_json_yields_nothing_rather_than_raising():
+    assert parse(b"<html>bad gateway</html>") == ([], [])
+
+
+def test_bars_come_back_in_date_order():
+    payload = chart(
+        [1758672000, 1758585600],
+        {
+            "open": [2.0, 1.0],
+            "high": [2.0, 1.0],
+            "low": [2.0, 1.0],
+            "close": [2.0, 1.0],
+            "volume": [2, 1],
+        },
+    )
+    bars, _ = parse(payload)
+    assert [b.trade_date for b in bars] == sorted(b.trade_date for b in bars)
+
+
+def test_a_quote_value_that_is_not_numeric_is_dropped_not_raised():
+    # Non-numeric strings (empty string, invalid formats) in quote arrays
+    # should not crash the entire payload. The bar containing them is dropped;
+    # others survive.
+    payload = chart(
+        [1758585600, 1758672000],
+        {
+            "open": [100.0, ""],
+            "high": [101.0, 101.0],
+            "low": [99.0, 99.0],
+            "close": [100.0, 100.0],
+            "volume": [10, 10],
+        },
+    )
+    bars, _ = parse(payload)
+    assert len(bars) == 1
+    assert bars[0].trade_date == date(2025, 9, 23)
+
+
+def test_an_out_of_range_timestamp_is_dropped_not_raised():
+    # An epoch that is out of range for datetime should drop that bar, not
+    # raise an exception.
+    payload = chart(
+        [1758585600, 999999999999999],
+        {
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.0, 100.0],
+            "close": [100.0, 101.0],
+            "volume": [10, 10],
+        },
+    )
+    bars, _ = parse(payload)
+    assert len(bars) == 1
+    assert bars[0].trade_date == date(2025, 9, 23)
+
+
+def test_a_split_entry_missing_date_is_dropped_not_raised():
+    # A malformed split entry without a date should be dropped without
+    # raising, and bars should still be returned.
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+        events={
+            "splits": {
+                "bad_entry": {
+                    "numerator": 2,
+                    "denominator": 1,
+                    # Missing "date" key
+                }
+            }
+        },
+    )
+    bars, actions = parse(payload)
+    assert len(bars) == 1
+    assert actions == []
+
+
+def test_a_split_entry_that_is_not_a_dict_is_dropped_not_raised():
+    # If a split entry is not a dict (e.g., null or a list), it should be
+    # dropped without raising an exception.
+    payload = chart(
+        [1758585600],
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]},
+        events={
+            "splits": {
+                "bad_entry": None,
+                "good_entry": {
+                    "date": 1758585600,
+                    "numerator": 2,
+                    "denominator": 1,
+                },
+            }
+        },
+    )
+    bars, actions = parse(payload)
+    assert len(bars) == 1
+    assert len(actions) == 1
+    assert actions[0].action_type == "split"
+
+
+def test_a_nan_price_drops_the_bar_rather_than_storing_a_nan():
+    # Python's json encoder writes the bare `NaN` token and its decoder reads it
+    # back, `Decimal("NaN")` is a valid Decimal, and Postgres `numeric` stores
+    # 'NaN' happily — so without a guard a NaN close lands in a not-null column
+    # and poisons every momentum metric derived from it.
+    payload = chart(
+        [1758585600],
+        {
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [float("nan")],
+            "volume": [1],
+        },
+    )
+    assert "NaN" in payload.decode()
+    bars, _ = parse(payload)
+    assert bars == []
+
+
+def test_an_infinite_price_drops_the_bar_too():
+    payload = chart(
+        [1758585600],
+        {
+            "open": [float("inf")],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+            "volume": [1],
+        },
+    )
+    bars, _ = parse(payload)
+    assert bars == []

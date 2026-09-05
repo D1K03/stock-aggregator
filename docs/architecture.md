@@ -183,6 +183,8 @@ flowchart TD
     bot["bot.agent + bot.client"]
     tools["bot.tools"]
     universe["universe"]
+    blobs["blobs<br/>local + s3, hand-rolled SigV4"]
+    ingest["ingest<br/>prices + sweep"]
 
     boot --> settings
     boot --> secrets
@@ -217,6 +219,13 @@ flowchart TD
 
     universe --> settings
     universe --> fetch
+
+    env --> blobs
+    ingest --> settings
+    ingest --> secrets
+    ingest --> fetch
+    ingest --> blobs
+
     audit --> settings
 ```
 
@@ -515,8 +524,8 @@ year boundary without colliding with a same-named yearly one.
 ## The v1 pipeline
 
 The spine, and the only diagram here that draws things which do not exist.
-Ingest, scoring, the snapshot diff and alerting are all unwritten; universe and
-identity are built and loaded.
+Universe, identity and daily **price** ingest are built; fundamentals ingest is
+cycle two, and scoring, the snapshot diff and alerting are all unwritten.
 
 ```mermaid
 flowchart LR
@@ -524,8 +533,9 @@ flowchart LR
 
     csv["data/universe.csv"]
     ident["universe load<br/>security, security_symbol,<br/>security_sector, peer_group"]
-    ing["«not built» ingest<br/>yfinance prices + fundamentals<br/>content-hash dedup"]
-    facts[("ingest_observation<br/>fundamental_fact<br/>price_daily")]
+    ing["ingest prices<br/>Yahoo /v8/finance/chart, raw bars only<br/>content-hash dedup, payload to R2"]
+    ingf["«not built» ingest fundamentals<br/>the crumbed quoteSummary path<br/>cycle two"]
+    facts[("ingest_observation<br/>price_daily<br/>«not built» fundamental_fact")]
     sc["«not built» scoring<br/>percentile within sector peer group,<br/>then average within pillar"]
     derived[("metric_daily<br/>pillar_score_daily<br/>snapshot_daily<br/>event_flag_daily")]
     diff["«not built» diff<br/>today vs the last comparable snapshot"]
@@ -536,7 +546,9 @@ flowchart LR
 
     csv --> ident
     ident --> ing
+    ident --> ingf
     ing --> facts
+    ingf --> facts
     facts --> sc
     sc --> derived
     derived --> diff
@@ -545,7 +557,7 @@ flowchart LR
     gate -->|true| cool
     cool --> post
 
-    class ing,facts,sc,derived,diff,gate,skip,cool,post unbuilt
+    class ingf,sc,derived,diff,gate,skip,cool,post unbuilt
 ```
 
 The `emits_alerts` gate is drawn because it is the invariant most likely to be

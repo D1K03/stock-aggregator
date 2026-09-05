@@ -116,6 +116,11 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    path holds one session for the run — `screener.universe.sources.yahoo` already does this and
    the ingest client should extend that shape rather than start again.
 
+   The price half is implemented — see `docs/specs/2026-09-05-price-ingest.md` and
+   `docs/plans/2026-09-05-price-ingest.md`. Fundamentals remain, per that spec's own
+   "Out of scope" section, along with scoring and the dashboard/bot swap off
+   `screener.concept`.
+
    **Not yfinance.** The library emits parsed DataFrames, so a stored payload would be its
    reshaping rather than the response — which breaks the content-hash restatement detector and
    leaves "did the API lie or did our parser?" unanswerable. Direct also returns profile,

@@ -40,3 +40,126 @@ def fresh_db(empty_db):
     """A connection to an empty public schema with all migrations applied."""
     apply_migrations(empty_db, MIGRATIONS)
     return empty_db
+
+
+@pytest.fixture
+def an_observation(fresh_db):
+    """Make an ingest_observation for a security, and return its id.
+
+    `price_daily.ingest_observation_id` and `corporate_action.ingest_observation_id`
+    are both not-null foreign keys, so nothing can be inserted without one.
+    A fixture returning a callable rather than a plain function, because a test
+    module cannot import from conftest without relying on pytest's import mode.
+    """
+
+    def make(security_id: int) -> int:
+        source_id = fresh_db.execute(
+            "insert into data_source (code, name) values ('yahoo', 'Yahoo') "
+            "on conflict (code) do update set name = excluded.name returning id"
+        ).fetchone()[0]
+        run_id = fresh_db.execute(
+            "insert into ingest_run (source_id, endpoint, started_at, status) "
+            "values (%s, 'chart', now(), 'running') returning id",
+            (source_id,),
+        ).fetchone()[0]
+        return fresh_db.execute(
+            """insert into ingest_observation
+               (ingest_run_id, security_id, fetched_at, content_hash, blob_path,
+                is_new_payload, payload_bytes)
+               values (%s, %s, now(), %s, 'yahoo/chart/2026-09-05/1.json.gz', true, 1)
+               returning id""",
+            (run_id, security_id, b"\x00" * 32),
+        ).fetchone()[0]
+
+    return make
+
+
+@pytest.fixture
+def ingest_ctx(fresh_db, an_observation):
+    """One security and an observation, as (security_id, observation_id)."""
+    security_id = fresh_db.execute(
+        """insert into security
+           (name, mic, currency, country, primary_symbol, first_seen)
+           values ('Test', 'XNAS', 'USD', 'US', 'AAA', '2020-01-01') returning id"""
+    ).fetchone()[0]
+    return security_id, an_observation(security_id)
+
+
+@pytest.fixture
+def two_securities(fresh_db):
+    """Two securities as (id, symbol) pairs."""
+    out = []
+    for name, symbol in (("Alpha", "AAA"), ("Beta", "BBB")):
+        out.append(
+            (
+                fresh_db.execute(
+                    """insert into security
+                       (name, mic, currency, country, primary_symbol, first_seen)
+                       values (%s, 'XNAS', 'USD', 'US', %s, '2020-01-01') returning id""",
+                    (name, symbol),
+                ).fetchone()[0],
+                symbol,
+            )
+        )
+    return out[0], out[1]
+
+
+def _chart_bytes(day, close="100", volume=10, split=None):
+    """A minimal chart response. Used by the run and sweep tests."""
+    import json
+    from datetime import datetime, timezone
+
+    stamp = int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+    body = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {"currency": "USD"},
+                    "timestamp": [stamp],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [float(close)],
+                                "high": [float(close)],
+                                "low": [float(close)],
+                                "close": [float(close)],
+                                "volume": [volume],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+    }
+    if split:
+        body["chart"]["result"][0]["events"] = {
+            "splits": {str(stamp): {"date": stamp, "numerator": 2, "denominator": 1}}
+        }
+    return json.dumps(body).encode()
+
+
+@pytest.fixture
+def chart_bytes():
+    """A test module cannot import a plain function from conftest, so the
+    module-level helper (`_chart_bytes`) is handed out through a fixture —
+    the same shape as `an_observation` above."""
+    return _chart_bytes
+
+
+class _FakeClient:
+    """A ChartClient-shaped stub, keyed by symbol so one can fail."""
+
+    def __init__(self, bodies):
+        self.bodies = bodies
+        self.asked = []
+
+    def fetch(self, symbol, start, end):
+        self.asked.append((symbol, start, end))
+        return self.bodies.get(symbol)
+
+
+@pytest.fixture
+def FakeClient():
+    """Hands out the stub class itself, for the same reason as `chart_bytes`:
+    a test module cannot import a plain name from conftest."""
+    return _FakeClient

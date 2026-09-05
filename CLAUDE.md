@@ -12,9 +12,10 @@ the schema, the pipeline and CI/CD.
 
 ## Status
 
-The database schema and the infrastructure layer are built and tested; no ingest, scoring or
-alerting code exists yet. Runtime dependencies are `psycopg` and `httpx`, and nothing else —
-check `pyproject.toml` before assuming a library is available.
+The database schema, the infrastructure layer and daily **price** ingest are built and tested;
+fundamentals are the next ingest cycle, and no scoring or alerting code exists yet. Runtime
+dependencies are `psycopg` and `httpx`, and nothing else — check `pyproject.toml` before
+assuming a library is available.
 
 ## What it does
 
@@ -98,6 +99,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   Refuses if more than 10% of the active universe would be retired; `--force` overrides.
 - Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status` on 8080
 - Check every integration against the real world: `python -m screener.boot selftest`
+- Ingest prices: `python -m screener.ingest prices` — fetches missing daily bars per
+  security, backfilling to 2020 on first sight. `sweep` is a hand-run diagnostic that
+  compares six years against what is stored and writes nothing.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
@@ -196,3 +200,11 @@ nothing outside imports a submodule directly.
   groups, so it has to show up in a diff before it can move a score. Identity is matched on CIK,
   not symbol — match on symbol and a rename reads as a departure plus an unrelated arrival.
 - `screener.boot` — secrets, then migrations under an advisory lock, then serve.
+- `screener.blobs` — the payload store. `local` for tests, Cloudflare R2 in production,
+  SigV4 hand-rolled because two verbs against one bucket with static credentials is the
+  narrow case where that is tractable. Nothing prunes: `ingest_observation.blob_path` is
+  `not null` and every score traces back to a stored response.
+- `screener.ingest` — daily bars and corporate actions from Yahoo. Backfill is not a mode;
+  a security with no rows gets 2020. Two windows: the fetch window widens to close a gap,
+  the settling window (7 days) never does, and inside it is the one place the ingest path
+  mutates an existing row.
