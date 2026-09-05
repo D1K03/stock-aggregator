@@ -1,6 +1,7 @@
 import pytest
 
 from screener.ai.config import RouterConfig
+from screener.bot.config import BotConfig
 from screener.config import Settings, settings
 from screener.config import env
 from screener.fetch.config import ProxyConfig
@@ -41,6 +42,7 @@ def test_an_integer_variable_with_a_typo_raises_rather_than_using_the_default(
         ProxyConfig(api_key=CREDENTIAL),
         RouterConfig(api_key=CREDENTIAL),
         DiscordConfig(webhook_url=CREDENTIAL),
+        BotConfig(token=CREDENTIAL),
     ],
 )
 def test_no_config_object_prints_its_credentials(config):

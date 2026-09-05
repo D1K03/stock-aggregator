@@ -215,13 +215,27 @@ the previous day with alerting disabled before resuming live.
 
 ## LLM usage
 
-Narrative extraction only — the unstructured work FinBERT cannot do: condensing earnings-call
+Narrative extraction, and answering questions in the Discord server. Never a number.
+
+The extraction case is the unstructured work FinBERT cannot do: condensing earnings-call
 transcripts, extracting guidance changes from filings, turning 10-K risk sections into structured
 flags.
 
+**The bot's replies are the second case**, and were not part of the original "extraction only"
+rule. Someone mentions the bot, a model answers. What keeps that inside the project's constraints
+is the system prompt rather than the phrasing of this entry: it forbids investment advice
+outright, forbids producing a figure the screener does not have, and tells the model to say when
+it does not know. That last one matters most while ingest does not exist, because every number a
+model could offer about a security today would be invented.
+
+The rule that has not moved: **an LLM never emits a score.** Sentiment is FinBERT's, percentiles
+are arithmetic, and a model asked for either would produce a confident answer with nothing behind
+it.
+
 **OpenRouter** as the front door: one API across many models, easy to swap and compare on
-cost/quality. A cheap model (Gemini Flash / GPT-4o-mini / Haiku class) is fractions of a penny
-per document.
+cost/quality. A cheap model is fractions of a penny per document — the bot answers on Solar Pro 4,
+which is cheaper than the extraction default and carries a 524k context, the property that starts
+to matter once a reply has to hold a transcript.
 
 ## Alerting
 
@@ -245,7 +259,18 @@ a tool that shouts BUY reads as a toy while one that shows evidence reads as eng
 state, and do not re-alert the same ticker for N days. Without this a score hovering near a
 threshold fires daily and the channel is muted within a week.
 
-Delivery is a single HTTP POST to a webhook. No OAuth, no bot hosting.
+Delivery is a single HTTP POST to a webhook. That has not changed: an alert is one message a
+day, and a webhook needs one secret and no connection.
+
+**A gateway bot exists separately, as a command surface.** Previously ruled out along with OAuth
+under "no bot hosting". The reversal is about what the bot is *for*: not delivering alerts, which
+the webhook does well, but taking commands and eventually running agent-style work. HTTP
+interactions were the cheaper option and would have kept the original wording literally true, with
+Discord posting to the service already behind the tunnel and no extra process. They were rejected
+because interactions only ever see a command someone typed; message events, reactions and anything
+ambient are invisible to them, and building on them now would mean rebuilding the moment the bot
+needs to notice something nobody typed. The cost is a long-lived process that reconnects on its
+own, one more container, and `aiohttp` in the tree.
 
 ## Infrastructure
 

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from screener.ai import complete
 from screener.ai.config import RouterConfig
+from screener.bot.config import BotConfig
 from screener.fetch import fetch
 from screener.fetch.config import ProxyConfig
 from screener.notify.config import DiscordConfig
@@ -122,6 +123,54 @@ def _safe(name: str, check: Callable[[], Check]) -> Check:
         return Check(name, FAIL, f"{type(exc).__name__}: {exc}")
 
 
+def _bot() -> Check:
+    """Whether the bot's token is real and its allow-list is usable.
+
+    Asks Discord who the token belongs to rather than only checking that a
+    token exists. That is a read, so it posts nothing and cannot be noticed in
+    the server, but it is the difference between "a token is configured" and
+    "the token works" — which is the whole reason this command exists.
+
+    Importing `BotConfig` does not pull in discord.py, so the unconfigured case
+    stays as cheap as every other check here.
+    """
+    config = BotConfig.from_env()
+    if not config.enabled:
+        return Check("discord bot", SKIP, "DISCORD_BOT_TOKEN is not set")
+    if config.guild_id is None:
+        # Without a guild, commands register globally and take about an hour to
+        # appear, which reads as a broken bot to anyone testing after a deploy.
+        return Check("discord bot", FAIL, "DISCORD_GUILD_ID is not set")
+    if not config.allowed_user_ids:
+        return Check("discord bot", FAIL, "ALLOWED_DISCORD_USER_IDS is empty")
+
+    try:
+        result = fetch(
+            "https://discord.com/api/v10/users/@me",
+            ("direct",),
+            timeout=15.0,
+            headers={
+                "Authorization": f"Bot {config.token}",
+                # Discord asks bots to identify themselves honestly, so the
+                # browser fingerprint the fetch layer sends by default is the
+                # wrong claim to make to this particular API.
+                "User-Agent": (
+                    "DiscordBot (https://github.com/D1K03/stock-aggregator, 0.1.0)"
+                ),
+            },
+        )
+    except Exception as exc:
+        return Check("discord bot", FAIL, f"{type(exc).__name__}: {exc}")
+
+    username = result.json().get("username", "?")
+    return Check(
+        "discord bot",
+        OK,
+        f"{username}, guild {config.guild_id}, "
+        f"{len(config.allowed_user_ids)} permitted user(s)",
+    )
+
+
 def run() -> bool:
     """Run every check and log the results. True when nothing failed."""
     direct = _safe("fetch direct", _direct)
@@ -132,6 +181,7 @@ def run() -> bool:
         _safe("fetch isp_proxy", lambda: _isp_proxy(direct)),
         _safe("openrouter", _openrouter),
         _safe("discord", _discord),
+        _safe("discord bot", _bot),
     ]
 
     width = max(len(c.name) for c in results)

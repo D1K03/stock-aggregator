@@ -10,6 +10,20 @@ dependencies = [
     # runs before anything else and must not depend on the package installing.
     "httpx>=0.27",
     "psycopg[binary]>=3.1",
+    # The Discord gateway client, for the inbound bot only. Alert delivery is
+    # still an httpx POST to a webhook and does not import this.
+    #
+    # Not a cheap dependency, and not worth describing as one: it pulls aiohttp,
+    # which pulls aiohappyeyeballs, aiosignal, attrs, frozenlist, multidict,
+    # propcache and yarl. Eight new packages, and a second HTTP stack beside
+    # httpx. What it buys is the gateway protocol — identify, heartbeat, resume,
+    # session limits, reconnect backoff, rate-limit buckets — which is the part
+    # nobody should write twice.
+    #
+    # Upper bound, unlike the two above: this sits on discord.py's whole API
+    # surface rather than on a stable request and response shape, and 3.0 is a
+    # declared breaking release.
+    "discord.py>=2.4,<3",
 ]
 
 [project.optional-dependencies]

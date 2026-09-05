@@ -182,6 +182,16 @@ jobs:
             for attempt in $(seq 1 30); do
               if $COMPOSE exec -T api python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready').status == 200 else 1)"; then
                 echo "ready after ${attempt} attempt(s)"
+                # The bot has no port and no healthcheck, so nothing above would
+                # notice it crash-looping on a token that never reached
+                # Infisical. Give it a moment to fail, then insist it is up.
+                sleep 15
+                if ! $COMPOSE ps --status running --services | grep -qx bot; then
+                  echo "::error::the bot container is not running"
+                  $COMPOSE logs --tail=60 bot
+                  exit 1
+                fi
+                echo "bot container is running"
                 exit 0
               fi
               sleep 3
