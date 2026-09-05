@@ -366,6 +366,19 @@ class Handler(BaseHTTPRequestHandler):
                     offset=(page_number - 1) * audit.PAGE_SIZE,
                 )
                 totals = audit.spend(conn)
+                from screener.bot import budget
+                from screener.bot.config import BotConfig
+
+                actors = audit.by_actor(conn)
+                # The mapping that already links the two identities for the
+                # Discord handoff, read the other way round.
+                people = audit.fold(
+                    actors,
+                    {
+                        str(discord_id): login
+                        for login, discord_id in BotConfig.from_env().user_map.items()
+                    },
+                )
                 available = audit.operations(conn)
         except Exception as exc:
             logger.warning("could not read the audit trail: %s", exc)
@@ -409,6 +422,30 @@ class Handler(BaseHTTPRequestHandler):
                     "cost_24h_usd": float(totals.cost_24h),
                     "tokens_24h": totals.tokens_24h,
                 },
+                # What one person may spend in a day, so the interface can
+                # show how close each of them is rather than only the total.
+                "daily_cap_usd": float(budget.daily_cap()),
+                # Who spent it. Two people share one bill, and a single total
+                # says the month was cheap or expensive without saying whose
+                # questions made it so. Folded onto one row per human through
+                # the same DISCORD_USER_MAP the handoff uses.
+                "people": [
+                    {
+                        "login": p.login,
+                        "known": p.known,
+                        "avatar": audit.avatar(p),
+                        "events": p.events,
+                        "cost_usd": float(p.cost),
+                        "tokens": p.tokens,
+                        "cost_24h_usd": float(p.cost_24h),
+                        "last_seen": p.last_seen.isoformat(),
+                        "surfaces": [
+                            {"kind": kind, "cost_usd": float(cost)}
+                            for kind, cost in p.surfaces
+                        ],
+                    }
+                    for p in people
+                ],
                 "operations": [
                     {"kind": k, "operation": o, "count": c} for k, o, c in available
                 ],

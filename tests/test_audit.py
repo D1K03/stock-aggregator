@@ -186,3 +186,58 @@ def test_a_recorded_event_reads_back_with_its_cost(fresh_db, monkeypatch, db_url
     assert events[0].operation == "status"
     assert events[0].cost_usd == Decimal("0.00012300")
     assert events[0].detail == {"arguments": {}}
+
+
+# -- spend per person ------------------------------------------------------
+
+
+def test_spend_is_attributed_to_the_person_who_asked(fresh_db):
+    # Two people share one bill. A single total says the month was expensive
+    # without saying whose questions made it so.
+    insert(fresh_db, actor="ehewes", actor_kind="github", cost_usd=Decimal("0.0400"))
+    insert(fresh_db, actor="ehewes", actor_kind="github", cost_usd=Decimal("0.0200"))
+    insert(fresh_db, actor="401071550331355146", cost_usd=Decimal("0.0100"))
+
+    rows = audit.by_actor(fresh_db)
+    assert [(r.actor, float(r.cost)) for r in rows] == [
+        ("ehewes", 0.06),
+        ("401071550331355146", 0.01),
+    ]
+    assert rows[0].events == 2
+    assert rows[0].actor_kind == "github"
+
+
+def test_the_same_person_on_two_surfaces_is_two_rows(fresh_db):
+    # Joining a GitHub login to a Discord id needs a mapping this layer does
+    # not hold, so they are reported separately and each says which surface it
+    # is, rather than being silently merged into a number nobody can check.
+    insert(fresh_db, actor="ehewes", actor_kind="github", cost_usd=Decimal("0.02"))
+    insert(fresh_db, actor="ehewes", actor_kind="discord", cost_usd=Decimal("0.03"))
+
+    rows = audit.by_actor(fresh_db)
+    assert len(rows) == 2
+    assert {r.actor_kind for r in rows} == {"github", "discord"}
+
+
+def test_people_who_cost_nothing_are_left_out(fresh_db):
+    # The trail records tool calls and slash commands too. A list of people who
+    # spent nothing is noise on a panel whose whole subject is money.
+    insert(fresh_db, kind="tool", operation="chart", cost_usd=Decimal("0"))
+    insert(fresh_db, kind="command", operation="ping", cost_usd=Decimal("0"))
+    assert audit.by_actor(fresh_db) == []
+
+
+def test_work_with_nobody_behind_it_is_not_counted_as_a_person(fresh_db):
+    # `actor` is `not null default 'system'`, so scheduled work is not absent
+    # from the trail, it is attributed to the machine. A panel headed "spend by
+    # person" listing "system" would be wrong in a way that reads as a bug.
+    insert(fresh_db, kind="system", operation="boot.migrate", actor="system",
+           actor_kind="system", cost_usd=Decimal("0.01"))
+    assert audit.by_actor(fresh_db) == []
+
+
+def test_the_dearest_person_is_first(fresh_db):
+    # The panel is a ranking, so the order is the answer.
+    insert(fresh_db, actor="quiet", cost_usd=Decimal("0.001"))
+    insert(fresh_db, actor="chatty", cost_usd=Decimal("0.900"))
+    assert [r.actor for r in audit.by_actor(fresh_db)] == ["chatty", "quiet"]

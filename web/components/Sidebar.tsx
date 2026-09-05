@@ -30,7 +30,7 @@ const NARROW = "(max-width: 860px)";
    as a tab bar, so the content gets the full width. */
 const PHONE = "(max-width: 760px)";
 
-type Item = { label: string; href: string; icon: React.ReactNode };
+type Item = { label: string; href: string; icon: React.ReactNode; soon?: boolean };
 
 function Icon({ d }: { d: string }) {
   return (
@@ -41,13 +41,17 @@ function Icon({ d }: { d: string }) {
   );
 }
 
+/* `soon` marks a destination that does not exist yet. It stays listed, because
+   the shape of the thing is worth showing, but it is rendered as text rather
+   than a link — a nav item that looks clickable and does nothing is worse than
+   one that says it is not ready. */
 const ITEMS: Item[] = [
   { label: "Overview", href: "/", icon: <Icon d="M3 12h5l2 6 4-14 2 8h5" /> },
   { label: "Steven", href: "/steven", icon: <Icon d="M21 12a9 9 0 01-9 9 9 9 0 01-4-1l-5 1 1-5a9 9 0 01-1-4 9 9 0 019-9 9 9 0 019 9z" /> },
   { label: "Audit", href: "/audit", icon: <Icon d="M4 4h11l5 5v11H4zM15 4v5h5M8 13h8M8 17h5" /> },
-  { label: "Universe", href: "#", icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
-  { label: "Alerts", href: "#", icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
-  { label: "Runs", href: "#", icon: <Icon d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> },
+  { label: "Universe", href: "#", soon: true, icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
+  { label: "Alerts", href: "#", soon: true, icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
+  { label: "Runs", href: "#", soon: true, icon: <Icon d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> },
 ];
 
 export default function Sidebar({ active = "Overview" }: { active?: string }) {
@@ -174,18 +178,30 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
         </div>
 
         <nav className="rail-nav">
-          {ITEMS.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={item.label === active ? "on" : undefined}
-              title={shut ? item.label : undefined}
-              aria-label={item.label}
-            >
-              <span className="rail-icon">{item.icon}</span>
-              {labelled && <span className="rail-label">{item.label}</span>}
-            </Link>
-          ))}
+          {ITEMS.map((item) =>
+            item.soon ? (
+              <span
+                key={item.label}
+                className="soon"
+                title={`${item.label} — not built yet`}
+                aria-disabled="true"
+              >
+                <span className="rail-icon">{item.icon}</span>
+                {labelled && <span className="rail-label">{item.label}</span>}
+              </span>
+            ) : (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={item.label === active ? "on" : undefined}
+                title={shut ? item.label : undefined}
+                aria-label={item.label}
+              >
+                <span className="rail-icon">{item.icon}</span>
+                {labelled && <span className="rail-label">{item.label}</span>}
+              </Link>
+            )
+          )}
         </nav>
 
         <div className="rail-foot" ref={menuRef}>

@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { AuditPage, compact, fetchAudit, money } from "@/lib/audit";
+import { AuditPage, Person as PersonRow, compact, fetchAudit, money } from "@/lib/audit";
 import { usePublishScreen } from "@/lib/screen-context";
 
 const KINDS = ["agent", "command", "tool", "system"] as const;
@@ -14,6 +14,53 @@ function relative(iso: string): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+/* One person's row.
+ *
+ * The bar is today against the cap rather than a share of all spend, because
+ * the cap is the thing that can actually stop you: a share tells you who talks
+ * most, this tells you how much of the day is left. It turns amber near the
+ * limit and copper-deep at it, so the state is legible without reading the
+ * numbers. */
+function Person({ person, cap }: { person: PersonRow; cap: number }) {
+  const used = cap > 0 ? Math.min(100, (person.cost_24h_usd / cap) * 100) : 100;
+  const state = used >= 100 ? " spent" : used >= 70 ? " near" : "";
+  return (
+    <div className="who-row">
+      <div className="who-head">
+        {person.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="who-pic" src={person.avatar} alt="" width={28} height={28} />
+        ) : (
+          <span className="who-pic as-initials" aria-hidden="true">
+            {person.login.slice(0, 2)}
+          </span>
+        )}
+        <span className="who-name">
+          {person.login}
+          {!person.known && <em>unmapped</em>}
+          {person.surfaces.map((s) => (
+            <em key={s.kind} className="who-surface">{s.kind}</em>
+          ))}
+        </span>
+        <span className="who-cost">{money(person.cost_usd)}</span>
+      </div>
+      <div className={`who-bar${state}`}>
+        <motion.i
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(1.5, used)}%` }}
+          transition={{ duration: 0.6, ease: [0, 0, 0.2, 1] }}
+        />
+      </div>
+      <div className="who-meta">
+        {money(person.cost_24h_usd)} of {money(cap)} today
+        {used >= 100 ? " — at the cap" : ` · ${used.toFixed(0)}% used`} ·{" "}
+        {person.events} paid {person.events === 1 ? "event" : "events"} ·{" "}
+        {compact(person.tokens)} tokens · last {relative(person.last_seen)}
+      </div>
+    </div>
+  );
 }
 
 export default function Audit() {
@@ -102,6 +149,29 @@ export default function Audit() {
                 </motion.div>
               ))}
             </div>
+
+            {(data?.people?.length ?? 0) > 0 && (
+              <motion.section
+                className="card who"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.45, ease: [0, 0, 0.2, 1] }}
+              >
+                <h2>Spend by person</h2>
+                <p className="who-lede">
+                  Dearest first, billed rather than estimated. Dashboard and Discord
+                  are one person here — the bar is what they have spent in the last
+                  24 hours against the {money(data!.daily_cap_usd)} daily cap, which
+                  is what actually stops a runaway loop. Set it with{" "}
+                  <code>DAILY_SPEND_CAP_USD</code>.
+                </p>
+                <div className="who-rows">
+                  {data!.people.map((p) => (
+                    <Person key={p.login} person={p} cap={data!.daily_cap_usd} />
+                  ))}
+                </div>
+              </motion.section>
+            )}
 
             <div className="filters">
               <label>Type</label>

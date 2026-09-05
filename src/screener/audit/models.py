@@ -49,3 +49,25 @@ class Spend:
     events_24h: int
     cost_24h: Decimal
     tokens_24h: int
+
+
+@dataclass(frozen=True, slots=True)
+class ActorSpend:
+    """What one person cost.
+
+    Two people share this deployment and one bill. A single total says the
+    month was cheap or expensive; it does not say whose questions did it, which
+    is the thing either of them would actually want to know.
+
+    Only paid events count: a tool call bills nothing, and folding those in
+    would rank whoever pressed the most buttons rather than whoever spent the
+    most money.
+    """
+
+    actor: str
+    actor_kind: str
+    events: int
+    cost: Decimal
+    tokens: int
+    cost_24h: Decimal
+    last_seen: datetime

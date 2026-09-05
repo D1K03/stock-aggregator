@@ -24,6 +24,25 @@ export type Spend = {
   tokens_24h: number;
 };
 
+/* What one person cost, across every surface they used.
+ *
+ * Folded server-side through DISCORD_USER_MAP — the same mapping that lets a
+ * dashboard conversation be handed to Discord, read the other way round — so
+ * someone who used both is one row rather than two. Anyone unmapped still
+ * appears, under whatever identity the trail has, with `known` false and no
+ * picture. */
+export type Person = {
+  login: string;
+  known: boolean;
+  avatar: string | null;
+  events: number;
+  cost_usd: number;
+  tokens: number;
+  cost_24h_usd: number;
+  last_seen: string;
+  surfaces: { kind: string; cost_usd: number }[];
+};
+
 export type AuditPage = {
   events: AuditEvent[];
   page: number;
@@ -31,6 +50,9 @@ export type AuditPage = {
   total: number;
   pages: number;
   spend: Spend;
+  people: Person[];
+  /** What any one person may spend in a day, in dollars. */
+  daily_cap_usd: number;
   operations: { kind: string; operation: string; count: number }[];
 };
 
