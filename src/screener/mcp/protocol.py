@@ -161,10 +161,30 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         asked,
     )
     version = asked if asked in config.VERSIONS else config.DEFAULT_VERSION
+    base = config.base_url()
     return {
         "protocolVersion": version,
         "capabilities": {"tools": {}},
-        "serverInfo": {"name": config.SERVER_NAME, "version": _version()},
+        "serverInfo": {
+            # `name` is the programmatic identifier and `title` is what a person
+            # reads, which is the split the 2025-11-25 revision introduced.
+            "name": config.SERVER_NAME,
+            "title": "Screener",
+            "version": _version(),
+            "websiteUrl": base,
+            # Steven's orb, the same one the browser tab shows, so the connector
+            # and the dashboard are recognisably the same thing. Served by the
+            # web container through Caddy's catch-all, which is why it needs no
+            # route of its own. SVG rather than PNG because that is the asset
+            # that exists and it stays crisp at whatever size a client asks for.
+            "icons": [
+                {
+                    "src": f"{base}/icon.svg",
+                    "mimeType": "image/svg+xml",
+                    "sizes": ["any"],
+                }
+            ],
+        },
         "instructions": (
             "Read-only access to a multi-signal equity screener's database: "
             "daily price bars, company identity and sectors, Reddit posts and "

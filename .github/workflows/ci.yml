@@ -148,7 +148,15 @@ jobs:
   # push-triggered workflow would race this one and could win.
   deploy:
     needs: [ci-ok]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `always()` is load-bearing, not decoration. A skipped job propagates the
+    # skip through `needs` transitively, and `build` is skipped on a push
+    # because the deploy rebuilds those images anyway. Without this, ci-ok
+    # succeeds, deploy is skipped with it, and a merge to main silently ships
+    # nothing. The result of ci-ok is then checked explicitly, because
+    # `always()` alone would deploy a failing build.
+    if: >-
+      always() && needs.ci-ok.result == 'success'
+      && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # The workflow-level grant above stays read-only; only this job widens, and
     # only to what publishing to GHCR needs.
     permissions:

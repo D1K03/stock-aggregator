@@ -265,3 +265,8 @@ done. Daily **price** ingest is built and the universe is committed; fundamental
 ingest cycle, and no scoring or alerting code exists yet. `python -m screener.boot selftest` is
 what exercises the infrastructure end to end, and it is worth running after a deploy for exactly
 that reason.
+
+The data is now readable from claude.ai as a custom connector, over the same read-only engine the
+`/playground` console uses and a third Postgres role of its own. That is a reading surface and
+changes nothing about the pipeline below it: nothing here writes, and the scoring work outlined
+above is unaffected.

@@ -277,6 +277,90 @@ one to a SQL console.
 
 ---
 
+## The MCP connector
+
+`screener.mcp` — the same read-only engine, reached by claude.ai as a custom
+connector. Paste `https://screener.edenmatrix.xyz/mcp` into **Customize →
+Connectors**, approve once with GitHub, and Claude can query prices,
+fundamentals, scores, alerts, a week of Reddit and the live transcripts in one
+context. It reads and never writes, and every call lands in the audit trail
+under the login that authorised it.
+
+**Nothing streams, and that is what makes it work here.** The transport is
+Streamable HTTP, but the spec permits answering a JSON-RPC request with a single
+`application/json` object instead of opening an SSE stream, and `cloudflared`
+buffers server-sent events. A stream through this tunnel would arrive all at
+once when the response closed. So `POST /mcp` returns one object, `GET /mcp` is
+405, there is no `Mcp-Session-Id`, and there is nothing for the tunnel to
+buffer. Hand-rolled rather than the official SDK, which would bring pydantic,
+starlette and anyio in to replace a five-entry dispatch table.
+
+**OAuth is not a preference.** claude.ai's fixed-header mode is beta and limited
+to some organisations, and authless would leave a database open to whoever
+learned the URL, so `oauth_dcr` is the only route. The api container is
+therefore an OAuth 2.1 authorization server as well as a resource server, and
+its consent step is the GitHub session the dashboard already issues, so there is
+no second identity to keep.
+
+**`_redirect_allowed` is where the security actually lives.** Dynamic client
+registration is unauthenticated by definition, and the tempting conclusion is
+that this is harmless because a client is inert until somebody approves it. It
+is not. An attacker registers a client named Claude whose callback is their own
+server, sends you a link to `/oauth/authorize`, and a `SameSite=Lax` cookie
+rides a top-level navigation: you are signed in, you are on the allow-list, and
+the consent page says Claude. PKCE does not help, because the attacker chose the
+challenge. So a callback address is checked against a list rather than accepted
+from whoever registered it, and the consent page shows the redirect origin
+rather than the name a client claims for itself.
+
+Around that: tokens are hashed with a purpose label, so a connector token is not
+also a valid browser cookie; a replayed refresh token revokes its whole family
+rather than quietly losing a race; `permits()` is re-checked on every request,
+so removing somebody from `ALLOWED_GITHUB_LOGINS` disconnects them rather than
+leaving a thirty-day token live; and `?next=` on sign-in accepts only a path on
+this origin.
+
+**A third role, `playground_mcp`.** Not the console's and not Steven's, because
+this caller differs from both in the way that matters: they run inside this
+deployment and what this one reads leaves the box. Migration 018 grants it the
+28 public tables plus the skybird transcripts, and that last part is a real
+decision rather than a copied list — it means transcripts reach claude.ai, it is
+said out loud there, and it is one `revoke` away.
+
+Unlike the console and Steven, the split here is **a branch, not a credential**,
+and that is worth being straight about. The connector is served by the same
+process as the console, because its consent screen needs the session cookie that
+process issues, so the api container necessarily holds both passwords and
+`playground.connecting_as` picks the role per call. What the third role still
+buys is that widening what claude.ai may read costs a migration and a line in a
+test.
+
+| | |
+|---|---|
+| Switch | `PLAYGROUND_MCP_DB_PASSWORD`. Unset means the role cannot log in and `/mcp` reports itself off, exactly as the console does. |
+| Tools | `list_tables` and `query` for anything, plus `reddit_chatter`, `price_history`, `latest_transcripts` and `ingest_health` for the questions that have a shape. The last of those exists so a model can tell stale data from a quiet week. |
+| Bounds | The engine's, unchanged, plus a semaphore over in-flight tool calls so Postgres `max_connections` is not the limit anyone discovers. |
+| Audit | Every `tools/call`, with its arguments, as `mcp.<tool>` against the GitHub login. |
+
+**Two things are not in this repository and fail invisibly.** The Caddy handles
+for `/mcp`, `/oauth/*` and `/.well-known/*`, without which the catch-all sends
+them to Next.js, which redirects, and Claude drops the `Authorization` header
+across a redirect. And Cloudflare's **"Block AI bots"**, which answers
+`Claude-User` with 403 at the edge before anything reaches the VPS; there is a
+WAF rule skipping it for those three paths on this hostname only, so the setting
+stays on everywhere else. The check is one command:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Claude-User/1.0' \
+  https://screener.edenmatrix.xyz/.well-known/oauth-protected-resource
+```
+
+A 403 there means the edge, not the code.
+
+**Do not** add write tools, a second identity, or an SSE transport.
+
+---
+
 ## Live stream capture
 
 `screener.skybird` — yt-dlp and ffmpeg in a container of its own, feeding the
@@ -377,9 +461,18 @@ rule today, so this is cheap; revisit if that changes.
 
 ### Caddy, and why a service is called `app`
 
-Caddy fronts the stack and routes by path: `/auth`, `/health`, `/ready` and
-`/status` to the status service, everything else to the dashboard. One origin,
+Caddy fronts the stack and routes by path to the status service: `/auth/*`,
+`/health`, `/ready`, `/status`, `/api/*`, and the connector's `/mcp`,
+`/oauth/*` and `/.well-known/*`. Everything else is the dashboard. One origin,
 so the session cookie is same-site and there is no CORS surface.
+
+The connector's three are outside `/api/*` because none of those paths is ours
+to choose: `/.well-known/*` is fixed by RFC 9728 and RFC 8414, and `/mcp` is
+what gets typed into Claude. Each therefore needs a `handle` of its own, and
+without one the catch-all hands it to Next.js, which redirects to `/login`.
+That is not a cosmetic failure: Claude drops the `Authorization` header across
+a redirect, so it surfaces as an authorization error with nothing in the repo
+to explain it.
 
 **The Caddy service is named `app`.** The tunnel's public hostname points at
 `app:8080`, and that mapping is in the dashboard, so renaming the service means
@@ -513,9 +606,17 @@ One line per integration: database and migration count, build SHA, a direct
 fetch, a proxied fetch **and whether its exit IP actually differs**, the
 configured lanes **and whether they differ from each other**, OpenRouter, the
 Discord webhook, the bot token, the social mirror **and how far behind it
-is**, and the playground role **and that it is not a privileged one** — freshness rather than reachability, because a mirror that has quietly
-stopped keeping up still answers. Anything unconfigured reports `SKIP`,
-because switched-off is the expected state for most of it.
+is**, the playground role **and that it is not a privileged one**, and the
+connector **and the address its tokens are bound to** — freshness rather than
+reachability, because a mirror that has quietly stopped keeping up still
+answers. Anything unconfigured reports `SKIP`, because switched-off is the
+expected state for most of it.
+
+The connector's check has a blind spot worth naming: it runs inside the api
+container, and Cloudflare answers `Claude-User` with 403 at the edge, before
+anything reaches this process. A green `mcp` line says the role and the URL are
+right, not that Claude can get here. The user-agent curl above is the check for
+that half.
 
 It posts nothing. Nothing in this project has a consumer yet, so this command is
 the only thing that would notice a piece of it going quietly broken.
