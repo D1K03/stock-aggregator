@@ -705,3 +705,43 @@ def test_the_connector_reports_itself_off_without_a_role(server, monkeypatch):
     )
     assert status == 503
     assert "role" in json.loads(body)["error"]["message"]
+
+
+def test_a_refused_post_does_not_poison_the_next_request(server):
+    """The bug that made claude.ai see an intermittent 501.
+
+    `/mcp` answers 401 without a token so the client knows to go and authorise,
+    and it does that before reading the request body. Under HTTP/1.1 keep-alive
+    the unread bytes stay in the socket, so the next request line the parser
+    reads is whatever the body started with, and the stdlib answers 501
+    Unsupported method to a perfectly ordinary request.
+
+    Two requests down one socket is the only way to see it: each on its own
+    connection passes.
+    """
+    import http.client
+
+    host, port = server.replace("http://", "").split(":")
+    conn = http.client.HTTPConnection(host, int(port))
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+
+    conn.request("POST", "/mcp", body=body, headers={"Content-Type": "application/json"})
+    first = conn.getresponse()
+    first.read()
+    assert first.status == 401
+
+    # Whatever happens to the connection, the second request must be answered on
+    # its merits. 501 here means the server read this request's own predecessor
+    # as a verb.
+    try:
+        conn.request("GET", "/health")
+        second = conn.getresponse()
+        second.read()
+        status = second.status
+    except http.client.RemoteDisconnected:
+        # Closing rather than reusing is the fix working: a poisoned socket
+        # cannot be reused if it is not kept open.
+        status = 200
+    finally:
+        conn.close()
+    assert status == 200

@@ -29,8 +29,8 @@ SCOPE = "screener:read"
 # echoed back when it is one of these; otherwise it is answered with the first,
 # which the spec says should be the latest we support. A tools-only server is
 # unaffected by what separates them.
-VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
-DEFAULT_VERSION = VERSIONS[1]
+VERSIONS = ("2026-11-25", "2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26")
+DEFAULT_VERSION = VERSIONS[3]
 
 SERVER_NAME = "screener"
 

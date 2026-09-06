@@ -103,9 +103,35 @@ class Handler(BaseHTTPRequestHandler):
     # is built and then not written rather than skipped.
     _head = False
 
+    # Whether this request's body has been consumed. Reset per request by
+    # `handle_one_request`, set by `_read_body`.
+    _body_read = False
+
+    def handle_one_request(self) -> None:
+        self._body_read = False
+        super().handle_one_request()
+
     def _send(
         self, status: HTTPStatus, body: bytes, headers: list[tuple[str, str]]
     ) -> None:
+        # An answer sent without reading the request body poisons the
+        # connection. Under HTTP/1.1 keep-alive the unread bytes are still in
+        # the socket, so the next request line the parser reads is whatever the
+        # body happened to start with, `self.command` becomes nonsense, and the
+        # stdlib answers 501 Unsupported method. It presents as an intermittent
+        # 501 on a route that works when tried on its own, which is exactly how
+        # it was found: claude.ai POSTs `initialize`, is told 401 so it can go
+        # and authorise, and the request after that gets a 501 from its own
+        # first request being re-read as a verb.
+        #
+        # `_read_body` already closes on its own refusals. This is the other
+        # half: every route that answers *before* reading, which is every
+        # unauthenticated 401 and every unavailable 503 on a POST.
+        if not self._body_read and not self._head:
+            length = (self.headers.get("Content-Length") or "").strip()
+            if length.isdigit() and int(length) > 0:
+                self.close_connection = True
+
         self.send_response(status)
         for name, value in headers:
             self.send_header(name, value)
@@ -194,6 +220,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(body) != length:
             refuse(HTTPStatus.BAD_REQUEST, "the upload ended early")
             return None
+        self._body_read = True
         return body
 
     def _session_token(self) -> str | None:
