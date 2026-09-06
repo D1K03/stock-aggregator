@@ -14,7 +14,7 @@ def alert_setup(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("insert into weight_version (code) values ('v1') returning id")
+        cur.execute("select id from weight_version where code = 'v1'")
         weight = cur.fetchone()[0]
         cur.execute(
             "insert into scoring_logic_version (description) values ('initial') returning id"

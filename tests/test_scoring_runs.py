@@ -4,15 +4,15 @@ import psycopg
 
 @pytest.fixture
 def versions(fresh_db):
-    """A weight version and a logic version to hang runs off."""
+    """The seeded weight version and logic version, to hang runs off.
+
+    Both are seeded by 019 now. `weight_version.code` is unique, so inserting a
+    second 'v1' here would raise rather than test anything.
+    """
     with fresh_db.cursor() as cur:
-        cur.execute(
-            "insert into weight_version (code) values ('v1') returning id"
-        )
+        cur.execute("select id from weight_version where code = 'v1'")
         weight = cur.fetchone()[0]
-        cur.execute(
-            "insert into scoring_logic_version (description) values ('initial') returning id"
-        )
+        cur.execute("select id from scoring_logic_version order by id limit 1")
         logic = cur.fetchone()[0]
     return weight, logic
 
@@ -60,7 +60,6 @@ def test_status_rejects_unknown_value(fresh_db, versions):
 
 def test_pillar_weights_reject_negative_values(fresh_db, versions):
     weight, _ = versions
-    fresh_db.execute("insert into pillar (code, name) values ('quality', 'Quality')")
     with pytest.raises(psycopg.errors.CheckViolation):
         fresh_db.execute(
             """

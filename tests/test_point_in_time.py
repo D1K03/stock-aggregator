@@ -22,7 +22,7 @@ def fact_setup(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("insert into pillar (code, name) values ('quality', 'Q') returning id")
+        cur.execute("select id from pillar where code = 'quality'")
         pillar = cur.fetchone()[0]
         cur.execute(
             """

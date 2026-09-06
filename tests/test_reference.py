@@ -9,9 +9,7 @@ def test_btree_gist_extension_is_installed(fresh_db):
 
 
 def test_metric_cadence_rejects_unknown_value(fresh_db):
-    fresh_db.execute(
-        "insert into pillar (code, name) values ('quality', 'Quality')"
-    )
+    # `quality` is seeded by 019 now, so this reads it rather than creating it.
     with pytest.raises(psycopg.errors.CheckViolation):
         fresh_db.execute(
             """
