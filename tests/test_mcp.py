@@ -738,9 +738,25 @@ def test_a_refused_post_does_not_poison_the_next_request(server):
         second = conn.getresponse()
         second.read()
         status = second.status
-    except http.client.RemoteDisconnected:
+    except ConnectionError:
         # Closing rather than reusing is the fix working: a poisoned socket
         # cannot be reused if it is not kept open.
+        #
+        # `ConnectionError`, not `RemoteDisconnected`, because one close
+        # reaches the client as either of two exceptions and which one is a
+        # race. The server answers before reading the body, so the unread bytes
+        # are still in its receive queue when it closes -- and a close with
+        # unread data sends RST after the FIN. Win the race with the RST and
+        # the write is buffered, so the failure surfaces on the read as
+        # `RemoteDisconnected`; lose it and the write itself fails with
+        # `BrokenPipeError`. Both are `ConnectionError`, both mean the socket
+        # was closed rather than reused, and that is the whole assertion.
+        #
+        # It presented as an intermittent `BrokenPipeError` under `-n 5` and
+        # never on an idle machine, because load is what widens the gap between
+        # the two requests. Measured directly: with a body large enough to
+        # guarantee unread bytes, 20/20 `BrokenPipeError` at any delay, and
+        # 12/20 with none at all.
         status = 200
     finally:
         conn.close()
