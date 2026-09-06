@@ -33,6 +33,7 @@ Four facts do most of the work in this picture:
 ```mermaid
 flowchart LR
     internet(["The internet"])
+    claude(["claude.ai<br/>custom connector"])
     edge["Cloudflare edge<br/>TLS + Access policy"]
 
     subgraph vps["VPS — compose project stock-aggregator"]
@@ -56,9 +57,11 @@ flowchart LR
     arctic["Arctic Shift"]
 
     internet --> edge
+    claude -->|"MCP over HTTPS, bearer token"| edge
     cfd -->|"dials outward, never in"| edge
     cfd --> app
     app -->|"/auth/* /health /ready /status /api/*"| api
+    app -->|"/mcp /oauth/* /.well-known/*"| api
     app -->|"everything else"| web
     bot -->|"POST /api/render"| web
     api -->|"POST /transcribe"| tr
@@ -107,6 +110,20 @@ control plane" means in this picture — the arrow from the dashboard to a runni
 capture goes through `pg`, not across the network. It has no healthcheck for the
 same reason the bot has none, and it holds a Postgres advisory lock so a second
 copy stands by rather than capturing the same stream twice.
+
+**`api` answers claude.ai as well as the browser.** The connector is not a
+container of its own, and could not be: its OAuth consent screen needs the
+session cookie the status service issues, so the two share a process. That
+process therefore holds three read-only database passwords and picks the role
+per call, which is the one place in this system where the separation between
+roles is a branch rather than a credential. `docs/infrastructure.md` says so
+where it describes the connector.
+
+Its three paths need `handle` blocks of their own because none of them can live
+under `/api/*`: `/.well-known/*` is fixed by RFC 9728 and RFC 8414, and `/mcp`
+is what somebody types into Claude. Without them the catch-all sends all three
+to Next.js, which redirects, and an `Authorization` header does not survive a
+redirect.
 
 **`transcribe` has no Caddy route on purpose.** `/transcribe` matches the
 catch-all, which goes to Next.js, so nothing on the internet resolves to it. The

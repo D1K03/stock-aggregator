@@ -243,6 +243,35 @@ def _playground() -> Check:
     )
 
 
+def _connector() -> Check:
+    """Whether claude.ai could reach this data, and as which role.
+
+    Two halves, and the second is the one worth having. Reading the catalogue
+    proves `playground_mcp` can log in and sees what 018 granted it. Reporting
+    the canonical resource URL proves the deployment agrees with what somebody
+    would paste into Claude: every token is bound to that string as an audience,
+    so an `APP_BASE_URL` still saying localhost produces a connector that
+    authorises fine and then refuses every call.
+
+    What it cannot check from in here is the edge. Cloudflare answers
+    `Claude-User` with 403 before anything reaches this process, and that failure
+    is invisible to every check on this side of the tunnel.
+    """
+    from screener import mcp, playground
+
+    if not mcp.enabled():
+        return Check("mcp", SKIP, "PLAYGROUND_MCP_DATABASE_URL is not set")
+    try:
+        with playground.connecting_as(mcp.config.database_url()):
+            tables = playground.catalog()
+    except Exception as exc:
+        return Check("mcp", FAIL, f"{type(exc).__name__}: {exc}")
+    resource = mcp.resource()
+    if resource.startswith("http://localhost"):
+        return Check("mcp", FAIL, f"APP_BASE_URL is unset; tokens would bind to {resource}")
+    return Check("mcp", OK, f"{len(tables)} readable table(s), serving {resource}")
+
+
 def _safe(name: str, check: Callable[[], Check]) -> Check:
     """Run one check, turning any unexpected exception into a FAIL.
 
@@ -318,6 +347,7 @@ def run() -> bool:
         _safe("discord bot", _bot),
         _safe("reddit", _reddit),
         _safe("playground", _playground),
+        _safe("mcp", _connector),
     ]
 
     width = max(len(c.name) for c in results)

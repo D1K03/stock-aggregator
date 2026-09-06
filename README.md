@@ -56,7 +56,7 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 | Apply migrations | `python -m screener.boot migrate` |
 | Refresh universe CSV | `python -m screener.universe refresh` |
 | Load universe | `python -m screener.universe load --dry-run` |
-| Run the status service | `python -m screener.boot` |
+| Run the status service | `python -m screener.boot` (the dashboard API, the playground and the MCP connector) |
 | Check every integration | `python -m screener.boot selftest` |
 | Stop the database | `docker compose down` |
 
@@ -88,6 +88,20 @@ Two properties shape most of the schema:
   Scores are versioned per scoring run for the same reason — a crossing is a property of an
   adjacent *pair* of scores, so recomputing in place would retroactively change which alerts ever
   fired.
+
+## Reading it from Claude
+
+The same read-only tables are available to claude.ai as a custom connector. The
+address is at the foot of the table tree on `/playground`, with a copy button;
+paste it into **Customize → Connectors**, approve once with GitHub, and Claude
+can query prices, fundamentals, scores, alerts, Reddit and the live transcripts
+in one context. It reads and never writes, and every call is recorded against
+the login that authorised it.
+
+Switched off unless `PLAYGROUND_MCP_DB_PASSWORD` is set, on the same terms as
+the SQL console beside it. `docs/infrastructure.md` covers the OAuth flow, the
+third Postgres role, and the two pieces of Cloudflare configuration that live
+outside this repository.
 
 ## Documentation
 

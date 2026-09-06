@@ -29,6 +29,7 @@ Nothing here writes to the screener's data, and every tool call lands in the
 audit trail attributed to the GitHub login that authorised the connector.
 """
 
+from screener.mcp import config
 from screener.mcp.config import (
     AUTHORIZATION_SERVER,
     AUTHORIZE_PATH,
@@ -73,6 +74,7 @@ __all__ = [
     "authorization_server_document",
     "authorize",
     "bearer",
+    "config",
     "enabled",
     "handle",
     "protected_resource_document",
