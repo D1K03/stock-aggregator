@@ -73,10 +73,41 @@ fell out of it:
 - **`EBIT` + `DepreciationAndAmortization` reproduces `EBITDA` exactly** (133,050M + 11,698M =
   144,748M). So EBITDA is a derivation Yahoo happens to publish, and D3 excludes it.
 
-**F7 — coverage is patchy per metric and per year.** AAPL's `InterestExpense` series ends at
-2023-09-30 with nothing for 2024 or 2025, while every neighbouring series runs to 2025-09-30. A
-metric present for one company-year and absent for the next is the normal case, not a fault, and
-it is the ratios cycle that will have to answer for it through `pillar_score_daily.coverage`.
+**F7 — coverage is patchy per metric and per year, and this is the finding with the longest
+reach.** AAPL's `InterestExpense` ends at 2023-09-30 with nothing for 2024 or 2025 while every
+neighbouring series runs to 2025-09-30. Measured across a 60-security random sample of the loaded
+universe, all 60 answering:
+
+| stem | any period | a period at or after 2024-06-30 |
+|---|---|---|
+| `TotalRevenue`, `NetIncome`, `PretaxIncome`, `OperatingCashFlow`, `OrdinarySharesNumber` | 60 | 60 |
+| `StockholdersEquity`, `TotalDebt`, `NetPPE` | 59–60 | 59 |
+| `TaxProvision`, `DepreciationAndAmortization` | 57–58 | 57–58 |
+| `CapitalExpenditure` | 57 | 56 |
+| `InterestExpense` | 55 | **54** |
+| `EBIT`, `CashCashEquivalentsAndShortTermInvestments` | 54 | 54 |
+| `CurrentDebt` | 47 | **43** |
+
+**AAPL is not representative**: interest expense is recently present for 90% of the sample, not a
+third. But 90% still means roughly 150 of 1,504 securities with no interest coverage ratio, and
+`CurrentDebt` at 72% is thin enough that any ratio resting on it starts compromised. That
+constrains which Quality ratios are viable, and it is knowable now rather than after they are
+designed.
+
+**Two different absences, and only one is already handled.** Schema D9 drops a missing metric from
+its pillar's average and records `metric_count` and `coverage` — that answers *a metric absent for
+a security*. F7 is *a period absent for a metric*, which D9 does not see: the point-in-time read
+returns the latest fact held, so a ratio taking "the latest value per metric" will pair 2025
+revenue with 2023 interest expense and produce a number that looks entirely reasonable. The same
+silent-wrong shape as D6's collapsed period, arriving by a different route.
+
+**So the ratios cycle needs a staleness rule, not only a coverage rule**: a maximum age of a fact
+relative to `as_of`, beyond which it is not eligible and its ratio is absent rather than stale.
+Named here, with the measurement in front of us, so that cycle inherits the question already
+sharpened — the rule's *value* is its business, since it trades coverage against freshness, but
+the need for one is settled. D11's withdrawal case is the same rule seen from the other side: a
+figure the provider has stopped standing behind and one it stopped reporting in 2023 are
+indistinguishable in the fact table, and a staleness bound is what makes both harmless.
 
 **F3 — the payload is byte-stable.** Three consecutive fetches produced one hash. A result
 carries only `meta` (symbol and type) and `timestamp` (the period ends), so nothing in it moves
@@ -157,10 +188,25 @@ the same period end — so a bare `cash` would leave the next reader guessing wh
 is exactly the size of error nobody notices. **Codes are permanent once seeded**, so they say what
 they are rather than what is shortest.
 
+**`shares_outstanding` is the one row in this table that describes an instant rather than a
+period.** Its `period_end` is honest — the count is as at that date — so the schema holds and
+storing it needs no special case. But the next cycle has to reach for the right one: a
+period-average count belongs in anything earned *over* the period (EPS, and the P/E built on it),
+while the point-in-time count belongs in market capitalisation, which is a fact about a moment.
+The other 27 metrics are period quantities and need no such care.
+
 `total_debt` is kept despite `current_debt` and `long_term_debt` also being stored, because a
 provider's total-debt definition often includes lease obligations in neither component — it is a
 reported line here rather than a derivation, which is why the rule above says "computes from lines
 we already store" rather than "computes".
+
+**The rule is about provenance, not redundancy**, and that matters because this list is
+deliberately redundant in places. `pretax_income`, `tax_provision`, `net_income` and `ebit` are
+related by the usual identities, and a reader applying the rule too eagerly would drop two of them.
+They stay because each is a line Yahoo reports rather than a figure Yahoo computes — and the
+redundancy earns its place, since reported numbers that ought to reconcile are a cross-check that a
+restatement landed coherently. Redundancy is a reason to drop something only when the duplicate is
+*exactly* reproducible from stored inputs, as EBITDA and free cash flow were measured to be.
 
 `cadence` is `'quarterly'` on all 28 and `higher_is_better` is `true`. Neither is read: period
 granularity lives in `period_type` per fact, and nothing ranks an input. They are `not null`
