@@ -12,7 +12,13 @@ from screener.ingest.load import (
     record_observation,
 )
 from screener.ingest.parse import Action, Bar, parse
-from screener.ingest.run import IngestReport, active_securities, run_prices
+from screener.ingest.run import (
+    FundamentalsReport,
+    IngestReport,
+    active_securities,
+    run_fundamentals,
+    run_prices,
+)
 from screener.ingest.sweep import SweepReport, run_sweep
 from screener.ingest.timeseries import TYPES, TimeseriesClient
 from screener.ingest.window import BACKFILL_START, SETTLING_DAYS, windows
@@ -26,6 +32,7 @@ __all__ = [
     "Bar",
     "ChartClient",
     "Fact",
+    "FundamentalsReport",
     "Held",
     "HeldFact",
     "IngestReport",
@@ -39,6 +46,7 @@ __all__ = [
     "parse_facts",
     "read_facts",
     "record_observation",
+    "run_fundamentals",
     "run_prices",
     "run_sweep",
     "windows",

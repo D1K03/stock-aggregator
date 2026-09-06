@@ -99,7 +99,9 @@ def open_run(conn: psycopg.Connection, requested: int) -> int:
         return row[0]
 
 
-def close_run(conn: psycopg.Connection, run_id: int, report: IngestReport) -> None:
+def close_run(
+    conn: psycopg.Connection, run_id: int, report: "IngestReport | FundamentalsReport"
+) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """update ingest_run
@@ -155,7 +157,7 @@ def run_prices(
 
             content_hash = hashlib.sha256(payload).digest()
             with conn.cursor() as cur:
-                previous = previous_hash(cur, security_id)
+                previous = previous_hash(cur, security_id, ENDPOINT)
 
             if previous is not None and previous[0] == content_hash:
                 # Unchanged payload: no object is written, so the observation
@@ -224,6 +226,125 @@ def run_prices(
                 symbol,
                 type(exc).__name__,
                 exc,
+            )
+            continue
+        report.ok += 1
+
+    if owned_run:
+        close_run(conn, run_id, report)
+    return report
+
+
+FUNDAMENTALS_ENDPOINT = "timeseries"
+
+
+@dataclass
+class FundamentalsReport:
+    requested: int = 0
+    ok: int = 0
+    failed: int = 0
+    facts_written: int = 0
+
+    @property
+    def status(self) -> str:
+        if self.ok == 0 and self.requested:
+            return "failed"
+        return "ok" if self.failed == 0 else "partial"
+
+
+def open_fundamentals_run(conn: psycopg.Connection, requested: int) -> int:
+    """Its own run row.
+
+    `ingest_run.endpoint` is a single text column, so one row cannot describe
+    two endpoints — and the halves should not share one anyway: they fail
+    independently, and a partial fundamentals night must not touch the
+    per-security window derivation that makes a partial *price* night heal.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """insert into ingest_run
+               (source_id, endpoint, started_at, status, securities_requested)
+               values (%s, %s, now(), 'running', %s) returning id""",
+            (source_id(conn), FUNDAMENTALS_ENDPOINT, requested),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        return row[0]
+
+
+def run_fundamentals(
+    conn: psycopg.Connection,
+    *,
+    client,
+    blobs: BlobStore,
+    today: date,
+    securities: list[tuple[int, str]],
+    run_id: int | None = None,
+    delay: float = 0.0,
+) -> FundamentalsReport:
+    """One night of fundamentals. One transaction per security, as prices does."""
+    from screener.ingest.facts import parse as parse_facts
+    from screener.ingest.load import insert_facts, latest_values, metric_ids
+
+    report = FundamentalsReport(requested=len(securities))
+    owned_run = run_id is None
+    run_id = run_id if run_id is not None else open_fundamentals_run(conn, len(securities))
+
+    with conn.cursor() as cur:
+        ids = metric_ids(cur)
+
+    for security_id, symbol in securities:
+        if delay:
+            time.sleep(delay)
+        try:
+            payload = client.fetch(symbol)
+            if payload is None or len(payload) == 0:
+                # An empty body cannot be parsed into anything meaningful, so
+                # it is a failed security rather than a security with no facts.
+                # Treating it as success would record that we looked and
+                # learned nothing, which is a different and untrue claim.
+                report.failed += 1
+                logger.warning("no fundamentals for %s", symbol)
+                continue
+
+            content_hash = hashlib.sha256(payload).digest()
+            with conn.cursor() as cur:
+                previous = previous_hash(cur, security_id, FUNDAMENTALS_ENDPOINT)
+
+            if previous is not None and previous[0] == content_hash:
+                is_new = False
+                path = previous[1]
+            else:
+                is_new = True
+                path = blob_path(SOURCE, FUNDAMENTALS_ENDPOINT, today, security_id)
+                blobs.put(path, gzip.compress(payload))
+
+            parsed = parse_facts(payload)
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    observation_id, fetched_at = record_observation(
+                        cur,
+                        ingest_run_id=run_id,
+                        security_id=security_id,
+                        content_hash=content_hash,
+                        blob_path=path,
+                        is_new_payload=is_new,
+                        payload_bytes=len(payload),
+                    )
+                    held = latest_values(cur, security_id)
+                    report.facts_written += insert_facts(
+                        cur, security_id, observation_id, fetched_at,
+                        parsed, held, ids,
+                    )
+        except BlobWriteFailed:
+            # Systemic rather than per-object, as in the price path: a store
+            # that cannot be written to would leave ~1,500 observation rows
+            # naming objects that do not exist.
+            raise
+        except (httpx.HTTPError, httpx.InvalidURL, psycopg.Error) as exc:
+            report.failed += 1
+            logger.warning(
+                "%s failed (%s: %s)", symbol, type(exc).__name__, exc
             )
             continue
         report.ok += 1

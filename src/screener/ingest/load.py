@@ -36,8 +36,10 @@ class Change:
     new: Any
 
 
-def previous_hash(cur: psycopg.Cursor, security_id: int) -> tuple[bytes, str] | None:
-    """The last `(content_hash, blob_path)` seen for this security on `chart`.
+def previous_hash(
+    cur: psycopg.Cursor, security_id: int, endpoint: str
+) -> tuple[bytes, str] | None:
+    """The last `(content_hash, blob_path)` seen for this security on `endpoint`.
 
     The path comes back with the hash because the two are only meaningful
     together: when tonight's hash matches, no object is written, so the
@@ -47,15 +49,19 @@ def previous_hash(cur: psycopg.Cursor, security_id: int) -> tuple[bytes, str] | 
     claim the database enforces.
 
     `endpoint` lives on `ingest_run`, not on the observation, so this joins.
+    Parameterised rather than hard-coded to `'chart'` because fundamentals
+    shares this table under a different endpoint — without the parameter
+    tonight's fundamentals hash would compare against yesterday's *price*
+    hash, never match, and write a blob every night.
     """
     cur.execute(
         """select o.content_hash, o.blob_path
              from ingest_observation o
              join ingest_run r on r.id = o.ingest_run_id
-            where o.security_id = %s and r.endpoint = 'chart'
+            where o.security_id = %s and r.endpoint = %s
          order by o.fetched_at desc
             limit 1""",
-        (security_id,),
+        (security_id, endpoint),
     )
     row = cur.fetchone()
     return (bytes(row[0]), row[1]) if row else None
