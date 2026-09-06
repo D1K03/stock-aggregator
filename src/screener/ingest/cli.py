@@ -13,8 +13,9 @@ import psycopg
 from screener.blobs import store
 from screener.config import settings
 from screener.ingest.chart import ChartClient
-from screener.ingest.run import active_securities, run_prices
+from screener.ingest.run import active_securities, run_fundamentals, run_prices
 from screener.ingest.sweep import run_sweep
+from screener.ingest.timeseries import TimeseriesClient
 from screener.secrets import SecretsError, load_into_environ
 
 logger = logging.getLogger(__name__)
@@ -24,11 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="screener.ingest", description=__doc__)
     parser.add_argument(
         "command",
-        choices=("prices", "sweep"),
+        choices=("prices", "sweep", "fundamentals"),
         help=(
             "prices: fetch missing daily bars per security, backfilling to 2020 "
             "on first sight. sweep: compare six years against what is stored "
-            "and report differences, writing nothing."
+            "and report differences, writing nothing. "
+            "fundamentals: fetch every line item Yahoo reports per period and store what changed."
         ),
     )
     parser.add_argument(
@@ -94,6 +96,24 @@ def main(argv: list[str] | None = None) -> int:
         if not securities:
             logger.error("no active securities; run `python -m screener.universe load` first")
             return 1
+
+        if args.command == "fundamentals":
+            # TimeseriesClient for fundamentals data, opened separately to avoid
+            # unnecessary ChartClient initialization for a different endpoint.
+            with TimeseriesClient() as fundamentals_client:
+                report = run_fundamentals(
+                    conn,
+                    client=fundamentals_client,
+                    blobs=store(),
+                    today=today,
+                    securities=securities,
+                    delay=args.delay,
+                )
+            logger.info(
+                "fundamentals: %d requested, %d ok, %d failed, %d facts written",
+                report.requested, report.ok, report.failed, report.facts_written,
+            )
+            return 0 if report.ok else 1
 
         with ChartClient() as client:
             if args.command == "prices":
