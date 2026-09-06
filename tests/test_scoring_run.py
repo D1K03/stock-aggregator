@@ -261,6 +261,31 @@ def test_a_date_with_no_visible_bars_fails_before_writing_anything(fresh_db, uni
     assert _counts(fresh_db)["snapshot_daily"] == 0
 
 
+def test_a_zero_momentum_weight_fails_loudly_rather_than_writing_an_empty_snapshot(
+    fresh_db, universe
+):
+    # Pillar weights live in the database precisely so they can be tuned
+    # without a redeploy -- so a weight version that zeroes momentum out is an
+    # ordinary change, not a corrupt one, and it must not silently produce a
+    # night with pillar rows but no snapshot rows (the same empty-snapshot
+    # failure mode `NoBarsVisible` exists to prevent).
+    fresh_db.execute(
+        "update pillar_weight set weight = 0"
+        " where weight_version_id = (select id from weight_version where code = 'v1')"
+        "   and pillar_id = (select id from pillar where code = 'momentum')"
+    )
+
+    with pytest.raises(RuntimeError, match="momentum"):
+        run_scoring(fresh_db, as_of=AS_OF)
+
+    assert fresh_db.execute(
+        "select count(*) from pillar_score_daily"
+    ).fetchone()[0] == 0
+    assert fresh_db.execute(
+        "select count(*) from snapshot_daily"
+    ).fetchone()[0] == 0
+
+
 def test_reference_reads_what_the_migration_seeded(fresh_db):
     ref = reference(fresh_db)
 

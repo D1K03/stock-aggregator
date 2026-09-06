@@ -184,6 +184,17 @@ def reference(conn: psycopg.Connection) -> Reference:
         raise RuntimeError(
             f"expected {len(CODES)} seeded metrics, found {len(metrics)}"
         )
+    if weights.get(PILLAR_CODE, Decimal(0)) <= 0:
+        # `blend` drops any pillar the weight version doesn't weight
+        # positively, so a zero (or missing) momentum weight here would write
+        # a full `pillar_score_daily` and zero `snapshot_daily` rows -- the
+        # same empty-snapshot night `NoBarsVisible` exists to prevent,
+        # arriving through the weight version instead of the bars.
+        raise RuntimeError(
+            f"weight version {WEIGHT_CODE!r} does not weight the "
+            f"{PILLAR_CODE!r} pillar positively; add or fix its "
+            "`pillar_weight` row before scoring with it"
+        )
     return Reference(
         logic_version_id=logic[0],
         weight_version_id=weight[0],
