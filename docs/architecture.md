@@ -231,7 +231,7 @@ flowchart TD
     universe["universe"]
     blobs["blobs<br/>local + s3, hand-rolled SigV4"]
     ingest["ingest<br/>prices + sweep"]
-    scoring["scoring<br/>five pure modules + peers + run"]
+    scoring["scoring<br/>five pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
 
     boot --> settings

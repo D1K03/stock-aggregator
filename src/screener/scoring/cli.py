@@ -12,7 +12,12 @@ from datetime import date, timedelta
 import psycopg
 
 from screener.config import settings
-from screener.scoring.run import CUTOFF_OFFSET, NoBarsVisible, run_scoring
+from screener.scoring.run import (
+    CUTOFF_OFFSET,
+    NoBarsVisible,
+    ScoringInProgress,
+    run_scoring,
+)
 from screener.secrets import SecretsError, load_into_environ
 
 logger = logging.getLogger(__name__)
@@ -34,21 +39,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _recovery_sql(as_of: date) -> str:
-    # The exclusion constraint keys on `status`, not `outcome`: a run that
-    # dies leaves its row at `status='live', outcome='running'` as the record
-    # that the night died, and that row alone blocks every future attempt to
-    # open a live run for the same date. A failed run's writes rolled back
-    # whole, so the row has no dependents and deleting it is safe -- this is
-    # named at the moment of failure so an operator at 02:00 has a sanctioned
-    # action instead of a permanently wedged date.
-    upper = (as_of + timedelta(days=1)).isoformat()
+def _recovery_note(as_of: date) -> str:
+    # Recovery is automatic now, and saying so is the point: before migration
+    # 020 the exclusion constraint keyed on `status` alone, so the row a failed
+    # night left behind blocked that date for ever and an operator had to
+    # delete it by hand. `run_scoring` marks a catchable failure `failed` on
+    # the way out, and `reconcile` settles anything a killed process could not.
+    # What is left worth saying at 02:00 is which date is affected and that
+    # re-running it is the whole of the fix.
     return (
-        f"the run holding {as_of} wrote nothing and still holds the date as live;\n"
-        f"release it with:\n"
-        f"  delete from scoring_run\n"
-        f"   where as_of_range = daterange('{as_of}', '{upper}', '[)')\n"
-        f"     and outcome = 'running'"
+        f"the run holding {as_of} wrote nothing; it is marked failed and no "
+        f"longer holds the date.\n"
+        f"re-run it with:\n"
+        f"  python -m screener.scoring run --as-of {as_of}"
     )
 
 
@@ -80,34 +83,41 @@ def main(argv: list[str] | None = None) -> int:
     with psycopg.connect(settings().database_url, autocommit=True) as conn:
         try:
             report = run_scoring(conn, as_of=as_of, cutoff_offset=CUTOFF_OFFSET)
+        except ScoringInProgress as exc:
+            # Before the generic branch, and before the recovery note: no run
+            # row was opened, nothing is wedged, and the note's "re-run it"
+            # would be the wrong advice. Someone else is scoring; the answer
+            # is to wait, not to try again immediately.
+            logger.error("%s", exc)
+            return 1
         except NoBarsVisible as exc:
-            logger.error("%s\n%s", exc, _recovery_sql(as_of))
+            logger.error("%s\n%s", exc, _recovery_note(as_of))
             return 1
         except psycopg.errors.ExclusionViolation:
-            # Exactly what an operator hits on the *second* attempt after a
-            # failed night: the stale row from the first attempt is still
-            # `status='live'`, so telling them how to clear it is the point.
+            # After 020 this no longer means a stale row from a failed
+            # night -- those are marked `failed` and stop holding the date.
+            # It means a run that genuinely stands: one that finished `ok`, or
+            # one still in flight. Either way the answer is not to clear it.
             logger.error(
-                "a live run already covers %s; supersede it rather than scoring "
-                "the date twice\n%s",
-                as_of, _recovery_sql(as_of),
+                "a live run already covers %s and has not failed; supersede it "
+                "rather than scoring the date twice",
+                as_of,
             )
             return 1
         except Exception:
             # `open_run` commits before `score()` runs inside its own
             # transaction, so anything else `score()` raises -- a write
             # constraint violation, a transient database error, a bug -- still
-            # leaves the run row behind as a wedged date, exactly like
-            # `NoBarsVisible`. Catching `Exception` (never a bare `except`,
-            # and never `SystemExit`/`KeyboardInterrupt`) means this is the
-            # backstop for whatever the two named branches above do not
-            # already cover, not a replacement for them. `logger.exception`
-            # keeps the traceback in the log for whoever debugs the bug
-            # itself; returning 1 rather than re-raising matches the other
-            # branches so the process always exits cleanly with a recovery
-            # instruction rather than a bare traceback and no next step.
+            # leaves the run row behind, exactly like `NoBarsVisible`.
+            # Catching `Exception` (never a bare `except`, and never
+            # `SystemExit`/`KeyboardInterrupt`) means this is the backstop for
+            # whatever the two named branches above do not already cover, not
+            # a replacement for them. `logger.exception` keeps the traceback
+            # in the log for whoever debugs the bug itself; returning 1 rather
+            # than re-raising matches the other branches so the process always
+            # exits cleanly with a next step rather than a bare traceback.
             logger.exception(
-                "scoring %s failed unexpectedly\n%s", as_of, _recovery_sql(as_of),
+                "scoring %s failed unexpectedly\n%s", as_of, _recovery_note(as_of),
             )
             return 1
     logger.info(

@@ -164,7 +164,7 @@ Scripts were throwaway and were not kept.
 pillar score and a dated snapshot, written once a night in one transaction under a versioned
 `scoring_run`.
 
-Verified against a real Postgres 16 with all nineteen migrations and the committed universe, in
+Verified against a real Postgres 16 with all twenty migrations and the committed universe, in
 reduced form: Task 11's precondition, a full night of ingested prices, did not exist on this
 machine, so the run was `--limit 60` rather than the full 1,504. 59 scored, 1,445 skipped for
 want of a window, one of the sixty for want of one — D8's "absent, not zero" firing on real data
@@ -174,6 +174,15 @@ the fallback ladder D7 calls "unexercised in practice" was in fact exercised, an
 **sector-level grouping remains unverified against real data** — a later full-universe run is
 what settles it. One transaction wrote 236 `metric_daily` rows, 59 `pillar_score_daily`, 59
 `snapshot_daily`, 4 `peer_group_stat`, and zero runs with `emits_alerts` true.
+
+A failed night settles itself. Migration 020 narrows `scoring_run`'s exclusion constraint to
+`where (status = 'live' and outcome <> 'failed')`, `run_scoring` marks a catchable failure
+`failed` on the way out, and `reconcile` settles what a killed process could not — under an
+advisory lock, on `screener.skybird`'s terms, because a night in flight and a night whose
+process is gone are otherwise the same row. Before that, three individually correct decisions
+combined into a trap: one live run per date, a dead run leaves its row, and a constraint keying
+on `status` while death is recorded through `outcome`. Recovery was an operator deleting a row
+by hand; it is now re-running the date. The spec's §6 erratum carries the reasoning.
 
 Alerting is switched off on every run this cycle produces, and that is a claim recorded for the
 alerting cycle to honour rather than a label: the suppression machinery does not exist, these

@@ -237,10 +237,21 @@ def test_a_partial_write_leaves_all_three_tables_empty(fresh_db, universe, monke
     assert counts["metric_daily"] == 0
     assert counts["pillar_score_daily"] == 0
     assert counts["snapshot_daily"] == 0
-    # The run row survives, still `running`, as the record that it died.
+    assert counts["peer_group_stat"] == 0
+    # The run row survives as the record that the night died, and says so:
+    # `failed` rather than `running`, because the process lived long enough to
+    # record it. Under 020 that is also what stops it holding the date.
     assert fresh_db.execute("select outcome from scoring_run").fetchall() == [
-        ("running",)
+        ("failed",)
     ]
+
+    # And the date is scorable again, which is the property the whole
+    # three-part recovery exists for: re-run it and it goes through.
+    monkeypatch.undo()
+    report = run_scoring(fresh_db, as_of=AS_OF)
+
+    assert report.scored == MIN_PEERS
+    assert _counts(fresh_db)["snapshot_daily"] == MIN_PEERS
 
 
 def test_a_second_live_run_for_the_same_date_is_rejected(fresh_db, universe):

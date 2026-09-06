@@ -115,11 +115,12 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   compares six years against what is stored and writes nothing.
 - Score a night: `python -m screener.scoring run` — every active security for today, into
   `metric_daily`, `peer_group_stat`, `pillar_score_daily` and `snapshot_daily`, in one
-  transaction. `--as-of` overrides the date and refuses one in the past. A failed run leaves its
-  row at `status = 'live', outcome = 'running'`, which blocks any later live run for that date;
-  recovery is `delete from scoring_run where as_of_range = daterange('<as_of>', '<as_of + 1
-  day>', '[)') and outcome = 'running'`, the exact statement the CLI prints at the moment of
-  failure.
+  transaction. `--as-of` overrides the date and refuses one in the past. Takes an advisory lock,
+  so a second process refuses rather than scoring the same night twice. **A failed night needs
+  no operator action: re-run the date.** A failure it can catch marks the run `failed`, which
+  (migration 020) is what stops it holding the date; one it cannot — a kill, an OOM — leaves
+  `outcome = 'running'`, and the next run's `reconcile` settles it, the way skybird settles a
+  capture left by a dead supervisor.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
@@ -279,7 +280,8 @@ nothing outside imports a submodule directly.
   deliberately unlike ingest's per-security commits: a half-scored day would read as a crossing
   for every security that never got scored. Adjustment is total return — splits and dividends,
   anchored at the present — and is the one piece of arithmetic here where a wrong answer looks
-  entirely plausible, so it is a pure function with its own tests. The three read-only roles
-  already hold `select` on all four derived tables from 013, 017 and 018, so the console,
+  entirely plausible, so it is a pure function with its own tests. A run that dies is settled
+  rather than left to block its date: `reconcile` under an advisory lock, on skybird's terms.
+  The three read-only roles already hold `select` on all four derived tables from 013, 017 and 018, so the console,
   Steven's `sql` tool and the claude.ai connector see real scores the night this first runs,
   with no migration and no code change.

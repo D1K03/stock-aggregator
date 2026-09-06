@@ -130,6 +130,22 @@ class NoBarsVisible(RuntimeError):
     """No security had a visible bar, so there is nothing honest to write."""
 
 
+class ScoringInProgress(RuntimeError):
+    """Another process holds the scoring lock, so this one does not start."""
+
+
+# Distinct from `screener.boot`'s migration lock; any 64-bit constant will do,
+# and it only has to be unique within this database.
+#
+# This exists to make `reconcile` safe rather than to serialise the nightly job
+# for its own sake. Without a lock, a run row at 'running' is ambiguous -- a
+# night still in flight looks exactly like one whose process is gone -- and
+# reconciling would eventually declare a healthy run dead and let a second one
+# score the same date beside it. Holding the lock is what earns the right to
+# say "anything still 'running' belongs to nobody".
+SCORING_LOCK_ID = 8_119_003
+
+
 @dataclass(frozen=True)
 class Reference:
     logic_version_id: int
@@ -399,6 +415,32 @@ def score(
     )
 
 
+def reconcile(conn: psycopg.Connection) -> int:
+    """Settle runs left behind by a process that died without saying so.
+
+    Runs once, under the scoring lock and before any run row is opened, so
+    'running' at that moment can only mean a process that is no longer there --
+    a live one would be holding the lock this caller just took. The same shape
+    as `screener.skybird.store.reconcile`, for the same reason: a row nobody is
+    behind has to be settled by whoever notices, because the thing that would
+    have settled it is gone.
+
+    Marked failed rather than deleted. The row is the record that a night
+    happened and did not finish, which is worth keeping; what it must stop
+    doing is holding the date, and after 020 `outcome = 'failed'` is exactly
+    what stops that.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "update scoring_run set outcome = 'failed', finished_at = now() "
+            "where outcome = 'running'"
+        )
+        settled = cur.rowcount
+    if settled:
+        logger.warning("reconciled %d scoring run(s) left by a previous process", settled)
+    return settled
+
+
 def run_scoring(
     conn: psycopg.Connection,
     *,
@@ -407,14 +449,53 @@ def run_scoring(
 ) -> ScoringReport:
     """One night, on an autocommit connection.
 
-    The run row is committed first so that a failure leaves it `running` --
-    the record that a night died, exactly as ingest leaves `ingest_run`. The
-    writes are one transaction beneath it.
+    The run row is committed before the writes begin, so a failure rolls the
+    writes back whole and leaves the row behind as the record that the night
+    died. Two things then keep that record from wedging the date: a failure we
+    can catch marks itself `failed` on the way out, and one we cannot -- a
+    kill, an OOM, a container going away -- is settled by `reconcile` at the
+    start of the next run.
     """
-    run_id = open_run(conn, as_of=as_of, cutoff_offset=cutoff_offset)
-    with conn.transaction():
-        report = score(conn, run_id=run_id, as_of=as_of, cutoff_offset=cutoff_offset)
-    close_run(conn, run_id, "ok")
+    row = conn.execute(
+        "select pg_try_advisory_lock(%s)", (SCORING_LOCK_ID,)
+    ).fetchone()
+    assert row is not None
+    if not row[0]:
+        raise ScoringInProgress(
+            "another scoring run holds the lock; refusing to score the same "
+            "night twice"
+        )
+    try:
+        reconcile(conn)
+        run_id = open_run(conn, as_of=as_of, cutoff_offset=cutoff_offset)
+        try:
+            with conn.transaction():
+                report = score(
+                    conn, run_id=run_id, as_of=as_of, cutoff_offset=cutoff_offset
+                )
+        except BaseException:
+            # `BaseException`, not `Exception`: a run killed by a timeout or a
+            # Ctrl-C has wedged its date exactly as thoroughly as one that hit
+            # a bug, and the row costs one statement to settle while the
+            # process is still alive to do it.
+            try:
+                close_run(conn, run_id, "failed")
+            except psycopg.Error:
+                # The connection itself is gone, which is the case `reconcile`
+                # exists for. Say so rather than replacing the real failure
+                # with the failure to record it.
+                logger.warning(
+                    "could not mark run %d failed; the next run reconciles it",
+                    run_id,
+                )
+            raise
+        close_run(conn, run_id, "ok")
+    finally:
+        # Session-scoped, so a killed process releases it when its socket
+        # dies. This is for the ordinary path, where the process lives on to
+        # do something else -- a lock held past the run would wedge tomorrow
+        # night as surely as the constraint once wedged today.
+        conn.execute("select pg_advisory_unlock(%s)", (SCORING_LOCK_ID,))
     logger.info(
         "scored %d securities for %s across %d peer groups, %d skipped",
         report.scored, as_of, report.groups, report.skipped,
