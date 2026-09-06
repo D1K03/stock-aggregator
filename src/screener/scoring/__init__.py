@@ -6,8 +6,9 @@ are the two that open a connection, and nothing here opens a socket.
 """
 
 from screener.scoring.adjust import Action, adjusted_closes
+from screener.scoring.blend import AGREEMENT_THRESHOLD, Snapshot, blend
 from screener.scoring.metrics import CODES, compute, months_before
 from screener.scoring.percentile import deciles, percentiles
 from screener.scoring.pillars import PillarScore, score_pillar
 
-__all__ = ["CODES", "Action", "PillarScore", "adjusted_closes", "compute", "deciles", "months_before", "percentiles", "score_pillar"]
+__all__ = ["AGREEMENT_THRESHOLD", "CODES", "Action", "PillarScore", "Snapshot", "adjusted_closes", "blend", "compute", "deciles", "months_before", "percentiles", "score_pillar"]
