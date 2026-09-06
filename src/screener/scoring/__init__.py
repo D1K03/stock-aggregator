@@ -6,5 +6,6 @@ are the two that open a connection, and nothing here opens a socket.
 """
 
 from screener.scoring.adjust import Action, adjusted_closes
+from screener.scoring.metrics import CODES, compute, months_before
 
-__all__ = ["Action", "adjusted_closes"]
+__all__ = ["CODES", "Action", "adjusted_closes", "compute", "months_before"]
