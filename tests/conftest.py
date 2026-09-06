@@ -20,7 +20,7 @@ def db_url(request) -> str:
     plain URL exactly as before.
 
     Why parallelism at all, when the suite is already fast per test: it is not.
-    Applying eighteen migrations costs about 320ms and every database test pays
+    Applying twenty migrations costs about 320ms and every database test pays
     it, which is two thirds of the wall time and cannot be avoided — the app
     opens its own connections everywhere, so there is no transaction to roll
     back, and `create database ... template` measured *slower* than migrating.

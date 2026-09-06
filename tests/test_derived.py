@@ -81,7 +81,7 @@ def derived_setup(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("insert into pillar (code, name) values ('quality', 'Q') returning id")
+        cur.execute("select id from pillar where code = 'quality'")
         pillar = cur.fetchone()[0]
         cur.execute(
             """
@@ -101,7 +101,7 @@ def derived_setup(fresh_db):
             (scheme,),
         )
         peer_group = cur.fetchone()[0]
-        cur.execute("insert into weight_version (code) values ('v1') returning id")
+        cur.execute("select id from weight_version where code = 'v1'")
         weight = cur.fetchone()[0]
         cur.execute(
             "insert into scoring_logic_version (description) values ('initial') returning id"
@@ -219,7 +219,7 @@ def test_comparable_prior_snapshot_query(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("insert into weight_version (code) values ('v1') returning id")
+        cur.execute("select id from weight_version where code = 'v1'")
         weight = cur.fetchone()[0]
         cur.execute(
             "insert into scoring_logic_version (description) values ('logic-a') returning id"

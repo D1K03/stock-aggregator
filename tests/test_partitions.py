@@ -32,7 +32,7 @@ def test_rows_route_into_a_newly_created_partition(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("insert into weight_version (code) values ('v1') returning id")
+        cur.execute("select id from weight_version where code = 'v1'")
         weight = cur.fetchone()[0]
         cur.execute(
             "insert into scoring_logic_version (description) values ('x') returning id"

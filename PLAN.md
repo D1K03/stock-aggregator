@@ -160,6 +160,37 @@ back through. v1 scores at sector level, which clears 20 members everywhere. Rea
 
 Scripts were throwaway and were not kept.
 
+**Scoring — the Momentum pillar** — merged in #NN (fill in the PR number at merge, as every entry above does). Bars become sector-relative percentiles, a
+pillar score and a dated snapshot, written once a night in one transaction under a versioned
+`scoring_run`.
+
+Verified against a real Postgres 16 with all twenty migrations and the committed universe, in
+reduced form: Task 11's precondition, a full night of ingested prices, did not exist on this
+machine, so the run was `--limit 60` rather than the full 1,504. 59 scored, 1,445 skipped for
+want of a window, one of the sixty for want of one — D8's "absent, not zero" firing on real data
+rather than on a fixture. Every sector fell below the twenty-member floor at this size, so the
+whole run fell back to the **market** group (`fallback_level` 0, `peer_count` 59 throughout):
+the fallback ladder D7 calls "unexercised in practice" was in fact exercised, and
+**sector-level grouping remains unverified against real data** — a later full-universe run is
+what settles it. One transaction wrote 236 `metric_daily` rows, 59 `pillar_score_daily`, 59
+`snapshot_daily`, 4 `peer_group_stat`, and zero runs with `emits_alerts` true.
+
+A failed night settles itself. Migration 020 narrows `scoring_run`'s exclusion constraint to
+`where (status = 'live' and outcome <> 'failed')`, `run_scoring` marks a catchable failure
+`failed` on the way out, and `reconcile` settles what a killed process could not — under an
+advisory lock, on `screener.skybird`'s terms, because a night in flight and a night whose
+process is gone are otherwise the same row. Before that, three individually correct decisions
+combined into a trap: one live run per date, a dead run leaves its row, and a constraint keying
+on `status` while death is recorded through `outcome`. Recovery was an operator deleting a row
+by hand; it is now re-running the date. The spec's §6 erratum carries the reasoning.
+
+Alerting is switched off on every run this cycle produces, and that is a claim recorded for the
+alerting cycle to honour rather than a label: the suppression machinery does not exist, these
+scores are incomparable with everything after fundamentals land, and a one-pillar crossing is
+definitionally the least interesting alert there is.
+
+Spec: `docs/specs/2026-09-05-scoring.md`. Plan: `docs/plans/2026-09-06-scoring.md`.
+
 ## Then, in dependency order
 
 Each needs its own brainstorm → spec → plan cycle; they are too big for one.
@@ -185,11 +216,7 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    leaves "did the API lie or did our parser?" unanswerable. Direct also returns profile,
    statements, key statistics, earnings trend and recommendation trend in one `quoteSummary`
    call. Reasoning in `DESIGN.md`.
-3. **Scoring** — metric computation, percentile within sector peer group, pillar aggregation
-   with the coverage gate. No fallback walk in v1: every sector clears the peer floor, so
-   `fallback_level` is recorded as sector throughout and the ladder stays unexercised until an
-   industry rung is added.
-4. **Diff and alerting** — crossing detection against the last comparable snapshot, cooldown,
+3. **Diff and alerting** — crossing detection against the last comparable snapshot, cooldown,
    the Discord POST.
 
 ## Carried forward
@@ -257,14 +284,19 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
   Services) holds exactly 20 names, sitting on the floor rather than above it.
 - Coverage floor for alert suppression, per rule in `alert_rule.min_coverage` — still open, needs
   real metric coverage to settle.
+- **Plain twelve-month versus 12-minus-1** for `ret_12m`. Settled at plain for consistency with
+  the other three metrics; adding `ret_12_1m` later is one metric row plus one function.
+- **The 75th-percentile threshold for `pillar_agreement`.** Follows `DESIGN.md`'s "top quartile"
+  and is otherwise arbitrary.
 
 ## Status
 
 Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance
 done. Daily **price** ingest is built and the universe is committed; fundamentals are the next
-ingest cycle, and no scoring or alerting code exists yet. `python -m screener.boot selftest` is
-what exercises the infrastructure end to end, and it is worth running after a deploy for exactly
-that reason.
+ingest cycle. Scoring is built for the Momentum pillar and writes snapshots with alerting
+switched off, verified in reduced form against 60 securities rather than the full universe; no
+alerting code exists yet. `python -m screener.boot selftest` is what exercises the infrastructure
+end to end, and it is worth running after a deploy for exactly that reason.
 
 The data is now readable from claude.ai as a custom connector, over the same read-only engine the
 `/playground` console uses and a third Postgres role of its own. That is a reading surface and
