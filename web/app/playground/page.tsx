@@ -36,6 +36,7 @@ export default function Playground() {
   const [ask, setAsk] = useState("");
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -169,6 +170,27 @@ export default function Playground() {
               <div className="pg-off">{catalog.reason ?? "Not configured here."}</div>
             )}
           </div>
+
+          {/* The same tables, read from Claude rather than from here. The URL is
+              the one the server will accept: every token is bound to it as an
+              audience, so pasting the address bar instead would be refused with
+              nothing on screen to explain why. */}
+          {catalog?.connector?.enabled && (
+            <div className="pg-connector">
+              <span className="pg-connector-head">Read this from Claude</span>
+              <code title={catalog.connector.url}>{catalog.connector.url}</code>
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(catalog.connector!.url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1600);
+                }}
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+              <small>Add it as a custom connector, then sign in with GitHub.</small>
+            </div>
+          )}
         </aside>
 
         <div className="pg-main">

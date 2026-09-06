@@ -20,6 +20,8 @@ export type Catalog = {
     max_sql: number;
     timeout_ms: number;
   };
+  /* The same tables, read from Claude instead of from this page. */
+  connector?: { enabled: boolean; url: string };
 };
 
 export type Column = { name: string; type: string };

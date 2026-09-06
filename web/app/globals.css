@@ -1078,6 +1078,33 @@ footer.site .prov {
 }
 .pg-run:disabled { opacity: 0.5; cursor: default; }
 
+/* The connector address, at the foot of the tree. Beside the tables rather
+   than on its own page, because it is the same grant seen from somewhere else. */
+.pg-connector {
+  border-top: 1px solid var(--line);
+  padding: calc(var(--sp) * 3);
+  display: grid; gap: 6px;
+  grid-template-columns: 1fr auto;
+}
+.pg-connector-head {
+  grid-column: 1 / -1; font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted);
+}
+.pg-connector code {
+  font-family: var(--font-geist-mono), monospace; font-size: 0.7rem;
+  color: var(--copper); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0; align-self: center;
+}
+.pg-connector button {
+  border: 1px solid var(--line); background: none; color: var(--ink-muted);
+  border-radius: 9999px; padding: 3px 10px; cursor: pointer;
+  font: inherit; font-size: 0.7rem; font-weight: 600;
+}
+.pg-connector button:hover { color: var(--copper); border-color: var(--copper); }
+.pg-connector small {
+  grid-column: 1 / -1; font-size: 0.68rem; color: var(--ink-muted); opacity: 0.8;
+}
+
 /* The ask bar, above the editor rather than beside the tree: what you are
    describing is the query, and the query is here. */
 .pg-ask {

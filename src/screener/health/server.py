@@ -516,6 +516,18 @@ class Handler(BaseHTTPRequestHandler):
                     "max_sql": playground.MAX_SQL,
                     "timeout_ms": playground.STATEMENT_TIMEOUT_MS,
                 },
+                # The same data, read from Claude instead of from here. Served
+                # beside the catalogue rather than from its own endpoint because
+                # it is one string and the page already asks for this one.
+                #
+                # It has to be the canonical URL rather than whatever the
+                # browser happens to be on: it is the audience every token is
+                # bound to, so a copy of `localhost:8080` pasted into claude.ai
+                # would be refused by this server with nothing to explain why.
+                "connector": {
+                    "enabled": mcp.enabled(),
+                    "url": mcp.resource(),
+                },
             },
         )
 
