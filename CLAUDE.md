@@ -13,7 +13,8 @@ the schema, the pipeline and CI/CD.
 ## Status
 
 The database schema, the infrastructure layer and daily **price** ingest are built and tested;
-fundamentals are the next ingest cycle, and no scoring or alerting code exists yet. Runtime
+fundamentals are the next ingest cycle; scoring is built for the Momentum pillar and writes
+snapshots with alerting switched off, and no alerting code exists yet. Runtime
 dependencies are `psycopg`, `httpx` and `discord.py`, and nothing else — check `pyproject.toml`
 before assuming a library is available. `faster-whisper` and `yt-dlp` are extras (`voice`,
 `stream`) that one image each installs, and both are imported inside a function so the rest of
@@ -112,6 +113,13 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Ingest prices: `python -m screener.ingest prices` — fetches missing daily bars per
   security, backfilling to 2020 on first sight. `sweep` is a hand-run diagnostic that
   compares six years against what is stored and writes nothing.
+- Score a night: `python -m screener.scoring run` — every active security for today, into
+  `metric_daily`, `peer_group_stat`, `pillar_score_daily` and `snapshot_daily`, in one
+  transaction. `--as-of` overrides the date and refuses one in the past. A failed run leaves its
+  row at `status = 'live', outcome = 'running'`, which blocks any later live run for that date;
+  recovery is `delete from scoring_run where as_of_range = daterange('<as_of>', '<as_of + 1
+  day>', '[)') and outcome = 'running'`, the exact statement the CLI prints at the moment of
+  failure.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
@@ -259,3 +267,19 @@ nothing outside imports a submodule directly.
   a security with no rows gets 2020. Two windows: the fetch window widens to close a gap,
   the settling window (7 days) never does, and inside it is the one place the ingest path
   mutates an existing row.
+- `screener.scoring` — bars into percentiles, a pillar score and a dated snapshot. Five pure
+  modules and two that open a connection, as `screener.ingest` splits `parse` from `load`.
+  One pillar this cycle: prices give Momentum and nothing else, so `weight_version` v1 is
+  `{Momentum: 1.0}` and `snapshot_daily.min_coverage` says so on every row. **Every run this
+  cycle writes has `emits_alerts = false`** — not because a one-pillar blend is embarrassing,
+  but because deduplication and the per-ticker cooldown do not exist yet and these scores are
+  incomparable with everything after fundamentals land. Percentiles are computed within a
+  security's *sector* group, reached by walking `sector_node.parent_id` up from the level-2
+  industry node every `security_sector` row points at. The whole night is one transaction,
+  deliberately unlike ingest's per-security commits: a half-scored day would read as a crossing
+  for every security that never got scored. Adjustment is total return — splits and dividends,
+  anchored at the present — and is the one piece of arithmetic here where a wrong answer looks
+  entirely plausible, so it is a pure function with its own tests. The three read-only roles
+  already hold `select` on all four derived tables from 013, 017 and 018, so the console,
+  Steven's `sql` tool and the claude.ai connector see real scores the night this first runs,
+  with no migration and no code change.
