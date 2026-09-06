@@ -33,7 +33,16 @@ begin
         -- No password, deliberately, on the same terms as `playground`: a login
         -- role with a null password cannot authenticate under scram-sha-256, so
         -- Steven's `sql` tool ships switched off and a deployment turns it on.
-        create role playground_bot login password null;
+        begin
+            create role playground_bot login password null;
+        exception when duplicate_object then
+            -- Another database in this cluster created it between the
+            -- check above and this line. A role is a cluster object and
+            -- that check is not atomic across sessions, so both can pass
+            -- it and one loses on the unique index. The loser wanted the
+            -- role to exist and it does, so there is nothing to do.
+            null;
+        end;
     end if;
 
     -- The floor under this role: a statement timeout, a lock timeout, a

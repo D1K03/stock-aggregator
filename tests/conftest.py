@@ -77,21 +77,21 @@ def empty_db(db_url):
 def fresh_db(empty_db):
     """A connection to an empty public schema with all migrations applied.
 
-    Retried on `InternalError_`, which here means one thing: two workers
-    creating the same cluster-wide role in the same instant. Roles are not
-    per-database, so the first migration of a run is the one moment several
-    databases write the same `pg_authid` row, and Postgres fails the loser with
-    "tuple concurrently updated". Everything after that is a no-op, because the
-    role migrations only write their settings when absent.
+    Retried, because the first migration of a run is the one moment several
+    databases write the same cluster-wide rows. Roles are not per-database, so
+    two workers creating them at once collide, and an advisory lock does not
+    help because advisory locks are scoped per database.
 
-    An advisory lock is not the fix, because advisory locks are scoped per
-    database, which is worth stating since it is the obvious thing to reach for.
+    The migrations handle the `create role` race themselves. What is left here
+    is the settings write, which fails the loser with "tuple concurrently
+    updated" and succeeds on the next attempt because by then the settings are
+    there and the guard skips them.
     """
     for attempt in range(4):
         try:
             apply_migrations(empty_db, MIGRATIONS)
             return empty_db
-        except psycopg.errors.InternalError_:
+        except (psycopg.errors.InternalError_, psycopg.errors.UniqueViolation):
             if attempt == 3:
                 raise
             time.sleep(0.1 * (attempt + 1))

@@ -21,7 +21,16 @@ begin
         -- connector ships switched off and a deployment turns it on by giving
         -- it one. The password is never in this file, because this file is in
         -- git.
-        create role playground_mcp login password null;
+        begin
+            create role playground_mcp login password null;
+        exception when duplicate_object then
+            -- Another database in this cluster created it between the
+            -- check above and this line. A role is a cluster object and
+            -- that check is not atomic across sessions, so both can pass
+            -- it and one loses on the unique index. The loser wanted the
+            -- role to exist and it does, so there is nothing to do.
+            null;
+        end;
     end if;
 
     -- The floor under this role: a statement timeout, a lock timeout, a
