@@ -745,3 +745,15 @@ def test_a_refused_post_does_not_poison_the_next_request(server):
     finally:
         conn.close()
     assert status == 200
+
+
+def test_initialize_carries_the_orb_and_a_readable_name(connector):
+    _, answer = ask("initialize", {"protocolVersion": "2025-11-25"})
+    info = answer["result"]["serverInfo"]
+    assert info["title"] == "Screener"
+    icon = info["icons"][0]
+    # Absolute, on this origin, and the same asset the browser tab uses, so a
+    # client that renders it shows the thing people already recognise.
+    assert icon["src"] == f"{BASE}/icon.svg"
+    assert icon["mimeType"] == "image/svg+xml"
+    assert info["websiteUrl"] == BASE
