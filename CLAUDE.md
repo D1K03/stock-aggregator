@@ -89,7 +89,7 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Tests: `pytest` — needs `DATABASE_URL_TEST` pointing at a throwaway Postgres 16
   (the suite drops and recreates the `public` schema on every test). Parallel by
   default: one worker per core, each creating its own database in that server,
-  because eighteen migrations cost ~320ms and every database test pays it. `-n0`
+  because twenty migrations cost ~320ms and every database test pays it. `-n0`
   puts it back on one process for a debugger or a failure that needs reading in
   order.
 - Single test: `pytest tests/test_identity.py::test_overlapping_symbol_periods_for_one_security_are_rejected -v`
@@ -248,8 +248,9 @@ nothing outside imports a submodule directly.
   trail cannot be read — refusing everyone because Postgres blinked is the worse failure.
 - `screener.concept` — invented, schema-shaped sample data mirroring
   `web/lib/data.ts`, so the dashboard and the chart tool draw the same line. A
-  test parses the TypeScript and fails when the two drift. Delete it when
-  ingest lands.
+  test parses the TypeScript and fails when the two drift. Ingest and scoring
+  have landed, so this is now waiting to be deleted: the swap reads
+  `snapshot_daily` and is the only work left in it.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.

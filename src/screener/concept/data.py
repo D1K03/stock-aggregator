@@ -1,9 +1,11 @@
 """The dashboard's concept data, mirrored for the agent.
 
 **None of this is real.** It is invented, schema-shaped sample data so the
-dashboard has something to draw before ingest exists. When ingest lands this
-module is deleted and the chart tool reads `score_snapshot` instead; nothing
-here should grow a second purpose in the meantime.
+dashboard has something to draw. Ingest and scoring have both landed, so the
+condition for deleting this module is met and only the swap itself is left:
+the chart tool reads `snapshot_daily` instead and this goes. Nothing here
+should grow a second purpose in the meantime -- it is now waiting to be
+removed rather than waiting for something to exist.
 
 It mirrors `web/lib/data.ts`, which is a duplication and is worth explaining.
 The dashboard renders these numbers server-side from TypeScript and the agent

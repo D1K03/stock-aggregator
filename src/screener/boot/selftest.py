@@ -1,9 +1,11 @@
 """Checks every configured integration and reports what it found.
 
-Nothing in the infrastructure layer has a consumer yet — ingest, scoring and
-alerting are all unwritten — so a root can be quietly broken for months and
-nothing would say so. This is what closes that gap: one command, run on the
-box after a deploy, that exercises each piece against the real world.
+Ingest and scoring have consumers now; alerting still does not. That changed
+what this command is for rather than retiring it. A root that breaks is no
+longer silent for months — a night of ingest or scoring notices — but it
+notices at 02:00, in a log nobody is reading, and only for the roots that
+night happens to touch. This is still the only thing that exercises each piece
+against the real world on demand: one command, run on the box after a deploy.
 
 Anything unconfigured is reported as SKIP rather than failing, because "Bright
 Data is switched off" is the expected state, not a fault. Discord is checked

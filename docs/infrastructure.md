@@ -589,6 +589,17 @@ two containers starting together would otherwise both run the same
 **Never edit an applied migration**, and never rename one: the ledger keys on
 the filename, so a rename makes it run again.
 
+**There are two advisory locks, and a third needs its own id.** `screener.boot`
+holds one across migrations; `screener.scoring` holds another across a night, so
+that a run row left at `outcome = 'running'` can be read as "the process behind
+this is gone" rather than "this might still be going" — that reading is what
+lets a failed night stop holding its date. The ids are module constants
+(`MIGRATION_LOCK_ID`, `SCORING_LOCK_ID`) and they are per-database rather than
+per-server, so they only have to be unique within this application. Reach for
+one when a claim about other rows is only true while nobody else is writing;
+do not reach for one to serialise work that a unique constraint already
+serialises.
+
 > **There are no backups.** The database is a volume on a VPS and nothing
 > snapshots it. `deploy/README.md` has a manual `pg_dump`. This is the largest
 > outstanding gap in the infrastructure and it grows every day there is data.

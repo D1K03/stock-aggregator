@@ -274,8 +274,10 @@ flags.
 rule. Someone mentions the bot, a model answers. What keeps that inside the project's constraints
 is the system prompt rather than the phrasing of this entry: it forbids investment advice
 outright, forbids producing a figure the screener does not have, and tells the model to say when
-it does not know. That last one matters most while ingest does not exist, because every number a
-model could offer about a security today would be invented.
+it does not know. That mattered most while there was nothing behind the bot at all; prices and
+scores exist now, so the failure it guards against has changed shape rather than gone away. The
+model can be handed a real number and still reach past it — and a fabricated figure sitting
+beside three real ones is harder to catch than one where everything was invented.
 
 The rule that has not moved: **an LLM never emits a score.** Sentiment is FinBERT's, percentiles
 are arithmetic, and a model asked for either would produce a confident answer with nothing behind

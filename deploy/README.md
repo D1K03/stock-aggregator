@@ -120,9 +120,11 @@ every distinct exit it saw, and fails if two lanes share an address or if one
 comes out of the box's own. That failing is the whole point of the check, because
 lanes quietly sharing an exit are billed, look healthy and spread nothing.
 
-Nothing in the infrastructure layer has a consumer yet — ingest, scoring and
-alerting are all unwritten — so this command is the only thing that would
-notice a root going quietly broken.
+Ingest and scoring have consumers now, so a broken root is no longer silent
+until someone looks — but it surfaces at 02:00, in a log, and only for the
+roots that night touches. This command is still the only thing that exercises
+all of them on demand, which is what makes it worth running after a deploy
+rather than waiting to find out.
 
 ## Running it locally
 

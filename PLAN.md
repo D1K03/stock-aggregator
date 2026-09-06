@@ -43,8 +43,9 @@ Two decisions are worth keeping when this meets real data:
 the two live in separate Docker build contexts and neither can import the
 other's copy. `tests/test_charts.py` parses the TypeScript and fails if they
 disagree, and pins `series()` against values from the original walk — so the
-duplication is checked rather than trusted. Delete the package when ingest
-lands; the tool then reads `score_snapshot` and nothing else about it changes.
+duplication is checked rather than trusted. Ingest and scoring have both landed
+now, so the package is waiting to be deleted rather than waiting for a reason:
+the tool reads `snapshot_daily` and nothing else about it changes.
 
 ### Skybird — live stream capture
 
@@ -105,7 +106,9 @@ Open, and worth doing in this order:
   number rather than added to it.
 - **English only.** `base.en`, and `language="en"` is hard-coded.
 
-Still not built, and still blocked on ingest:
+Still not built — but no longer blocked. Ingest and scoring both landed, so
+`snapshot_daily` has real rows in it and every item below is now someone
+choosing to do it rather than waiting:
 
 - **Real data.** Everything above draws fiction. Every surface says so — the
   chart footer, the tool result, and the system prompt — and that wording is
@@ -195,10 +198,12 @@ Spec: `docs/specs/2026-09-05-scoring.md`. Plan: `docs/plans/2026-09-06-scoring.m
 
 Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 
-1. **Universe and identity** — pick the ticker list and populate `security`,
-   `security_symbol`, `security_sector`, `sector_node`, `peer_group`. Everything else needs
-   securities to exist. The taxonomy is settled (yfinance, two levels, sector groups only for
-   v1); what remains is choosing the list and handling the symbols that do not resolve.
+1. **Universe and identity** — **built.** `security`, `security_symbol`, `security_sector`,
+   `sector_node` and `peer_group` are populated: 1,504 securities across eleven sectors, the
+   list committed as `data/universe.csv` so a reclassification shows up in a diff before it can
+   move a score. Spec: `docs/specs/2026-09-05-universe-and-identity.md`. Left here rather than
+   moved to "Done" because items 2 and 3 read against it — this is the shape of the dependency,
+   not a queue.
 2. **Ingest** — prices and fundamentals into the bitemporal fact layer, payload writing,
    content-hash dedup. First real use of `cutoff_offset`. Settles where payloads land, which
    `DESIGN.md` now records as open. Inherits `screener.secrets`, and `screener.fetch` for every
@@ -208,8 +213,8 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 
    The price half is implemented — see `docs/specs/2026-09-05-price-ingest.md` and
    `docs/plans/2026-09-05-price-ingest.md`. Fundamentals remain, per that spec's own
-   "Out of scope" section, along with scoring and the dashboard/bot swap off
-   `screener.concept`.
+   "Out of scope" section, along with the dashboard/bot swap off `screener.concept`.
+   Scoring no longer does: it is built, and has moved to "Done" above.
 
    **Not yfinance.** The library emits parsed DataFrames, so a stored payload would be its
    reshaping rather than the response — which breaks the content-hash restatement detector and

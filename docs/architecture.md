@@ -300,10 +300,14 @@ dependency.
 
 ## The database
 
-Roughly twenty tables across three schemas. `public` holds the screener's own
-data model; `auth` and `audit` are separate because no scoring query joins to
-them, and because the test suite's `drop schema public cascade` should keep
-meaning exactly what it says. The design and its reasoning are in
+Thirty-seven tables across five schemas, not counting the yearly partitions.
+`public` holds the screener's own data model; `auth`, `audit`, `skybird` and
+`mcp` are separate for one reason each time — no scoring query joins to any of
+them — and because the test suite's `drop schema public cascade` should keep
+meaning exactly what it says. Each of the four had to say so in its own
+migration, which is the point: a schema is where something goes when it is not
+part of the data model, and that is a decision worth making one table at a
+time. The design and its reasoning are in
 `docs/specs/2026-09-04-database-schema-design.md`.
 
 ### Reference and identity
