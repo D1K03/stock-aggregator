@@ -67,14 +67,23 @@ def test_no_derivation_is_seeded(fresh_db):
 
 
 def test_the_point_in_time_index_includes_period_type(fresh_db):
-    # D6: without period_type a fiscal year collapses into its own Q4.
+    # D6: without period_type a fiscal year collapses into its own Q4. And the
+    # full order matters, not just that period_type is present somewhere: the
+    # point-in-time read's `order by` is exactly
+    # security_id, metric_id, period_end, period_type, observed_at desc, and
+    # any transposition means Postgres can't satisfy its `distinct on` from
+    # this index and sorts anyway -- paying the index's write cost on every
+    # insert for nothing. Pin the whole column list, not a substring of it.
     definition = fresh_db.execute(
         "select indexdef from pg_indexes where indexname = %s",
         ("fundamental_fact_pit_idx2",),
     ).fetchone()
     assert definition is not None
     text = definition[0]
-    assert "period_end, period_type, observed_at DESC" in text
+    assert (
+        "(security_id, metric_id, period_end, period_type, observed_at DESC)"
+        in text
+    )
 
 
 def test_the_old_index_that_omitted_period_type_is_gone(fresh_db):
