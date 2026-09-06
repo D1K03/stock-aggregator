@@ -35,16 +35,33 @@ begin
         -- Steven's `sql` tool ships switched off and a deployment turns it on.
         create role playground_bot login password null;
     end if;
+
+    -- The floor under this role: a statement timeout, a lock timeout, a
+    -- read-only default and a fixed search_path. None of them is the
+    -- enforcement -- every one is a USERSET a session could raise again, and
+    -- the grants are what actually hold -- but they keep an accident cheap.
+    --
+    -- Behind an existence check because `pg_db_role_setting` rows for a role
+    -- with no `in database` clause are *shared* across the whole cluster, so
+    -- writing them again from a second database is a write to a shared
+    -- catalog and two doing it at once fail with "tuple concurrently updated".
+    -- An advisory lock does not help: those are per-database, which was worth
+    -- measuring rather than assuming. Not writing twice does.
+    if not exists (
+        select 1 from pg_db_role_setting
+         where setrole = 'playground_bot'::regrole and setdatabase = 0
+    ) then
+        execute 'alter role playground_bot set statement_timeout                   = ''10s''';
+        execute 'alter role playground_bot set idle_in_transaction_session_timeout = ''30s''';
+        execute 'alter role playground_bot set lock_timeout                        = ''2s''';
+        execute 'alter role playground_bot set default_transaction_read_only       = on';
+        execute 'alter role playground_bot set search_path                         = ''public''';
+    end if;
 end
 $$;
 
 -- The same floor 013 puts under `playground`. Every one of these is a USERSET a
 -- session could raise again, so none of them is the enforcement; the grants are.
-alter role playground_bot set statement_timeout                   = '10s';
-alter role playground_bot set idle_in_transaction_session_timeout = '30s';
-alter role playground_bot set lock_timeout                        = '2s';
-alter role playground_bot set default_transaction_read_only       = on;
-alter role playground_bot set search_path                         = 'public';
 
 grant usage on schema public to playground_bot;
 

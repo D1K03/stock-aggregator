@@ -71,6 +71,12 @@ stream = [
 ]
 dev = [
     "pytest>=8.0",
+    # One worker per core, each with its own throwaway database. Not a nicety:
+    # applying eighteen migrations costs ~320ms and every database test pays it,
+    # which is two thirds of the wall clock. That work is irreducible -- the app
+    # opens its own connections so there is no transaction to roll back, and
+    # `create database ... template` measured *slower* -- but it parallelises.
+    "pytest-xdist>=3.6",
     "pyright>=1.1.400",
 ]
 
@@ -83,6 +89,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Parallel by default, because the serial suite is three and a half minutes and
+# that is long enough to stop running it. `-n0` puts it back on one process when
+# a failure needs reading in order, or a debugger needs a terminal.
+addopts = "-n auto"
 
 [tool.pyright]
 include = ["src", "tests"]
