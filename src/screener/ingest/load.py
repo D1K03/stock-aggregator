@@ -13,7 +13,7 @@ already been absorbed and leaves no mismatch to find.
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -356,3 +356,71 @@ def insert_facts(
         rows,
     )
     return len(rows)
+
+
+@dataclass(frozen=True)
+class HeldFact:
+    metric_code: str
+    period_end: date
+    period_type: str
+    value: Decimal
+    currency: str | None
+    observed_at: datetime
+
+
+def read_facts(
+    conn: psycopg.Connection,
+    security_ids: Sequence[int],
+    *,
+    as_of: date,
+    cutoff_offset: timedelta,
+) -> dict[int, list[HeldFact]]:
+    """What each security's facts were, as known on `as_of`.
+
+    The bitemporal read, and the only thing that can show the writes were
+    correct: rows existing proves nothing, because a test asserting the fields
+    it just passed in is a tautology.
+
+    **`period_type` is in the `distinct on` and it has to be.** A fiscal Q4
+    ends on the same date as its fiscal year -- AAPL reports both at 2025-09-30,
+    four-fold apart -- so the read documented in the schema spec,
+    `distinct on (security_id, metric_id, period_end)`, returns whichever was
+    inserted later and silently discards the other. For every company, every
+    year. Migration 021 puts `period_type` into the index too, in the order this
+    `order by` uses, so the `distinct on` is satisfied without a sort.
+
+    `cutoff` comes from `screener.scoring.visibility_cutoff` rather than being
+    recomputed here, so prices and fundamentals answer to one definition of
+    what a scoring date may see.
+    """
+    if not security_ids:
+        return {}
+    # Imported here rather than at module scope: `screener.scoring` imports
+    # nothing from `screener.ingest`, and keeping the edge one-directional at
+    # the top of the file would be a lie about a dependency that only exists
+    # inside this function.
+    from screener.scoring import visibility_cutoff
+
+    out: dict[int, list[HeldFact]] = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """select distinct on (f.security_id, f.metric_id, f.period_end,
+                                   f.period_type)
+                      f.security_id, m.code, f.period_end, f.period_type,
+                      f.value, f.currency, f.observed_at
+                 from fundamental_fact f
+                 join metric m on m.id = f.metric_id
+                where f.security_id = any(%(ids)s)
+                  and f.observed_at <= %(cutoff)s
+             order by f.security_id, f.metric_id, f.period_end, f.period_type,
+                      f.observed_at desc""",
+            {
+                "ids": list(security_ids),
+                "cutoff": visibility_cutoff(as_of, cutoff_offset),
+            },
+        )
+        for security_id, code, period_end, period_type, value, currency, observed_at in cur.fetchall():
+            out.setdefault(security_id, []).append(
+                HeldFact(code, period_end, period_type, value, currency, observed_at)
+            )
+    return out
