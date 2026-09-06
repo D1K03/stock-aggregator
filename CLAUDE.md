@@ -86,7 +86,11 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 
 - Install: `pip install -e ".[dev]"`
 - Tests: `pytest` — needs `DATABASE_URL_TEST` pointing at a throwaway Postgres 16
-  (the suite drops and recreates the `public` schema on every test).
+  (the suite drops and recreates the `public` schema on every test). Parallel by
+  default: one worker per core, each creating its own database in that server,
+  because eighteen migrations cost ~320ms and every database test pays it. `-n0`
+  puts it back on one process for a debugger or a failure that needs reading in
+  order.
 - Single test: `pytest tests/test_identity.py::test_overlapping_symbol_periods_for_one_security_are_rejected -v`
 - Typecheck: `pyright` — must report zero errors. psycopg types query parameters as
   `LiteralString`, so SQL assembled at runtime is rejected by design: build DDL with
@@ -99,7 +103,8 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   `BRIGHTDATA_PROXY_IPS` is set; `--no-proxy` forces one direct lane.
 - Load it (no network): `python -m screener.universe load --dry-run` then without `--dry-run`.
   Refuses if more than 10% of the active universe would be retired; `--force` overrides.
-- Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status` on 8080
+- Run the status service: `python -m screener.boot` — `/health`, `/ready`, `/status`,
+  `/playground`'s API and the MCP connector, all on 8080
 - Supervise live stream captures: `python -m screener.skybird` (the container's command).
   `start <url>`, `stop <id>`, `list` and `delete <id>` are the dashboard's writes from a
   terminal.
@@ -151,6 +156,25 @@ nothing outside imports a submodule directly.
   `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
   the web container, which rasterises the same string to PNG for Discord. One renderer, so the
   two surfaces cannot drift — do not add a second way to draw a chart.
+- `screener.mcp` — claude.ai reading this data as a custom connector, over the
+  Model Context Protocol. The transport is Streamable HTTP answered in plain
+  JSON: the spec allows a single object in reply to a POST instead of an SSE
+  stream, and **cloudflared buffers server-sent events**, so a transport that
+  never opens a stream is the one that works through this tunnel. Stateless, no
+  `Mcp-Session-Id`, `GET /mcp` is 405. Hand-rolled rather than the SDK, which
+  would bring pydantic and starlette in to replace a five-entry dispatch table.
+  Auth is OAuth 2.1 with dynamic client registration, because claude.ai offers
+  nothing simpler — its API-key mode is beta and limited to some organisations,
+  and authless would leave a database open to whoever learned the URL. The
+  consent step is the GitHub session the dashboard already issues, so there is
+  no second identity. `_redirect_allowed` is where the security actually lives:
+  registration is unauthenticated by necessity, so a callback address is checked
+  against a list rather than accepted from whoever registered it. Reads as
+  `playground_mcp` (018), a third role whose grant list adds the skybird
+  transcripts — which means transcripts leave the box, said out loud in the
+  migration. **Two things are not in this repo and will fail invisibly:** the
+  Caddy handles for `/mcp`, `/oauth/*` and `/.well-known/*`, and Cloudflare's
+  "Block AI bots" rule, which answers `Claude-User` with 403 at the edge.
 - `screener.playground` — read-only SQL from the dashboard and from Steven's `sql` tool, over
   one engine so the bounds cannot differ between them. **The enforcement is a Postgres role, not
   a check in Python**: the app connects as the cluster superuser, on which a SQL box would be

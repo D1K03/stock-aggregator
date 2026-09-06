@@ -17,7 +17,8 @@ have to be argued about before it is silently either.
 import re
 from pathlib import Path
 
-COMPOSE = Path(__file__).resolve().parent.parent / "deploy" / "compose.prod.yaml"
+ROOT = Path(__file__).resolve().parent.parent
+COMPOSE = ROOT / "deploy" / "compose.prod.yaml"
 
 # Every service that runs our code and reads the database.
 NEEDS_DATABASE = {
@@ -113,8 +114,35 @@ def test_the_bot_is_never_handed_the_consoles_password():
     # what actually closes it. Deleting that line silently re-opens the door.
     assert 'PLAYGROUND_DB_PASSWORD: ""' in services()["bot"]
 
-    # The api holds both, and only because provisioning runs there — beside the
-    # migrations, under the same advisory lock. It never builds a URL from the
-    # bot's password.
+    # Nor the connector's, which is a third role again.
+    assert 'PLAYGROUND_MCP_DB_PASSWORD: ""' in services()["bot"]
+
+    # The api holds all three, and only because provisioning runs there — beside
+    # the migrations, under the same advisory lock. It never builds a URL from
+    # the bot's password.
     assert "PLAYGROUND_BOT_DB_PASSWORD:" in services()["api"]
     assert "postgresql://playground_bot:" not in services()["api"]
+
+
+def test_the_connector_reaches_the_api_rather_than_the_dashboard():
+    # Every one of these is fixed by a spec or by what gets typed into Claude,
+    # so none of them can live under /api/ where the existing handle would catch
+    # it. Without a line each, Caddy's catch-all sends them to Next.js, which
+    # answers 307 to /login — and Claude drops the Authorization header across a
+    # redirect, so the whole flow fails as an authorization error with nothing
+    # here to explain it.
+    caddyfile = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text()
+    for path in ("/mcp", "/mcp/*", "/oauth/*", "/.well-known/*"):
+        assert f"handle {path} {{" in caddyfile, path
+
+    # And ahead of the catch-all, which is the whole point of listing them.
+    assert caddyfile.index("handle /mcp {") < caddyfile.index("handle {")
+
+
+def test_the_connector_runs_as_its_own_role():
+    # The grant list in `018_mcp.sql` is what decides what claude.ai can read,
+    # and it only decides anything if the process actually connects as that
+    # role rather than reusing the console's URL.
+    api = services()["api"]
+    assert "postgresql://playground_mcp:" in api
+    assert "PLAYGROUND_MCP_DATABASE_URL:" in api
