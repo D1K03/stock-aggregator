@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 
 import psycopg
@@ -10,7 +11,21 @@ MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
 
 
 @pytest.fixture(scope="session")
-def db_url() -> str:
+def db_url(request) -> str:
+    """The throwaway database this worker owns.
+
+    One per xdist worker, and it has to be: every test drops and recreates
+    `public`, so two workers sharing a database would delete each other's tables
+    mid-test. The name carries the worker id, and running without xdist gets the
+    plain URL exactly as before.
+
+    Why parallelism at all, when the suite is already fast per test: it is not.
+    Applying eighteen migrations costs about 320ms and every database test pays
+    it, which is two thirds of the wall time and cannot be avoided — the app
+    opens its own connections everywhere, so there is no transaction to roll
+    back, and `create database ... template` measured *slower* than migrating.
+    The work is irreducible; running it on four cores is not.
+    """
     url = os.environ.get("DATABASE_URL_TEST")
     if not url:
         # Skipping locally is a convenience; skipping in CI is a silent pass of a
@@ -18,7 +33,28 @@ def db_url() -> str:
         if os.environ.get("CI"):
             pytest.fail("DATABASE_URL_TEST is not set, but CI is — refusing to skip.")
         pytest.skip("DATABASE_URL_TEST is not set; see docs/plans for setup")
-    return url
+
+    worker = getattr(request.config, "workerinput", {}).get("workerid")
+    if worker is None:
+        return url
+
+    from psycopg import sql
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    base = str(conninfo_to_dict(url).get("dbname") or "screener_test")
+    mine = f"{base}_{worker}"
+    # `sql.Identifier`, not an f-string: psycopg types a query as LiteralString
+    # so that SQL assembled at runtime is rejected, and composition is the one
+    # sanctioned way through — the same path `screener.partitions` uses.
+    #
+    # From `postgres`, and autocommit, because you cannot create a database from
+    # inside the one you are dropping and `create database` cannot run in a
+    # transaction.
+    with psycopg.connect(make_conninfo(url, dbname="postgres"), autocommit=True) as conn:
+        name = sql.Identifier(mine)
+        conn.execute(sql.SQL("drop database if exists {}").format(name))
+        conn.execute(sql.SQL("create database {}").format(name))
+    return make_conninfo(url, dbname=mine)
 
 
 @pytest.fixture
@@ -32,14 +68,33 @@ def empty_db(db_url):
         conn.execute("drop schema if exists auth cascade")
         conn.execute("drop schema if exists audit cascade")
         conn.execute("drop schema if exists skybird cascade")
+        conn.execute("drop schema if exists mcp cascade")
         conn.execute("create schema public")
         yield conn
 
 
 @pytest.fixture
 def fresh_db(empty_db):
-    """A connection to an empty public schema with all migrations applied."""
-    apply_migrations(empty_db, MIGRATIONS)
+    """A connection to an empty public schema with all migrations applied.
+
+    Retried, because the first migration of a run is the one moment several
+    databases write the same cluster-wide rows. Roles are not per-database, so
+    two workers creating them at once collide, and an advisory lock does not
+    help because advisory locks are scoped per database.
+
+    The migrations handle the `create role` race themselves. What is left here
+    is the settings write, which fails the loser with "tuple concurrently
+    updated" and succeeds on the next attempt because by then the settings are
+    there and the guard skips them.
+    """
+    for attempt in range(4):
+        try:
+            apply_migrations(empty_db, MIGRATIONS)
+            return empty_db
+        except (psycopg.errors.InternalError_, psycopg.errors.UniqueViolation):
+            if attempt == 3:
+                raise
+            time.sleep(0.1 * (attempt + 1))
     return empty_db
 
 

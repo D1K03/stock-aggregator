@@ -22,14 +22,26 @@ def new_state() -> str:
     return secrets.token_urlsafe(24)
 
 
-def token_hash(token: str, secret: str) -> bytes:
+def token_hash(token: str, secret: str, *, purpose: str = "") -> bytes:
     """What goes in the database.
 
     HMAC rather than a bare digest so that reading the table is not enough to
     mint a session: an attacker would also need the secret, which lives in the
     environment and not in Postgres.
+
+    `purpose` is domain separation, and it matters as soon as a second kind of
+    credential shares this secret. Without it a connector's access token hashes
+    to exactly the bytes a browser session would, so a row copied from one table
+    to the other would be a working cookie — and the application connects as the
+    cluster superuser, so "copied between tables" is one bug or one careless
+    restore away. Labelled hashes cannot be moved.
+
+    The default is empty, and stays empty, so that every session issued before
+    this argument existed still resolves. Sessions are the unlabelled case by
+    history rather than by choice.
     """
-    return hmac.new(secret.encode(), token.encode(), sha256).digest()
+    material = f"{purpose}:{token}" if purpose else token
+    return hmac.new(secret.encode(), material.encode(), sha256).digest()
 
 
 def create_session(

@@ -10,6 +10,7 @@ for rather than assumed.
 import logging
 import math
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time as time_of_day, timedelta
 from decimal import Decimal
@@ -26,7 +27,9 @@ logger = logging.getLogger(__name__)
 # newline keeps a query whose first line is a `--` comment from swallowing it,
 # and both lengths are subtracted from any position Postgres reports so the
 # caret lands under the character the reader actually typed.
-_PREFIX = "\n"
+# Annotated rather than inferred: `select()` below concatenates it with a
+# literal, and only a LiteralString + LiteralString stays one.
+_PREFIX: LiteralString = "\n"
 
 # psycopg wraps the text as `DECLARE "<name>" CURSOR FOR ` — the parts joined
 # with single spaces, and the FOR carrying a trailing one. Postgres reports an
@@ -190,6 +193,13 @@ def _classify(exc: psycopg.Error) -> Exception:
     a reader most needs to see.
     """
     state = exc.sqlstate
+    if state is None and isinstance(exc, psycopg.ProgrammingError):
+        # psycopg raised before Postgres was reached: a malformed placeholder in
+        # a parameterised statement is the usual cause, and `select()` made that
+        # reachable. It carries no SQLSTATE, so the rule above would call it an
+        # unreachable database and tell the caller Postgres was down. It is a
+        # bad query, and that is what it should say.
+        return QueryError(message=str(exc))
     if state is None or state.startswith(_INFRASTRUCTURE):
         return Unavailable(type(exc).__name__)
     position = None
@@ -254,6 +264,41 @@ def run(sql_text: str, limit: int = config.DEFAULT_ROWS) -> Result:
         raise QueryError("no query")
     if len(text) > config.MAX_SQL:
         raise QueryError(f"query longer than {config.MAX_SQL} characters")
+    return _execute(_as_query(text), None, limit)
+
+
+def select(
+    query: LiteralString,
+    params: Sequence[Any] | None = None,
+    limit: int = config.DEFAULT_ROWS,
+) -> Result:
+    """Run a query this repository wrote, with parameters, under the same bounds.
+
+    The difference from `run` is where the text came from, and it is the whole
+    difference. `run` takes a string a person typed and needs
+    `cast(LiteralString, ...)` to get it past the type system; this takes a
+    literal out of our own source, so there is no cast, and
+    `grep -rn "cast(LiteralString"` still finds every place SQL escapes the type
+    system here.
+
+    It exists because a caller that wants "the last thirty days for AAPL" would
+    otherwise have to build that string, and a ticker concatenated into SQL is
+    the one thing this package is arranged to make impossible. Parameters remove
+    the question rather than answering it.
+
+    Verified rather than assumed, because the whole design leans on it: a
+    server-side cursor *does* take parameters, and it still refuses a second
+    statement when they are present — `select %s::int; drop table security`
+    comes back 42601. So this keeps every guarantee `run` has: one statement,
+    SELECT or VALUES only, read-only, and the same caps.
+    """
+    return _execute(_PREFIX + query, params, limit)
+
+
+def _execute(
+    query: LiteralString, params: Sequence[Any] | None, limit: int
+) -> Result:
+    """Both callers' shared body: one cursor, bounded rows, JSON-safe cells."""
     want = max(1, min(int(limit), config.MAX_ROWS))
 
     started = time.perf_counter()
@@ -265,9 +310,12 @@ def run(sql_text: str, limit: int = config.DEFAULT_ROWS) -> Result:
             # only a SELECT or VALUES.
             with conn.cursor(name=_CURSOR) as cur:
                 cur.itersize = want + 1
-                cur.execute(_as_query(text))
+                cur.execute(query, params)
                 described = cur.description or ()
-                columns = tuple(Column(d.name, _type_name(conn, d.type_code)) for d in described)
+                names = _type_names(conn, [d.type_code for d in described])
+                columns = tuple(
+                    Column(d.name, names.get(d.type_code, "unknown")) for d in described
+                )
                 fetched = cur.fetchmany(want + 1)
     except psycopg.Error as exc:
         raise _classify(exc) from exc
@@ -302,11 +350,22 @@ def run(sql_text: str, limit: int = config.DEFAULT_ROWS) -> Result:
     )
 
 
-def _type_name(conn: psycopg.Connection, oid: int) -> str:
-    """The type of a result column, as Postgres spells it.
+def _type_names(conn: psycopg.Connection, oids: Sequence[int]) -> dict[int, str]:
+    """The types of every result column, as Postgres spells them, in one query.
 
-    Looked up rather than guessed so the page can right-align numerics without
-    a mapping of its own that would need a line per type.
+    Looked up rather than guessed so the page can right-align numerics without a
+    mapping of its own that would need a line per type. One round trip for all
+    of them rather than one each, which used to make a twelve-column query cost
+    twelve extra round trips before a single row came back — invisible on a
+    dashboard and not invisible to a caller issuing several queries at once.
+
+    Not cached, deliberately: `any(%s)` costs one trip either way, and a cache
+    of type names is a cache that can be wrong after a migration.
     """
-    row = conn.execute("select format_type(%s, null)", [oid]).fetchone()
-    return str(row[0]) if row else "unknown"
+    if not oids:
+        return {}
+    rows = conn.execute(
+        "select oid, format_type(oid, null) from pg_type where oid = any(%s)",
+        [list({int(o) for o in oids})],
+    ).fetchall()
+    return {int(r[0]): str(r[1]) for r in rows}

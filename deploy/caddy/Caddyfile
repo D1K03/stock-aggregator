@@ -35,6 +35,30 @@
 		reverse_proxy api:8080
 	}
 
+	# The MCP connector: the endpoint claude.ai calls, its OAuth server, and
+	# the two discovery documents.
+	#
+	# These paths are not under /api/ because none of them is ours to choose:
+	# /.well-known/* is fixed by RFC 9728 and RFC 8414, and /mcp is what gets
+	# typed into Claude. Without a handle each, the catch-all hands them to
+	# Next.js, which answers 307 to /login — and Claude drops the Authorization
+	# header across a redirect, so the failure arrives as "authorization failed"
+	# with nothing in this repo to explain it.
+	#
+	# `/mcp` and `/mcp/*` rather than `/mcp*`, which would also match /mcpanything.
+	handle /mcp {
+		reverse_proxy api:8080
+	}
+	handle /mcp/* {
+		reverse_proxy api:8080
+	}
+	handle /oauth/* {
+		reverse_proxy api:8080
+	}
+	handle /.well-known/* {
+		reverse_proxy api:8080
+	}
+
 	# Everything else is the dashboard.
 	handle {
 		reverse_proxy web:3000

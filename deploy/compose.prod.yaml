@@ -91,6 +91,16 @@ services:
       # This process must not hold a connection string for a role it does not
       # use, and the bot must not hold one for this role.
       PLAYGROUND_BOT_DB_PASSWORD: ${PLAYGROUND_BOT_DB_PASSWORD:-}
+      # And the MCP connector's role, which this container both provisions and
+      # uses -- claude.ai calls `/mcp` here, and the OAuth consent screen needs
+      # the session cookie this process issues, so the two cannot be separate
+      # containers. That means this one holds three read-only passwords and the
+      # separation between the console and the connector is a branch in Python
+      # rather than a credential; `playground/config.py` says so out loud. What
+      # the third role still buys is that widening what claude.ai may read costs
+      # a migration.
+      PLAYGROUND_MCP_DB_PASSWORD: ${PLAYGROUND_MCP_DB_PASSWORD:-}
+      PLAYGROUND_MCP_DATABASE_URL: ${PLAYGROUND_MCP_DB_PASSWORD:+postgresql://playground_mcp:${PLAYGROUND_MCP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-screener}}
 
     healthcheck:
       # /health, not /ready: a readiness probe here would restart a perfectly
@@ -162,6 +172,7 @@ services:
       # must not have it. `environment:` wins over `env_file:`, so this is where
       # that is undone. `tests/test_compose.py` fails if it goes.
       PLAYGROUND_DB_PASSWORD: ""
+      PLAYGROUND_MCP_DB_PASSWORD: ""
 
     depends_on:
       # On `api` rather than `postgres`, for the reason `reddit` gives: a

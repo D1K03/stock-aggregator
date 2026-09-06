@@ -22,7 +22,38 @@ begin
         -- configures, so the playground ships switched off and is turned on by
         -- a deployment giving it one. The password is never in this file,
         -- because this file is in git.
-        create role playground login password null;
+        begin
+            create role playground login password null;
+        exception when duplicate_object then
+            -- Another database in this cluster created it between the
+            -- check above and this line. A role is a cluster object and
+            -- that check is not atomic across sessions, so both can pass
+            -- it and one loses on the unique index. The loser wanted the
+            -- role to exist and it does, so there is nothing to do.
+            null;
+        end;
+    end if;
+
+    -- The floor under this role: a statement timeout, a lock timeout, a
+    -- read-only default and a fixed search_path. None of them is the
+    -- enforcement -- every one is a USERSET a session could raise again, and
+    -- the grants are what actually hold -- but they keep an accident cheap.
+    --
+    -- Behind an existence check because `pg_db_role_setting` rows for a role
+    -- with no `in database` clause are *shared* across the whole cluster, so
+    -- writing them again from a second database is a write to a shared
+    -- catalog and two doing it at once fail with "tuple concurrently updated".
+    -- An advisory lock does not help: those are per-database, which was worth
+    -- measuring rather than assuming. Not writing twice does.
+    if not exists (
+        select 1 from pg_db_role_setting
+         where setrole = 'playground'::regrole and setdatabase = 0
+    ) then
+        execute 'alter role playground set statement_timeout                   = ''10s''';
+        execute 'alter role playground set idle_in_transaction_session_timeout = ''30s''';
+        execute 'alter role playground set lock_timeout                        = ''2s''';
+        execute 'alter role playground set default_transaction_read_only       = on';
+        execute 'alter role playground set search_path                         = ''public''';
     end if;
 end
 $$;
@@ -30,12 +61,6 @@ $$;
 -- The floor under a connection that forgot to set its own. Every one of these
 -- is a USERSET that a session could raise again, so none of them is the
 -- enforcement; the grants below are.
-alter role playground set statement_timeout                   = '10s';
-alter role playground set idle_in_transaction_session_timeout = '30s';
-alter role playground set lock_timeout                        = '2s';
-alter role playground set default_transaction_read_only       = on;
--- Unqualified `event` must not resolve to something the reader did not name.
-alter role playground set search_path                         = 'public';
 
 -- Required rather than decorative: the test suite recreates `public` as the
 -- superuser, which leaves it owner-only.

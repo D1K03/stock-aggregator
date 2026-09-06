@@ -20,6 +20,8 @@ export type Catalog = {
     max_sql: number;
     timeout_ms: number;
   };
+  /* The same tables, read from Claude instead of from this page. */
+  connector?: { enabled: boolean; url: string };
 };
 
 export type Column = { name: string; type: string };
@@ -77,4 +79,21 @@ export async function runQuery(
   if (response.ok) return { ok: true, result: body as QueryResult };
   if (response.status === 400) return { ok: false, failure: body as QueryFailure };
   throw new Error(body.error ?? `query failed: ${response.status}`);
+}
+
+/* Ask for SQL rather than writing it. What comes back goes in the editor and is
+   not run: the model suggests, the reader decides, and the Run button stays the
+   only thing that touches the database. */
+export async function suggestQuery(ask: string): Promise<string> {
+  const response = await fetch(`${BASE}/api/playground/suggest`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ask }),
+  });
+  if (response.status === 401) throw new Error("unauthorised");
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error ?? `that failed: ${response.status}`);
+  return body.sql as string;
 }

@@ -23,6 +23,7 @@ from screener.playground.config import (
     MAX_ROWS,
     MAX_SQL,
     STATEMENT_TIMEOUT_MS,
+    connecting_as,
     database_url,
     enabled,
 )
@@ -34,6 +35,7 @@ from screener.playground.engine import (
     Result,
     Unavailable,
     run,
+    select,
 )
 from screener.playground.provision import ensure_password
 
@@ -52,8 +54,10 @@ __all__ = [
     "Table",
     "Unavailable",
     "catalog",
+    "connecting_as",
     "database_url",
     "enabled",
     "ensure_password",
     "run",
+    "select",
 ]

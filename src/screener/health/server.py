@@ -7,6 +7,7 @@ import signal
 import threading
 import time
 import urllib.parse
+from collections.abc import Callable
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +15,8 @@ from typing import Any
 
 import psycopg
 
-from screener import audit, auth
+from screener import audit, auth, mcp
+from screener.ai import converse
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
 from screener.config import settings
@@ -35,6 +37,11 @@ PUBLIC_PATHS = frozenset({"/health", "/ready"})
 # The login recorded for a local development session. Not a GitHub username,
 # and paired with id 0, so it cannot collide with a real account.
 LOCAL_LOGIN = "local-dev"
+
+# Where a sign-in should land afterwards, when something asked. Its own cookie
+# rather than a round trip through GitHub's `state`, which is already carrying
+# the CSRF check and should keep doing only that.
+NEXT_COOKIE = "screener_after_login"
 
 # A dashboard question is a sentence, not an essay. Bounded here so a runaway
 # query string cannot become a bill.
@@ -91,6 +98,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- plumbing ---------------------------------------------------------
 
+    # Set by `do_HEAD` for the length of one request. The headers of a HEAD
+    # response must match the GET exactly, including Content-Length, so the body
+    # is built and then not written rather than skipped.
+    _head = False
+
     def _send(
         self, status: HTTPStatus, body: bytes, headers: list[tuple[str, str]]
     ) -> None:
@@ -99,7 +111,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not self._head:
+            self.wfile.write(body)
+
+    def _write(self, response: "mcp.Response") -> None:
+        """Send what `screener.mcp` decided, without unpacking it here.
+
+        The OAuth endpoints answer with HTML, redirects and `WWW-Authenticate`
+        headers as well as JSON, so `_respond` cannot carry them — and the rules
+        about which is which belong next to the specs they come from rather than
+        spread across a dispatch table.
+        """
+        self._send(
+            HTTPStatus(response.status),
+            response.body,
+            [("Content-Type", response.content_type), *response.headers],
+        )
 
     def _respond(
         self,
@@ -116,7 +143,11 @@ class Handler(BaseHTTPRequestHandler):
         headers += [("Set-Cookie", c) for c in cookies or []]
         self._send(HTTPStatus.FOUND, b"", headers)
 
-    def _read_body(self, limit: int) -> bytes | None:
+    def _read_body(
+        self,
+        limit: int,
+        envelope: Callable[[str], dict[str, Any]] | None = None,
+    ) -> bytes | None:
         """The request body, or `None` having already answered.
 
         Under HTTP/1.1 an unread body is the next request as far as the
@@ -126,38 +157,42 @@ class Handler(BaseHTTPRequestHandler):
 
         No chunked encoding. The only client is a browser `fetch` with a Blob,
         and it sends a length.
+
+        `envelope` reshapes the refusal. Every caller here answers
+        `{"error": "..."}` because that is this service's shape, but a JSON-RPC
+        client reads `{"jsonrpc", "error": {"code", "message"}}` and treats
+        anything else as a broken server. The bounds are the same either way;
+        only the wrapper differs, which is why this is an argument rather than a
+        second reader.
         """
+        def refuse(status: HTTPStatus, message: str) -> None:
+            self.close_connection = True
+            self._respond(status, envelope(message) if envelope else {"error": message})
+
         raw = self.headers.get("Content-Length")
         if raw is None or not raw.strip().isdigit():
-            self.close_connection = True
-            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no body"})
+            refuse(HTTPStatus.BAD_REQUEST, "no body")
             return None
         length = int(raw)
         if length == 0:
-            self.close_connection = True
-            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no body"})
+            refuse(HTTPStatus.BAD_REQUEST, "no body")
             return None
         if length > limit:
             # Refused on the header, so the bytes are never read.
-            self.close_connection = True
-            self._respond(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": f"over {limit} bytes"}
-            )
+            refuse(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"over {limit} bytes")
             return None
 
         self.connection.settimeout(BODY_TIMEOUT_SECONDS)
         try:
             body = self.rfile.read(length)
         except OSError:
-            self.close_connection = True
-            self._respond(HTTPStatus.BAD_REQUEST, {"error": "could not read the body"})
+            refuse(HTTPStatus.BAD_REQUEST, "could not read the body")
             return None
         finally:
             self.connection.settimeout(self.timeout)
 
         if len(body) != length:
-            self.close_connection = True
-            self._respond(HTTPStatus.BAD_REQUEST, {"error": "the upload ended early"})
+            refuse(HTTPStatus.BAD_REQUEST, "the upload ended early")
             return None
         return body
 
@@ -235,6 +270,8 @@ class Handler(BaseHTTPRequestHandler):
             self._transcribe(config)
         elif route == "/api/playground/query":
             self._playground_query(config)
+        elif route == "/api/playground/suggest":
+            self._playground_suggest(config)
         # Skybird's mutations. The docstring above prefers a GET with its
         # argument in the query string, and `_handoff` follows that even though
         # it sends a Discord message — but a GET that deletes a transcript is
@@ -250,8 +287,83 @@ class Handler(BaseHTTPRequestHandler):
             self._skybird_move(config, "resume")
         elif route == "/api/skybird/delete":
             self._skybird_delete(config)
+        # The connector. Outside /api/ because these paths are fixed by the
+        # specs and by what gets typed into Claude, not chosen by us — which is
+        # also why the Caddyfile needs a handle for each of them.
+        elif route == mcp.PATH:
+            self._mcp()
+        elif route == mcp.REGISTER_PATH:
+            self._mcp_register()
+        elif route == mcp.TOKEN_PATH:
+            self._mcp_token()
+        elif route == mcp.AUTHORIZE_PATH:
+            self._mcp_approve(config)
         else:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def do_DELETE(self) -> None:
+        """405, and only because 501 is the alternative.
+
+        A client may DELETE the MCP endpoint to end a session. This server
+        advertises no `Mcp-Session-Id`, so there is no session to end — and the
+        spec's answer for that is 405. Without this method the stdlib answers
+        501 with an HTML body and closes the connection, which is a different
+        and less true statement.
+        """
+        route = urllib.parse.urlparse(self.path).path
+        if route == mcp.PATH:
+            self._send(
+                HTTPStatus.METHOD_NOT_ALLOWED,
+                b'{"error":"this server is stateless"}',
+                [("Content-Type", "application/json"), ("Allow", "POST")],
+            )
+            return
+        self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def do_HEAD(self) -> None:
+        """A GET with the body dropped, which is what HEAD is.
+
+        Worth the six lines: `curl -I` is the first thing anyone reaches for to
+        check a URL does not redirect, and Claude's own troubleshooting guide
+        recommends exactly that. Without this it answers 501 for every path and
+        the check says nothing about the server.
+        """
+        self._head = True
+        try:
+            self.do_GET()
+        finally:
+            self._head = False
+
+    def do_OPTIONS(self) -> None:
+        """CORS preflight, for the MCP endpoint only.
+
+        Claude itself calls from a server and never preflights. The MCP
+        Inspector is a browser tool and does, and without this it gets a 501
+        that is invisible in the log — `log_message` is silenced — which reads
+        as the server being broken rather than as a missing verb.
+
+        No `Allow-Credentials` and no cookie is ever honoured cross-origin: this
+        endpoint authenticates with a bearer header, so allowing an origin to
+        send one it already possesses grants nothing it did not have.
+        """
+        route = urllib.parse.urlparse(self.path).path
+        if route != mcp.PATH and not route.startswith("/.well-known/"):
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        self._send(
+            HTTPStatus.NO_CONTENT,
+            b"",
+            [
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                (
+                    "Access-Control-Allow-Headers",
+                    "authorization, content-type, mcp-protocol-version",
+                ),
+                ("Access-Control-Expose-Headers", "WWW-Authenticate"),
+                ("Access-Control-Max-Age", "600"),
+            ],
+        )
 
     def _transcribe(self, config: AuthConfig) -> None:
         """Turn a recording from the dashboard into text.
@@ -404,8 +516,234 @@ class Handler(BaseHTTPRequestHandler):
                     "max_sql": playground.MAX_SQL,
                     "timeout_ms": playground.STATEMENT_TIMEOUT_MS,
                 },
+                # The same data, read from Claude instead of from here. Served
+                # beside the catalogue rather than from its own endpoint because
+                # it is one string and the page already asks for this one.
+                #
+                # It has to be the canonical URL rather than whatever the
+                # browser happens to be on: it is the audience every token is
+                # bound to, so a copy of `localhost:8080` pasted into claude.ai
+                # would be refused by this server with nothing to explain why.
+                "connector": {
+                    "enabled": mcp.enabled(),
+                    "url": mcp.resource(),
+                },
             },
         )
+
+    # -- the MCP connector -------------------------------------------------
+
+    def _mcp(self) -> None:
+        """The one MCP endpoint, answering in JSON and never in a stream.
+
+        No session and no cookie: this is called by Anthropic's servers, not by
+        a browser, so the credential is a bearer token. The 401 it answers
+        without one is not a dead end but the first step of discovery — the
+        `WWW-Authenticate` header is how a client finds the authorization
+        server, and Claude ignores that header on any other status.
+        """
+        if not mcp.enabled():
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                mcp.rpc_error("no read-only database role is configured here"),
+            )
+            return
+
+        version = self.headers.get("MCP-Protocol-Version")
+        if version is not None and version not in mcp.VERSIONS:
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                mcp.rpc_error(f"unsupported protocol version {version}"),
+            )
+            return
+
+        try:
+            caller = mcp.bearer(self.headers.get("Authorization"))
+        except mcp.Unauthorized as exc:
+            self._send(
+                HTTPStatus.UNAUTHORIZED,
+                json.dumps(mcp.rpc_error(str(exc))).encode(),
+                [
+                    ("Content-Type", "application/json"),
+                    ("Cache-Control", "no-store"),
+                    ("WWW-Authenticate", exc.header()),
+                ],
+            )
+            return
+
+        body = self._read_body(mcp.MAX_BODY, mcp.rpc_error)
+        if body is None:
+            return
+        status, answer = mcp.handle(body, actor=caller.login)
+        if answer is None:
+            # A notification. The spec asks for 202 and no body, and answering a
+            # notification at all is itself a protocol error.
+            self._send(HTTPStatus(status), b"", [("Cache-Control", "no-store")])
+            return
+        self._send(
+            HTTPStatus(status),
+            answer,
+            [("Content-Type", "application/json"), ("Cache-Control", "no-store")],
+        )
+
+    def _mcp_register(self) -> None:
+        body = self._read_body(mcp.MAX_REGISTER_BODY)
+        if body is not None:
+            self._write(mcp.register(body))
+
+    def _mcp_token(self) -> None:
+        body = self._read_body(mcp.MAX_FORM_BODY)
+        if body is not None:
+            self._write(mcp.token(body))
+
+    def _mcp_authorize(self, config: AuthConfig, query: str) -> None:
+        """The consent screen. The one place the browser session is the credential."""
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        self._write(
+            mcp.authorize(
+                query,
+                login,
+                config.permits(login) if login else False,
+                secret=config.session_secret,
+            )
+        )
+
+    def _mcp_approve(self, config: AuthConfig) -> None:
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        body = self._read_body(MAX_SQL_BODY)
+        if body is None:
+            return
+        form = urllib.parse.parse_qs(body.decode("utf-8", "replace"))
+        self._write(
+            mcp.approve(form, login or "", config.permits(login) if login else False)
+        )
+
+    def _playground_suggest(self, config: AuthConfig) -> None:
+        """Turn a description into SQL, and put it in the box without running it.
+
+        Its own endpoint rather than a trip through `/api/ask`, for two reasons.
+        Steven's system prompt and six tool schemas are a fixed cost on every
+        message and none of them help here — the whole prompt is the catalogue
+        and one instruction. And the prompt-budget test has about fifty
+        characters of headroom, so anything taught to Steven has to earn its
+        place in a way this does not need to.
+
+        It deliberately does not execute what it writes. The SQL lands in the
+        editor and a person presses Run, which keeps the model on the side of
+        the line where it suggests and the reader decides.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        body = self._json_body(MAX_SQL_BODY)
+        if body is None:
+            return
+        wanted = str(body.get("ask") or "").strip()[:MAX_QUESTION]
+        if not wanted:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "say what you want"})
+            return
+
+        from screener import playground
+        from screener.bot import budget
+
+        # The same daily cap the chat is under, and the same fold of Discord
+        # onto GitHub. A second way to spend money would be a second way to
+        # exceed a cap that exists to be the only one.
+        allowance = budget.check(login, "github")
+        if not allowance.allowed:
+            self._respond(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": f"daily cap of ${allowance.cap} reached"},
+            )
+            return
+
+        if not playground.enabled():
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "the playground is not configured on this deployment"},
+            )
+            return
+
+        try:
+            tables = playground.catalog()
+        except Exception as exc:
+            logger.warning("suggest: no catalogue (%s)", type(exc).__name__)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot reach the playground database"},
+            )
+            return
+
+        # The whole schema, because guessing which tables are relevant is the
+        # job being delegated. It is about 6k characters and it is what makes
+        # the difference between a plausible query and a runnable one.
+        schema = "\n".join(
+            f"{t.schema}.{t.name}({', '.join(c.name + ' ' + c.type for c in t.columns)})"
+            for t in tables
+        )
+        try:
+            completion = converse(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You write PostgreSQL SELECT statements against this "
+                            "schema and nothing else.\n\n"
+                            f"{schema}\n\n"
+                            "Return only SQL. No prose, no markdown fence, no "
+                            "explanation. One statement. Read-only: never INSERT, "
+                            "UPDATE, DELETE or any DDL. Prefer explicit column "
+                            "lists over *, and add a LIMIT unless the query "
+                            "already aggregates."
+                        ),
+                    },
+                    {"role": "user", "content": wanted},
+                ],
+                max_tokens=400,
+                temperature=0.1,
+            )
+        except Exception as exc:
+            logger.warning("suggest: model failed (%s)", type(exc).__name__)
+            self._respond(
+                HTTPStatus.BAD_GATEWAY, {"error": "could not reach the model"}
+            )
+            return
+
+        audit.record(
+            kind="agent",
+            operation="playground.suggest",
+            actor=login,
+            actor_kind="github",
+            model=completion.model,
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
+            cost_usd=completion.cost_usd,
+            detail={"ask": wanted},
+        )
+        self._respond(HTTPStatus.OK, {"sql": _unfenced(completion.text)})
 
     def _playground_query(self, config: AuthConfig) -> None:
         """Run one read-only query.
@@ -474,6 +812,19 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+
+        # The docstring above has always said the audit trail is the right place
+        # for a query, and until now nothing wrote one. The connector records
+        # every SQL statement claude.ai runs; the console's own box should not
+        # be the one surface where "which query was that" has no answer.
+        audit.record(
+            kind="tool",
+            operation="playground.query",
+            actor=login,
+            actor_kind="github",
+            duration_ms=result.ms,
+            detail={"sql": statement[:MAX_SQL_BODY], "rows": result.row_count},
+        )
 
         self._respond(
             HTTPStatus.OK,
@@ -805,7 +1156,7 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         elif route == "/auth/login":
-            self._login(config)
+            self._login(config, query)
 
         elif route == "/auth/callback":
             self._callback(config, query)
@@ -879,6 +1230,31 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                     "login": login,
                 },
+            )
+
+        # The connector's discovery documents. Public by necessity and by
+        # design: they name where to authorize and nothing else, and a client
+        # has to read them before it can hold a token to read them with.
+        elif route in (
+            mcp.PROTECTED_RESOURCE,
+            f"{mcp.PROTECTED_RESOURCE}{mcp.PATH}",
+        ):
+            self._write(mcp.protected_resource_document())
+
+        elif route == mcp.AUTHORIZATION_SERVER:
+            self._write(mcp.authorization_server_document())
+
+        elif route == mcp.AUTHORIZE_PATH:
+            self._mcp_authorize(config, parsed.query)
+
+        elif route == mcp.PATH:
+            # The spec's own escape hatch: a GET here would open an SSE stream,
+            # and this server does not offer one. 405 is how a client is told
+            # that rather than left waiting.
+            self._send(
+                HTTPStatus.METHOD_NOT_ALLOWED,
+                b'{"error":"this endpoint answers POST with JSON, not a stream"}',
+                [("Content-Type", "application/json"), ("Allow", "POST")],
             )
 
         else:
@@ -1167,7 +1543,7 @@ class Handler(BaseHTTPRequestHandler):
         """
         return config.base_url.startswith("https://")
 
-    def _login(self, config: AuthConfig) -> None:
+    def _login(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
         if not config.enabled or config.client_id is None:
             self._respond(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1175,9 +1551,17 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         state = auth.new_state()
+        cookies = [state_cookie(state, secure=self._secure(config))]
+        # Where to land afterwards. It exists for the connector: the OAuth
+        # consent screen needs a session, and without this a first-time connect
+        # would sign in and stop on the dashboard home page with no way back to
+        # the request it interrupted.
+        wanted = _safe_next((query.get("next") or [""])[0])
+        if wanted:
+            cookies.append(_next_cookie(wanted, secure=self._secure(config)))
         self._redirect(
             auth.authorize_url(config.client_id, state, config.redirect_uri),
-            [state_cookie(state, secure=self._secure(config))],
+            cookies,
         )
 
     def _local_login(self, config: AuthConfig) -> None:
@@ -1299,14 +1683,59 @@ class Handler(BaseHTTPRequestHandler):
         secure = self._secure(config)
         # The dashboard, not /status. Both are served from one origin, so a
         # signed-in browser should land on the page a person came for rather
-        # than on the JSON a probe came for.
+        # than on the JSON a probe came for — or on whatever asked for the
+        # sign-in, if it said so and the value survives `_safe_next`.
+        wanted = _safe_next(
+            auth.read_cookie(self.headers.get("Cookie"), NEXT_COOKIE) or ""
+        )
         self._redirect(
-            "/",
+            wanted or "/",
             [
                 auth.session_cookie(session, days=config.session_days, secure=secure),
                 auth.clear_cookie(auth.STATE_COOKIE, secure=secure),
+                auth.clear_cookie(NEXT_COOKIE, secure=secure),
             ],
         )
+
+
+def _unfenced(text: str) -> str:
+    """The SQL out of whatever the model wrapped it in.
+
+    Asked for bare SQL and told not to use a fence, models still sometimes send
+    ```sql ... ```. Stripping it here is three lines; leaving it means pasting a
+    syntax error into the editor and looking like the feature is broken.
+    """
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.split("\n", 1)[-1] if "\n" in body else body[3:]
+        body = body.rsplit("```", 1)[0]
+    return body.strip()
+
+
+def _safe_next(value: str) -> str:
+    """A path on this site, or nothing.
+
+    An unvalidated `next` is an open redirect, and an open redirect on this
+    origin is not a cosmetic bug here: it is the primitive that turns a stolen
+    authorization code into a delivered one. So this accepts a single leading
+    slash and refuses everything else — `//evil.example` (a protocol-relative
+    URL, which is absolute), a backslash (which some browsers normalise to a
+    slash), and anything carrying a scheme.
+    """
+    if not value.startswith("/") or value.startswith("//"):
+        return ""
+    if "\\" in value or ":" in value.split("/")[0]:
+        return ""
+    return value[:500]
+
+
+def _next_cookie(value: str, *, secure: bool) -> str:
+    """Short-lived, like the state cookie beside it, and for the same reason."""
+    flags = "; Secure" if secure else ""
+    return (
+        f"{NEXT_COOKIE}={urllib.parse.quote(value, safe='/?=&')}; Path=/; "
+        f"Max-Age=600; HttpOnly; SameSite=Lax{flags}"
+    )
 
 
 def _number(query: dict[str, list[str]], name: str) -> int | None:

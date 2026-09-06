@@ -30,6 +30,13 @@ DENIED = {
     "auth.app_user": "who may sign in",
     "auth.session": "token_hash is authentication material",
     "audit.event": "identities, conversation transcripts and spend",
+    # The connector's own credentials. Denied for the same reason `auth.session`
+    # is: a read-only console should not be able to select the tokens that
+    # authorise a caller, and a role that could would be one bug away from
+    # minting its own access.
+    "mcp.client": "who registered, and where a code may be sent",
+    "mcp.authorization": "one-time codes and their PKCE challenges",
+    "mcp.token": "access and refresh material for claude.ai",
 }
 
 # Denied to Steven and granted to the console, which is the one asymmetry

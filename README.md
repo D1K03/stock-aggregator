@@ -50,7 +50,7 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 
 | | |
 |---|---|
-| Tests | `pytest` |
+| Tests | `pytest` (parallel; `-n0` for one process) |
 | One test | `pytest tests/test_identity.py::test_a_retired_symbol_can_be_reissued_to_another_security -v` |
 | Typecheck | `pyright` — must report zero errors |
 | Apply migrations | `python -m screener.boot migrate` |

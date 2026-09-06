@@ -65,13 +65,30 @@ jobs:
       - run: pip install -e ".[dev]"
       - name: Run tests
         # The suite drops and recreates the public schema per test, so it needs a
-        # throwaway database — which the service container above is.
-        run: pytest -v
+        # throwaway database — which the service container above is. `pytest` is
+        # parallel by default (see pyproject) and each worker creates its own
+        # database in that server, so `postgres` needs to be reachable as a
+        # superuser — which it is here.
+        #
+        # No `-v`: with workers interleaving, a line per test is noise rather
+        # than a log, and a failure prints its own name either way.
+        run: pytest
 
-  # Builds the deployment image without publishing it, so a broken Dockerfile
+  # Builds the deployment images without publishing them, so a broken Dockerfile
   # fails on the pull request rather than after merge, when the only signal is
   # a red deploy.
+  #
+  # Pull requests only, and that is the point: on a push to main `deploy.yml`
+  # builds these same four images from the same commit and pushes them, so doing
+  # it here first is the same work twice — about three minutes of it, sitting on
+  # the critical path *before* the deploy that repeats it can even start. The
+  # check that a Dockerfile still builds has already happened on the pull
+  # request that introduced it.
+  #
+  # `ci-ok` keeps this in `needs` and tolerates a skip: its condition looks for
+  # failure or cancellation, and a skipped job is neither.
   build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
