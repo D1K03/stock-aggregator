@@ -19,6 +19,7 @@ def test_the_four_momentum_metrics_are_seeded(fresh_db):
     rows = fresh_db.execute(
         """select m.code, m.unit, m.higher_is_better, m.cadence, p.code
              from metric m join pillar p on p.id = m.pillar_id
+            where not m.is_input
          order by m.code"""
     ).fetchall()
     assert rows == [
