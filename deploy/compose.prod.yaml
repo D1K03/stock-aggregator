@@ -86,6 +86,11 @@ services:
       # role has no password, cannot log in, and the page says it is off.
       PLAYGROUND_DB_PASSWORD: ${PLAYGROUND_DB_PASSWORD:-}
       PLAYGROUND_DATABASE_URL: ${PLAYGROUND_DB_PASSWORD:+postgresql://playground:${PLAYGROUND_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-screener}}
+      # Steven's role is provisioned here too -- this container is where
+      # migrations and `ensure_password` run -- but its URL is not built here.
+      # This process must not hold a connection string for a role it does not
+      # use, and the bot must not hold one for this role.
+      PLAYGROUND_BOT_DB_PASSWORD: ${PLAYGROUND_BOT_DB_PASSWORD:-}
 
     healthcheck:
       # /health, not /ready: a readiness probe here would restart a perfectly
@@ -132,10 +137,38 @@ services:
         required: false
 
     environment:
+      # The bot reads the database as much as the status service does: the
+      # spend cap, Steven's memory, the audit trail every reply writes, and the
+      # skybird control tools. Missing, every one of those fails in a way that
+      # looks like nothing happening -- the cap fails open by design, memory
+      # comes back empty, and the trail simply has no Discord in it -- which is
+      # exactly how this was absent from the first deploy without anyone
+      # noticing. Infisical does not carry it because it is not a secret; it is
+      # the same compose-network address `api` is given four services up.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
       INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
       INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      # Steven's `sql` tool, as `playground_bot` -- the console's role minus the
+      # skybird schema. Same variable name the api reads, a different role
+      # behind it, and deliberately not `PLAYGROUND_DB_PASSWORD`: the split is
+      # only real while this container cannot authenticate as the other role.
+      PLAYGROUND_DATABASE_URL: ${PLAYGROUND_BOT_DB_PASSWORD:+postgresql://playground_bot:${PLAYGROUND_BOT_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-screener}}
+      # Emptied on purpose, and this line is load-bearing. `PLAYGROUND_DB_PASSWORD`
+      # is read from `.env` to build the api's URL above, and `env_file: .env`
+      # would then hand the same file's contents to this container as
+      # environment -- putting the console's credential in the one process that
+      # must not have it. `environment:` wins over `env_file:`, so this is where
+      # that is undone. `tests/test_compose.py` fails if it goes.
+      PLAYGROUND_DB_PASSWORD: ""
+
+    depends_on:
+      # On `api` rather than `postgres`, for the reason `reddit` gives: a
+      # healthy database is not a migrated one, and the bot reads `audit.event`
+      # and skybird's tables on its first message.
+      api:
+        condition: service_healthy
 
   # Speech to text, for voice messages in Discord and the mic button on the
   # dashboard. Its own image rather than a command override on `api` like the
