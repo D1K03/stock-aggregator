@@ -11,13 +11,15 @@ already been absorbed and leaves no mismatch to find.
 """
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 import psycopg
 
+from screener.ingest.facts import Fact
 from screener.ingest.parse import Action, Bar
 
 logger = logging.getLogger(__name__)
@@ -68,18 +70,24 @@ def record_observation(
     blob_path: str,
     is_new_payload: bool,
     payload_bytes: int,
-) -> int:
+) -> tuple[int, datetime]:
     """Always written, even when the payload was unchanged (schema D4).
 
     Dropping it when nothing changed would lose the record of what was known on
     a date, which is the whole point of the trail.
+
+    Returns `fetched_at` alongside the id because the fundamentals path stamps
+    every fact from one payload with it: `observed_at` has to be one value per
+    observation, not a clock read per row, or two facts from one response sort
+    non-deterministically against each other and a restatement chain can point
+    forwards in time.
     """
     cur.execute(
         """insert into ingest_observation
            (ingest_run_id, security_id, fetched_at, content_hash, blob_path,
             is_new_payload, payload_bytes)
            values (%s, %s, now(), %s, %s, %s, %s)
-           returning id""",
+           returning id, fetched_at""",
         (
             ingest_run_id,
             security_id,
@@ -91,7 +99,7 @@ def record_observation(
     )
     row = cur.fetchone()
     assert row is not None
-    return row[0]
+    return row[0], row[1]
 
 
 def insert_settled_bars(
@@ -254,3 +262,97 @@ def insert_actions(
             ),
         )
     return changes
+
+
+@dataclass(frozen=True)
+class Held:
+    """The latest fact held for one (metric, period_end, period_type)."""
+
+    fact_id: int
+    value: Decimal
+
+
+def metric_ids(cur: psycopg.Cursor) -> dict[str, int]:
+    """`metric.code` -> id, for the input metrics only.
+
+    Filtered on `is_input` rather than returning everything, so a fact naming a
+    *scored* metric — which would mean a ratio had been stored, against D3 —
+    cannot be written by accident.
+    """
+    cur.execute("select code, id from metric where is_input")
+    return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def latest_values(
+    cur: psycopg.Cursor, security_id: int
+) -> dict[tuple[str, date, str], Held]:
+    """What we already hold for this security, latest observation per period.
+
+    Keyed by `(metric_code, period_end, period_type)` — `period_type` is in the
+    key because a fiscal Q4 ends when its fiscal year does, so without it a
+    year and its own last quarter collapse into one entry and every night would
+    see one of them as changed.
+    """
+    cur.execute(
+        """select distinct on (f.metric_id, f.period_end, f.period_type)
+                  m.code, f.period_end, f.period_type, f.id, f.value
+             from fundamental_fact f
+             join metric m on m.id = f.metric_id
+            where f.security_id = %s
+         order by f.metric_id, f.period_end, f.period_type, f.observed_at desc""",
+        (security_id,),
+    )
+    return {
+        (code, period_end, period_type): Held(fact_id, value)
+        for code, period_end, period_type, fact_id, value in cur.fetchall()
+    }
+
+
+def insert_facts(
+    cur: psycopg.Cursor,
+    security_id: int,
+    observation_id: int,
+    observed_at: datetime,
+    facts: Sequence[Fact],
+    held: Mapping[tuple[str, date, str], Held],
+    ids: Mapping[str, int],
+) -> int:
+    """Insert only the facts whose value differs from what is held.
+
+    `observed_at` is the caller's — the observation's `fetched_at` — and is the
+    same for every fact from one payload. Never `now()` per row.
+
+    A fact whose value matches writes nothing at all: not a row, and (upstream)
+    not a blob. The observation is what records that we looked.
+    """
+    rows = []
+    for fact in facts:
+        metric_id = ids.get(fact.metric_code)
+        if metric_id is None:
+            # The parser only emits codes from SERIES, so this is unreachable
+            # from a real payload. Skipping rather than raising keeps a seed
+            # that has drifted from costing a whole security.
+            continue
+        key = (fact.metric_code, fact.period_end, fact.period_type)
+        previous = held.get(key)
+        if previous is not None and previous.value == fact.value:
+            continue
+        rows.append(
+            (
+                security_id, metric_id, fact.period_end, fact.period_type,
+                fact.value, fact.currency, observed_at, observation_id,
+                previous.fact_id if previous else None,
+            )
+        )
+    if not rows:
+        return 0
+    cur.executemany(
+        """insert into fundamental_fact
+           (security_id, metric_id, period_end, period_type, value, currency,
+            observed_at, ingest_observation_id, restates_id)
+           values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+           on conflict (security_id, metric_id, period_end, period_type,
+                        observed_at) do nothing""",
+        rows,
+    )
+    return len(rows)

@@ -2,6 +2,7 @@
 
 from screener.ingest.chart import ChartClient
 from screener.ingest.facts import SERIES, Fact, parse as parse_facts
+from screener.ingest.load import Held, insert_facts, latest_values, metric_ids, record_observation
 from screener.ingest.parse import Action, Bar, parse
 from screener.ingest.run import IngestReport, active_securities, run_prices
 from screener.ingest.sweep import SweepReport, run_sweep
@@ -17,12 +18,17 @@ __all__ = [
     "Bar",
     "ChartClient",
     "Fact",
+    "Held",
     "IngestReport",
     "SweepReport",
     "TimeseriesClient",
     "active_securities",
+    "insert_facts",
+    "latest_values",
+    "metric_ids",
     "parse",
     "parse_facts",
+    "record_observation",
     "run_prices",
     "run_sweep",
     "windows",

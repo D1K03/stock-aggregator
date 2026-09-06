@@ -179,7 +179,7 @@ def run_prices(
             # un-inserted gives a -50% return that looks like real data.
             with conn.transaction():
                 with conn.cursor() as cur:
-                    observation_id = record_observation(
+                    observation_id, _ = record_observation(
                         cur,
                         ingest_run_id=run_id,
                         security_id=security_id,
