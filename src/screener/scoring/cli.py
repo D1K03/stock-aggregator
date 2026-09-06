@@ -93,6 +93,23 @@ def main(argv: list[str] | None = None) -> int:
                 as_of, _recovery_sql(as_of),
             )
             return 1
+        except Exception:
+            # `open_run` commits before `score()` runs inside its own
+            # transaction, so anything else `score()` raises -- a write
+            # constraint violation, a transient database error, a bug -- still
+            # leaves the run row behind as a wedged date, exactly like
+            # `NoBarsVisible`. Catching `Exception` (never a bare `except`,
+            # and never `SystemExit`/`KeyboardInterrupt`) means this is the
+            # backstop for whatever the two named branches above do not
+            # already cover, not a replacement for them. `logger.exception`
+            # keeps the traceback in the log for whoever debugs the bug
+            # itself; returning 1 rather than re-raising matches the other
+            # branches so the process always exits cleanly with a recovery
+            # instruction rather than a bare traceback and no next step.
+            logger.exception(
+                "scoring %s failed unexpectedly\n%s", as_of, _recovery_sql(as_of),
+            )
+            return 1
     logger.info(
         "run %d: %d scored, %d skipped, %d peer groups",
         report.run_id, report.scored, report.skipped, report.groups,
