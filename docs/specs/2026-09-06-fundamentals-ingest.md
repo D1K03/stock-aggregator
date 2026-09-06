@@ -49,12 +49,34 @@ built on it would have no equity, no debt, no cash flow, no share count — no V
 all, and a Quality pillar of margins only. **`DESIGN.md` needs an erratum**: its description was
 true when measured and is not now.
 
-**F2 — `/ws/fundamentals-timeseries/v1/finance/timeseries/` carries all of it.** One request for
-AAPL returned 19 populated series in 16 KB: revenue, gross profit, operating income, net income,
-EBITDA, total assets, stockholders equity, total debt, cash, free cash flow, operating cash flow,
-capital expenditure, current assets, current liabilities, and **basic and diluted average
-shares** — which is what makes any price-relative ratio possible. Annual and quarterly both, each
-value carrying an `asOfDate` that is exactly `period_end`.
+**F2 — `/ws/fundamentals-timeseries/v1/finance/timeseries/` carries all of it.** A first request
+for AAPL returned every series asked for: revenue, gross profit, operating income, net income,
+total assets, stockholders equity, total debt, cash, operating cash flow, capital expenditure,
+current assets, current liabilities, and **basic and diluted average shares** — the last of which
+is what makes any price-relative ratio possible. Annual and quarterly both, each value carrying an
+`asOfDate` that is exactly `period_end`. (That request returned 19 *series objects* for 16 distinct
+line items, because three were asked for quarterly as well as annually. Series objects are not
+line items, and this spec counts line items.)
+
+**F6 — every statement line the ratios will want is available, and the payload names its own
+currency.** A second, wider request found all 24 further candidates populated, among them
+`TaxProvision`, `InterestExpense`, `PretaxIncome`, `EBIT`, `DepreciationAndAmortization`,
+`CostOfRevenue`, `LongTermDebt`, `CurrentDebt`, `NetPPE` and `OrdinarySharesNumber`. Three things
+fell out of it:
+
+- **Each value carries `currencyCode`** (`USD` throughout for AAPL). Currency is therefore read
+  from the payload rather than assumed, which D12 turns into a decision.
+- **`OrdinarySharesNumber` (14,773,260,000) differs from `BasicAverageShares` (14,948,500,000).**
+  The first is shares outstanding at the period end, the second an average across the period. Both
+  are stored, under names that say which, because a ratio wanting one and getting the other is
+  wrong by a percent or two — the least detectable size of wrong.
+- **`EBIT` + `DepreciationAndAmortization` reproduces `EBITDA` exactly** (133,050M + 11,698M =
+  144,748M). So EBITDA is a derivation Yahoo happens to publish, and D3 excludes it.
+
+**F7 — coverage is patchy per metric and per year.** AAPL's `InterestExpense` series ends at
+2023-09-30 with nothing for 2024 or 2025, while every neighbouring series runs to 2025-09-30. A
+metric present for one company-year and absent for the next is the normal case, not a fault, and
+it is the ratios cycle that will have to answer for it through `pillar_score_daily.coverage`.
 
 **F3 — the payload is byte-stable.** Three consecutive fetches produced one hash. A result
 carries only `meta` (symbol and type) and `timestamp` (the period ends), so nothing in it moves
@@ -83,39 +105,75 @@ Sixteen series are requested annual *and* quarterly in one call per security —
 with a `period1` far enough back to take everything Yahoo holds. `screener.universe` continues to
 use `quoteSummary` for profiles and is untouched by this.
 
-The series, and the `metric` row each one seeds. `code` is ours and is what any later ratio names;
-the Yahoo type is `annual`/`quarterly` prefixed onto the stem. `cadence` is `'quarterly'` for all
-sixteen — the schema's vocabulary for "reported per period" rather than a claim that only
-quarterlies are stored. `unit` is `'currency'` except where noted, and every row carries
-`is_input = true` and `higher_is_better = true`, the latter unread because nothing ranks an input.
+The series, and the `metric` row each one seeds. `code` is ours and is what any later ratio
+names; the Yahoo type is `annual`/`quarterly` prefixed onto the stem. Both prefixes are requested
+for every stem, so the list below is 28 metrics and 56 `type=` values.
+
+**What is on the list and what is not** follows one rule, which is D3 applied consistently: a line
+Yahoo *reports* is stored; a figure Yahoo *computes* from lines we already store is not. So
+`EBITDA`, `NetDebt`, `WorkingCapital`, `InvestedCapital`, `TangibleBookValue`,
+`TotalCapitalization` and `FreeCashFlow` are all deliberately absent — each is exactly reproducible
+from stored inputs (F6 checked EBITDA against EBIT + D&A, and free cash flow against operating
+cash flow minus capital expenditure, to the reported figure). `ReconciledDepreciation`,
+`DepreciationAmortizationDepletion`, `InterestExpenseNonOperating` and `ShareIssued` are absent as
+exact duplicates of a stem already listed.
 
 | `metric.code` | Yahoo type stem | unit | nominal pillar |
 |---|---|---|---|
 | `revenue` | `TotalRevenue` | currency | valuation |
+| `cost_of_revenue` | `CostOfRevenue` | currency | quality |
 | `gross_profit` | `GrossProfit` | currency | quality |
+| `research_and_development` | `ResearchAndDevelopment` | currency | quality |
+| `selling_general_admin` | `SellingGeneralAndAdministration` | currency | quality |
 | `operating_income` | `OperatingIncome` | currency | quality |
+| `ebit` | `EBIT` | currency | valuation |
+| `interest_expense` | `InterestExpense` | currency | quality |
+| `pretax_income` | `PretaxIncome` | currency | quality |
+| `tax_provision` | `TaxProvision` | currency | quality |
 | `net_income` | `NetIncome` | currency | valuation |
-| `ebitda` | `EBITDA` | currency | valuation |
-| `total_assets` | `TotalAssets` | currency | quality |
-| `stockholders_equity` | `StockholdersEquity` | currency | valuation |
-| `total_debt` | `TotalDebt` | currency | quality |
-| `cash` | `CashAndCashEquivalents` | currency | quality |
-| `free_cash_flow` | `FreeCashFlow` | currency | valuation |
+| `depreciation_amortisation` | `DepreciationAndAmortization` | currency | valuation |
 | `operating_cash_flow` | `OperatingCashFlow` | currency | quality |
 | `capital_expenditure` | `CapitalExpenditure` | currency | quality |
+| `total_assets` | `TotalAssets` | currency | quality |
 | `current_assets` | `CurrentAssets` | currency | quality |
 | `current_liabilities` | `CurrentLiabilities` | currency | quality |
-| `shares_basic` | `BasicAverageShares` | shares | valuation |
-| `shares_diluted` | `DilutedAverageShares` | shares | valuation |
+| `total_liabilities` | `TotalLiabilitiesNetMinorityInterest` | currency | quality |
+| `stockholders_equity` | `StockholdersEquity` | currency | valuation |
+| `cash_and_equivalents` | `CashAndCashEquivalents` | currency | quality |
+| `cash_and_short_term_investments` | `CashCashEquivalentsAndShortTermInvestments` | currency | quality |
+| `current_debt` | `CurrentDebt` | currency | quality |
+| `long_term_debt` | `LongTermDebt` | currency | quality |
+| `total_debt` | `TotalDebt` | currency | quality |
+| `net_ppe` | `NetPPE` | currency | quality |
+| `shares_basic_avg` | `BasicAverageShares` | shares | valuation |
+| `shares_diluted_avg` | `DilutedAverageShares` | shares | valuation |
+| `shares_outstanding` | `OrdinarySharesNumber` | shares | valuation |
+
+Four names earn their length. `cash_and_equivalents` and `cash_and_short_term_investments` are
+both stored and differ materially for a cash-rich company — AAPL reports 35,934M and 54,697M for
+the same period end — so a bare `cash` would leave the next reader guessing which was taken. The
+`_avg` on `shares_basic_avg` and `shares_diluted_avg` says these are period averages, against
+`shares_outstanding` which is the count at the period end; F6 measured them a percent apart, which
+is exactly the size of error nobody notices. **Codes are permanent once seeded**, so they say what
+they are rather than what is shortest.
+
+`total_debt` is kept despite `current_debt` and `long_term_debt` also being stored, because a
+provider's total-debt definition often includes lease obligations in neither component — it is a
+reported line here rather than a derivation, which is why the rule above says "computes from lines
+we already store" rather than "computes".
+
+`cadence` is `'quarterly'` on all 28 and `higher_is_better` is `true`. Neither is read: period
+granularity lives in `period_type` per fact, and nothing ranks an input. They are `not null`
+columns being filled.
 
 **The "nominal pillar" column is the fiction D8 describes**, recorded here so the seed does not
-have to invent it twice. `shares_diluted` genuinely feeds both pillars; `revenue` feeds Valuation
-through P/S and Quality through every margin. The column is filled because the schema requires it,
-not because it routes anything.
+have to invent it twice. `shares_diluted_avg` genuinely feeds both pillars, and `revenue` feeds
+Valuation through P/S and Quality through every margin. The column is filled because the schema
+requires it, not because it routes anything.
 
 `value` is `numeric`, so a share count and a currency amount coexist without scaling. Yahoo
-reports `CapitalExpenditure` as a negative number; it is stored exactly as reported, per D3 —
-sign conventions are the consuming ratio's problem, not the fact's.
+reports `CapitalExpenditure` as a negative number; it is stored exactly as reported, per D3 — sign
+conventions are the consuming ratio's problem, not the fact's.
 
 **D2 — The client holds no session.** Per F4: no crumb, no cookie jar, nothing carried between
 requests, so `screener.ingest.timeseries.TimeseriesClient` is `ChartClient`'s shape rather than
@@ -147,6 +205,14 @@ coincidence would break the day a volatile field is added upstream.
 date is what makes `observed_at` mean anything: without it, "we did not know this on Tuesday" and
 "we did not look on Tuesday" are the same absence.
 
+**`observed_at` is `ingest_observation.fetched_at`, identical for every fact parsed from one
+payload.** Not insert time, not parse time, not `now()` evaluated per row. This is the column the
+whole cycle exists to prove correct, and a per-row clock would break it in the least visible way
+available: two facts from one response would carry different timestamps, `order by observed_at
+desc` would become non-deterministic between them, and D5's `restates_id` could point at a row
+stamped *later* than the row superseding it. A single value read once per security and passed
+down makes that unrepresentable rather than merely unlikely.
+
 **D5 — A changed value sets `restates_id` to the row it supersedes.** The column exists for
 exactly this and populating it makes a restatement chain walkable without a self-join on
 timestamps. It is set at insert time from the row the value comparison already had to read, so
@@ -172,9 +238,24 @@ select distinct on (security_id, metric_id, period_end, period_type)
  order by security_id, metric_id, period_end, period_type, observed_at desc
 ```
 
-`fundamental_fact`'s unique constraint already includes `period_type`; its `pit` index does not,
-so a migration adds `(security_id, metric_id, period_type, period_end, observed_at desc)`. The
-old index is left alone: it still serves a query that filters to one period type.
+`fundamental_fact`'s unique constraint already includes `period_type`; its `pit` index does not.
+The migration therefore adds
+
+```sql
+create index fundamental_fact_pit_idx2 on fundamental_fact
+    (security_id, metric_id, period_end, period_type, observed_at desc);
+```
+
+**Column order matches the read's `order by` exactly, and has to.** An index ordered
+`(security_id, metric_id, period_type, period_end, observed_at desc)` — period_type before
+period_end — cannot satisfy this `distinct on` without a sort node, so it would be paid for on
+every insert and then sorted around on every read.
+
+The existing `fundamental_fact_pit_idx` is **dropped in the same migration.** It was
+`(security_id, metric_id, period_end, observed_at desc)`, and the only query it serves better than
+the new index is "the latest observation of one metric for one period end, across both period
+types" — which is the query D6 exists to say nobody should run. Keeping it would cost an index
+write per fact per night to serve a mistake.
 
 `cutoff` is `screener.scoring.visibility_cutoff(as_of, cutoff_offset)`, imported rather than
 reimplemented, so prices and fundamentals answer to one definition of what a scoring date may see.
@@ -212,9 +293,31 @@ every run requests the same wide range and D4 decides what is new. A security se
 time has no held values, so its whole history inserts — which is backfill, arriving as the
 ordinary path rather than a branch.
 
-**D11 — A null inside a series array is skipped, never stored.** Yahoo pads its arrays with
-nulls. A null becoming `0` in `value` would be a fabricated fundamental, and `value` is `not
-null` precisely so that a missing number cannot be mistaken for a real one.
+**D11 — A null is skipped, and a withdrawn value is left standing.** Yahoo pads its arrays with
+nulls, and a null becoming `0` in `value` would be a fabricated fundamental — `value` is `not null`
+precisely so a missing number cannot be mistaken for a real one. That much is a parse rule.
+
+The case it does not cover is a **withdrawal**: Yahoo reported a figure for a period on Monday and
+returns null for that same period on Tuesday. Skipping means Monday's value stays the latest, so
+the point-in-time read keeps serving a number the provider has stopped standing behind.
+
+That is the intended behaviour and it is a decision, not a parse rule. An absence is not a
+restatement, and the alternative — writing a tombstone row — cannot be expressed anyway, because
+`value` is `not null`. What it costs is real and worth naming: a withdrawn figure is
+indistinguishable from a current one in the fact table, and the only trace is that later
+observations stop refreshing it. F7 makes this concrete rather than theoretical — AAPL's
+`interest_expense` simply stops after 2023 — so the ratios cycle should treat the age of a fact as
+information, not assume the latest value is currently reported.
+
+**D12 — `currency` is read from the payload, never assumed.** Per F6 each value carries a
+`currencyCode`, so `fundamental_fact.currency` is populated from it rather than defaulted to USD
+from the US-only universe. The column is nullable and a null would be indistinguishable from
+"unknown" for ever, on data that cannot be backfilled; taking the provider's own answer costs one
+field in the parser and survives the day a non-USD listing enters the universe.
+
+If a value arrives with no `currencyCode`, the fact is stored with `currency` null rather than
+guessed. A null then means "the provider did not say", which is true, rather than "we assumed
+dollars", which might not be.
 
 ---
 
@@ -246,8 +349,8 @@ screener.ingest
   cli.py          + the `fundamentals` command                    [extended]
 ```
 
-A new migration adds `metric.is_input`, the corrected point-in-time index, and the 16 seeded
-input metrics.
+A new migration adds `metric.is_input`, replaces the point-in-time index per D6, and seeds the
+28 input metrics.
 
 ---
 
@@ -257,7 +360,7 @@ input metrics.
 open ingest_run   endpoint='timeseries', status='running'
    │
    └─ per security:
-      ├─ fetch the 16 series, annual and quarterly     (one request, no crumb)
+      ├─ fetch 28 stems, annual and quarterly          (one request, no crumb)
       ├─ hash; unchanged -> no blob write, reuse the stored path
       ├─ parse -> line items, nulls skipped                        [pure]
       ├─ read the latest held value per (metric, period_end, period_type)
@@ -302,6 +405,14 @@ rather than asserted:
 - `restates_id` points at the row it supersedes, and a three-deep chain walks.
 - `cutoff_offset` excludes a fact observed after the cutoff even when its `period_end` qualifies.
 - A null inside a series array is skipped rather than stored as zero.
+- **Every fact from one night carries its observation's `fetched_at`.** The direct test for D4's
+  `observed_at` rule: read back a night's facts and assert each one's `observed_at` equals the
+  `ingest_observation.fetched_at` it hangs from, with one distinct value across the security.
+- **A value that reverts produces three rows and a two-link chain.** A on Monday, B on Tuesday, A
+  again on Wednesday: Wednesday must insert rather than match, because the comparison is against
+  the latest observation and not against every value ever seen. Proves D4 compares the right thing.
+- A withdrawn value leaves the last reported figure as the point-in-time answer, per D11.
+- `currency` is populated from the payload, and a value without one stores null rather than USD.
 - One security's failure does not end the night, and the run reports `partial`.
 - Seeded input metrics carry `is_input = true`, and the four momentum metrics do not.
 
@@ -314,6 +425,18 @@ rather than asserted:
   moves, and no snapshot changes.
 - **The dashboard.** `screener.concept` stays, `illustrative` stays `true`, and nothing on screen
   moves. The swap is its own work and needs three pillars to be worth doing.
+
+**What this cycle is worth, stated plainly, since none of it is visible:** the next cycle cannot
+be wrong quietly. Every ratio it computes rests on `observed_at` meaning what it says and on the
+point-in-time read returning what was known — and both are proved here, against a real database,
+before anything depends on them.
+
+That is a legitimate thing to merge with nothing on screen, and it carries one obligation: **this
+cycle and the ratios cycle should be planned as a pair.** Facts accumulating with no consumer is
+precisely the state in which an `observed_at` bug survives a hundred nights, and every one of
+those nights writes history that cannot be corrected — the point-in-time record of what we knew is
+not re-derivable once wrong. The gap between "facts land" and "something reads them" should be
+weeks.
 - **TTM.** Derived at scoring time when something needs it, per D7.
 - **Source precedence.** `fundamental_fact` still has no `source_id` and `metric` gains none.
   There is one source, so there is no ambiguity to resolve and no evidence to resolve it with:
@@ -332,9 +455,10 @@ rather than asserted:
 - **How far back `period1` reaches.** Yahoo returns four annual and five quarterly periods
   whatever is asked, so the value is a formality until it is not. Worth re-measuring if the shape
   of the response ever changes.
-- **Whether `basic` and `diluted` average shares are both worth storing.** Both are stored
-  because D3's "cannot be backfilled" argument applies to every line item, but only one will be
-  used by the first ratio that needs a share count.
+- **Which of the three share counts each future ratio should take.** All three are stored because
+  the "cannot be backfilled" argument applies to every line item, and F6 measured the averages and
+  the outstanding count a percent apart. The convention — diluted average for per-share earnings
+  figures, outstanding for market capitalisation — belongs to the cycle that computes them.
 - **Whether an unchanged night should still write an observation for a security that failed.**
   It does not today: a failure writes nothing, so the trail records the check that succeeded and
   is silent about the one that did not. The `ingest_run` counts carry that instead.
@@ -353,4 +477,10 @@ rather than asserted:
   run." Per F4 that is true of `quoteSummary` and false of this endpoint.
 - **The schema spec** documents the point-in-time read as
   `distinct on (security_id, metric_id, period_end) ... order by observed_at desc`. Per D6 that
-  is wrong wherever both period types are held, which is everywhere.
+  is wrong wherever both period types are held, which is everywhere. `PLAN.md` repeats it in its
+  carried-forward note on source precedence and needs the same correction — the note's argument
+  about restatements from one source is unaffected, only the query it quotes.
+- **Migration 005** ships `fundamental_fact_pit_idx` on
+  `(security_id, metric_id, period_end, observed_at desc)`, which encodes the same missing
+  `period_type`. D6 replaces it; that is a dropped index rather than a doc fix, and it is the only
+  thing this cycle changes about a settled table.
