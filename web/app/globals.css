@@ -1078,6 +1078,27 @@ footer.site .prov {
 }
 .pg-run:disabled { opacity: 0.5; cursor: default; }
 
+/* The ask bar, above the editor rather than beside the tree: what you are
+   describing is the query, and the query is here. */
+.pg-ask {
+  display: flex; align-items: center; gap: calc(var(--sp) * 2);
+  padding: calc(var(--sp) * 2) calc(var(--sp) * 3);
+  border-bottom: 1px solid var(--line);
+}
+.pg-ask input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: none;
+  color: var(--ink); font: inherit; font-size: 0.82rem;
+}
+.pg-ask input::placeholder { color: var(--ink-muted); }
+.pg-ask button {
+  border: 1px solid var(--line); background: none; color: var(--ink-muted);
+  border-radius: 9999px; padding: 5px 12px; cursor: pointer;
+  font: inherit; font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+}
+.pg-ask button:hover:not(:disabled) { color: var(--copper); border-color: var(--copper); }
+.pg-ask button:disabled { opacity: 0.5; cursor: default; }
+.pg-ask-note { font-size: 0.72rem; color: var(--copper); }
+
 .pg-out { flex: 1; overflow: auto; background: var(--card);
   border: 1px solid var(--line); border-radius: var(--r-2xl); }
 /* `globals.css` makes every table row a pointer for the clickable screener

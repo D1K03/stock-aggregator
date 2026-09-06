@@ -452,7 +452,12 @@ async def respond(
 
     if not reply.text:
         return Reply(
-            text="The model returned nothing.", tools=reply.tools, charts=reply.charts
+            text="The model returned nothing.",
+            tools=reply.tools,
+            charts=reply.charts,
+            # Whatever a tool did produce is still worth showing. The model
+            # having nothing to say about a table is not a reason to hide it.
+            rows=reply.rows,
         )
     return Reply(
         text=_truncate(reply.text),
@@ -460,6 +465,12 @@ async def respond(
         cost_usd=reply.cost_usd,
         tools=reply.tools,
         charts=reply.charts,
+        # `rows` was missing here, and the symptom was the quiet kind: the `sql`
+        # tool collected them, `/api/ask` serialised `reply.rows`, and the
+        # dashboard drew nothing because this rebuild dropped them on the way
+        # past. Every test around the tool exercised `collecting_rows` directly
+        # rather than through here, so nothing caught it.
+        rows=reply.rows,
     )
 
 

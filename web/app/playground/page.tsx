@@ -10,6 +10,7 @@ import {
   fetchCatalog,
   isNumeric,
   runQuery,
+  suggestQuery,
 } from "@/lib/playground";
 
 /* Read-only SQL over the data this deployment allows.
@@ -32,6 +33,9 @@ export default function Playground() {
   const [failure, setFailure] = useState<QueryFailure | null>(null);
   const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState("");
+  const [ask, setAsk] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -59,6 +63,22 @@ export default function Playground() {
       setRunning(false);
     }
   }, [sql, running]);
+
+  /* Writes the query and stops. It does not run it: the model suggests and the
+     reader decides, so Run stays the only thing that reaches the database. */
+  const write = useCallback(async () => {
+    if (!ask.trim() || asking) return;
+    setAsking(true);
+    setAskError(null);
+    try {
+      setSql(await suggestQuery(ask));
+      box.current?.focus();
+    } catch (exc) {
+      setAskError(exc instanceof Error ? exc.message : "that failed");
+    } finally {
+      setAsking(false);
+    }
+  }, [ask, asking]);
 
   /* Inserting at the cursor rather than replacing the box: the point of the
      tree is to help write a query, not to overwrite one. */
@@ -153,6 +173,28 @@ export default function Playground() {
 
         <div className="pg-main">
           <div className="pg-editor">
+            <div className="pg-ask">
+              <input
+                value={ask}
+                placeholder="Describe a query — e.g. the ten most-mentioned tickers this week"
+                onChange={(e) => setAsk(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void write();
+                  }
+                }}
+                aria-label="Describe the query you want"
+                disabled={catalog?.enabled === false}
+              />
+              {askError && <span className="pg-ask-note">{askError}</span>}
+              <button
+                onClick={write}
+                disabled={asking || !ask.trim() || catalog?.enabled === false}
+              >
+                {asking ? "Writing…" : "Write it"}
+              </button>
+            </div>
             <textarea
               ref={box}
               className="pg-sql"

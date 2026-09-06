@@ -16,6 +16,7 @@ from typing import Any
 import psycopg
 
 from screener import audit, auth, mcp
+from screener.ai import converse
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
 from screener.config import settings
@@ -269,6 +270,8 @@ class Handler(BaseHTTPRequestHandler):
             self._transcribe(config)
         elif route == "/api/playground/query":
             self._playground_query(config)
+        elif route == "/api/playground/suggest":
+            self._playground_suggest(config)
         # Skybird's mutations. The docstring above prefers a GET with its
         # argument in the query string, and `_handoff` follows that even though
         # it sends a Discord message — but a GET that deletes a transcript is
@@ -617,6 +620,119 @@ class Handler(BaseHTTPRequestHandler):
             mcp.approve(form, login or "", config.permits(login) if login else False)
         )
 
+    def _playground_suggest(self, config: AuthConfig) -> None:
+        """Turn a description into SQL, and put it in the box without running it.
+
+        Its own endpoint rather than a trip through `/api/ask`, for two reasons.
+        Steven's system prompt and six tool schemas are a fixed cost on every
+        message and none of them help here — the whole prompt is the catalogue
+        and one instruction. And the prompt-budget test has about fifty
+        characters of headroom, so anything taught to Steven has to earn its
+        place in a way this does not need to.
+
+        It deliberately does not execute what it writes. The SQL lands in the
+        editor and a person presses Run, which keeps the model on the side of
+        the line where it suggests and the reader decides.
+        """
+        try:
+            login = self._current_login(config)
+        except auth.SessionLookupFailed as exc:
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot check the session", "database": str(exc)},
+            )
+            return
+        if login is None:
+            self._respond(HTTPStatus.UNAUTHORIZED, {"error": "sign in at /auth/login"})
+            return
+
+        body = self._json_body(MAX_SQL_BODY)
+        if body is None:
+            return
+        wanted = str(body.get("ask") or "").strip()[:MAX_QUESTION]
+        if not wanted:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "say what you want"})
+            return
+
+        from screener import playground
+        from screener.bot import budget
+
+        # The same daily cap the chat is under, and the same fold of Discord
+        # onto GitHub. A second way to spend money would be a second way to
+        # exceed a cap that exists to be the only one.
+        allowance = budget.check(login, "github")
+        if not allowance.allowed:
+            self._respond(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": f"daily cap of ${allowance.cap} reached"},
+            )
+            return
+
+        if not playground.enabled():
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "the playground is not configured on this deployment"},
+            )
+            return
+
+        try:
+            tables = playground.catalog()
+        except Exception as exc:
+            logger.warning("suggest: no catalogue (%s)", type(exc).__name__)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot reach the playground database"},
+            )
+            return
+
+        # The whole schema, because guessing which tables are relevant is the
+        # job being delegated. It is about 6k characters and it is what makes
+        # the difference between a plausible query and a runnable one.
+        schema = "\n".join(
+            f"{t.schema}.{t.name}({', '.join(c.name + ' ' + c.type for c in t.columns)})"
+            for t in tables
+        )
+        try:
+            completion = converse(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You write PostgreSQL SELECT statements against this "
+                            "schema and nothing else.\n\n"
+                            f"{schema}\n\n"
+                            "Return only SQL. No prose, no markdown fence, no "
+                            "explanation. One statement. Read-only: never INSERT, "
+                            "UPDATE, DELETE or any DDL. Prefer explicit column "
+                            "lists over *, and add a LIMIT unless the query "
+                            "already aggregates."
+                        ),
+                    },
+                    {"role": "user", "content": wanted},
+                ],
+                max_tokens=400,
+                temperature=0.1,
+            )
+        except Exception as exc:
+            logger.warning("suggest: model failed (%s)", type(exc).__name__)
+            self._respond(
+                HTTPStatus.BAD_GATEWAY, {"error": "could not reach the model"}
+            )
+            return
+
+        audit.record(
+            kind="agent",
+            operation="playground.suggest",
+            actor=login,
+            actor_kind="github",
+            model=completion.model,
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
+            cost_usd=completion.cost_usd,
+            detail={"ask": wanted},
+        )
+        self._respond(HTTPStatus.OK, {"sql": _unfenced(completion.text)})
+
     def _playground_query(self, config: AuthConfig) -> None:
         """Run one read-only query.
 
@@ -684,6 +800,19 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+
+        # The docstring above has always said the audit trail is the right place
+        # for a query, and until now nothing wrote one. The connector records
+        # every SQL statement claude.ai runs; the console's own box should not
+        # be the one surface where "which query was that" has no answer.
+        audit.record(
+            kind="tool",
+            operation="playground.query",
+            actor=login,
+            actor_kind="github",
+            duration_ms=result.ms,
+            detail={"sql": statement[:MAX_SQL_BODY], "rows": result.row_count},
+        )
 
         self._respond(
             HTTPStatus.OK,
@@ -1555,6 +1684,20 @@ class Handler(BaseHTTPRequestHandler):
                 auth.clear_cookie(NEXT_COOKIE, secure=secure),
             ],
         )
+
+
+def _unfenced(text: str) -> str:
+    """The SQL out of whatever the model wrapped it in.
+
+    Asked for bare SQL and told not to use a fence, models still sometimes send
+    ```sql ... ```. Stripping it here is three lines; leaving it means pasting a
+    syntax error into the editor and looking like the feature is broken.
+    """
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.split("\n", 1)[-1] if "\n" in body else body[3:]
+        body = body.rsplit("```", 1)[0]
+    return body.strip()
 
 
 def _safe_next(value: str) -> str:
