@@ -27,7 +27,6 @@ _SPARE_ATTEMPTS = 3
 # five quarterly periods whatever is asked for, so this is a formality until
 # the shape of the response changes.
 PERIOD1 = 1420070400  # 2015-01-01
-PERIOD2 = 4102444800  # 2100-01-01
 
 BROWSER = {
     "User-Agent": (
@@ -50,6 +49,7 @@ class TimeseriesClient:
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] | None = None,
         backoff: float = 1.0,
+        now: Callable[[], float] | None = None,
     ) -> None:
         self._owned = lanes is None
         self.lanes = lanes or LanePool.from_env(
@@ -60,6 +60,7 @@ class TimeseriesClient:
         )
         self._sleep = sleep or time.sleep
         self._backoff = backoff
+        self._now = now or time.time
 
     def close(self) -> None:
         if self._owned:
@@ -83,10 +84,16 @@ class TimeseriesClient:
         # carrying a slash builds a URL httpx rejects with `InvalidURL`, which
         # descends from Exception rather than HTTPError and so escapes the
         # guard in `_request` entirely.
+        #
+        # `period2` must be the current time, not a far-future bound: a
+        # far-future `period2` makes Yahoo return 200 with series metadata but
+        # no data arrays, which reads as "this security has nothing" rather than
+        # as an error, silently losing an entire night's ingest.
         safe = quote(symbol, safe="")
+        period2 = int(self._now())
         url = (
             f"{BASE}/{safe}?symbol={safe}&type={TYPES}"
-            f"&period1={PERIOD1}&period2={PERIOD2}"
+            f"&period1={PERIOD1}&period2={period2}"
         )
         backoff = self._backoff
         for _ in range(len(self.lanes) + _SPARE_ATTEMPTS):

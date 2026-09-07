@@ -98,3 +98,32 @@ def test_a_429_parks_the_lane_and_retries():
     ) as client:
         assert client.fetch("AAPL") == b"{}"
     assert calls["n"] == 2
+
+
+def test_period2_is_a_present_day_timestamp():
+    # A far-future period2 makes Yahoo return 200 with series metadata but no
+    # data arrays, which looks like "this security has nothing" and silently
+    # loses the ingest. period2 must be the current time, injected so tests can
+    # control it.
+    import re
+    import time
+
+    seen = {}
+    controlled_time = 1725000000  # Sept 2024
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        return httpx.Response(200, content=b"{}")
+
+    with TimeseriesClient(
+        transport=_transport(handler), now=lambda: float(controlled_time)
+    ) as client:
+        client.fetch("AAPL")
+
+    # Extract period2 from URL
+    match = re.search(r"period2=(\d+)", seen["url"])
+    assert match, "period2 not found in URL"
+    period2 = int(match.group(1))
+
+    # Verify it is within a small window of our controlled time
+    assert period2 == controlled_time
