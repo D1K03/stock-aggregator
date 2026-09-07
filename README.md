@@ -14,11 +14,11 @@ Early. The database schema is built and tested; nothing ingests data yet.
 
 | Piece | State |
 |---|---|
-| Database schema | Done — 9 migrations, 44 tests |
+| Database schema | Done — 21 migrations |
 | Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, GitHub sign-in, CI/CD |
-| Universe and identity | Not started |
-| Ingest | Not started |
-| Scoring | Not started |
+| Universe and identity | Done — 1,504 securities across eleven sectors, committed as `data/universe.csv` |
+| Ingest | Done — daily prices and corporate actions, plus fundamentals (28 line items/period); nothing consumes a fundamental fact yet |
+| Scoring | Done for the Momentum pillar only — dated snapshots, alerting switched off; the other four pillars have no scored metrics yet |
 | Diff and alerting | Not started |
 
 ## Getting started
