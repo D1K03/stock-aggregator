@@ -12,9 +12,9 @@ the schema, the pipeline and CI/CD.
 
 ## Status
 
-The database schema, the infrastructure layer and daily **price** ingest are built and tested;
-fundamentals are the next ingest cycle; scoring is built for the Momentum pillar and writes
-snapshots with alerting switched off, and no alerting code exists yet. Runtime
+The database schema, the infrastructure layer and daily ingest — **price and fundamentals** — are
+built and tested; scoring is built for the Momentum pillar and writes snapshots with alerting
+switched off, and no ratio consumes a fundamental fact yet. No alerting code exists yet. Runtime
 dependencies are `psycopg`, `httpx` and `discord.py`, and nothing else — check `pyproject.toml`
 before assuming a library is available. `faster-whisper` and `yt-dlp` are extras (`voice`,
 `stream`) that one image each installs, and both are imported inside a function so the rest of
@@ -113,6 +113,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Ingest prices: `python -m screener.ingest prices` — fetches missing daily bars per
   security, backfilling to 2020 on first sight. `sweep` is a hand-run diagnostic that
   compares six years against what is stored and writes nothing.
+- Ingest fundamentals: `python -m screener.ingest fundamentals` — every line item
+  Yahoo reports per period, appended only where a value changed. Safe to re-run:
+  an unchanged night writes observations and no facts.
 - Score a night: `python -m screener.scoring run` — every active security for today, into
   `metric_daily`, `peer_group_stat`, `pillar_score_daily` and `snapshot_daily`, in one
   transaction. `--as-of` overrides the date and refuses one in the past. Takes an advisory lock,
@@ -269,6 +272,17 @@ nothing outside imports a submodule directly.
   a security with no rows gets 2020. Two windows: the fetch window widens to close a gap,
   the settling window (7 days) never does, and inside it is the one place the ingest path
   mutates an existing row.
+  Fundamentals are the second half, from Yahoo's `fundamentals-timeseries`
+  endpoint rather than `quoteSummary`, whose statement modules are now empty.
+  It needs no crumb and no cookie, so the client is `ChartClient`'s shape.
+  Twenty-eight reported line items are stored; anything Yahoo *computes* from
+  lines already stored — EBITDA, free cash flow — is derived at scoring time
+  instead. A fact is appended only when its value differs from the latest held,
+  and every fact from one payload carries its observation's `fetched_at` as
+  `observed_at`, because a per-row clock would let a restatement chain point
+  forwards in time. `read_facts` is the point-in-time read and **includes
+  `period_type`**: a fiscal Q4 ends when its fiscal year does, so without it a
+  year collapses into its own last quarter.
 - `screener.scoring` — bars into percentiles, a pillar score and a dated snapshot. Five pure
   modules and two that open a connection, as `screener.ingest` splits `parse` from `load`.
   One pillar this cycle: prices give Momentum and nothing else, so `weight_version` v1 is

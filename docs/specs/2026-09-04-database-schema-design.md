@@ -355,6 +355,13 @@ order by security_id, metric_id, period_end, observed_at desc;
 
 `fundamental_fact_pit_idx` is exactly that access path. ~430k rows/yr including restatements.
 
+**Erratum, from the fundamentals ingest cycle.** `period_type` belongs in the `distinct on`,
+because a fiscal Q4 shares its `period_end` with its fiscal year — AAPL reports both at
+2025-09-30, four-fold apart — so the read as documented above returns whichever of the two was
+inserted later, silently collapsing a year into its own last quarter. Migration 021 drops
+`fundamental_fact_pit_idx` and replaces it with an index that carries `period_type`, and the read
+becomes `distinct on (security_id, metric_id, period_end, period_type)`.
+
 **The cutoff must be an explicit interval, not a bare date.** Comparing `observed_at <= $2`
 against a `date` casts it to midnight at the *start* of that day, silently excluding everything
 learned during it — including the nightly fetch the score is supposed to be based on. See

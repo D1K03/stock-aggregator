@@ -194,6 +194,42 @@ definitionally the least interesting alert there is.
 
 Spec: `docs/specs/2026-09-05-scoring.md`. Plan: `docs/plans/2026-09-06-scoring.md`.
 
+**Fundamentals ingest** — item 2's remaining half. Twenty-eight reported line items from Yahoo's
+`fundamentals-timeseries` endpoint, appended into the bitemporal fact layer only where a value
+changed against the latest held.
+
+Verified against a real Postgres 16 with all 21 migrations and the committed universe of 1,504
+securities, full night: **1,504 requested, 1,504 ok, 0 failed, 341,894 facts written, 4 minutes
+10 seconds.** 346,486 facts stand in the table counting earlier smoke runs, 154,326 annual and
+192,160 quarterly; zero carry a null currency, holding D12's read-from-the-payload rule across
+the whole universe, and zero have `observed_at <> fetched_at`, holding D4's clock rule across
+every fact rather than one AAPL example. Re-running `--limit 20` twice wrote 4,592 facts the
+first time and zero the second, with an observation recorded both times — append-on-change
+working against the live endpoint rather than a fixture. 514 `(metric, period_end)` pairs hold
+both an annual and a quarterly fact: every one of them is a case where the schema spec's
+documented point-in-time read would have silently dropped a value, which is why D6 is now an
+erratum against that spec rather than a proposal. Coverage varies more than F7's 60-security
+sample suggested: `research_and_development` reaches only 468 of 1,504 securities (31%),
+`current_debt` 1,228 (82%), `cost_of_revenue` and `gross_profit` 1,306 each (87%).
+
+The run's own plan had one defect worth recording. The first full attempt reported `20 ok, 0
+failed` and stored nothing: `period2` was a fixed bound of 2100-01-01, and Yahoo answers a
+request shaped that way with 200 and every series present as `meta` with no data array — a
+success indistinguishable from a security that genuinely has nothing to report. `period2` is now
+computed from the clock per request. It is the strongest argument this cycle produced for why a
+hand run against the real endpoint is a task and not a formality: the automated suite passed
+throughout, against a client that could not have written a single fact.
+
+Nothing scores from this yet. §9 of the spec says what a cycle with nothing on screen is worth:
+the payoff is that the next cycle — ratios — cannot be wrong quietly, because 341,894 facts and
+their `observed_at` values are already sitting where a ratio will read them, checkable against
+what the payload actually said. That is also the argument for planning fundamentals and ratios as
+a pair rather than in sequence: facts accumulating with no consumer is exactly where a bug in
+`observed_at` survives a hundred nights of history that no later cycle can correct, because
+nothing was reading it closely enough to notice.
+
+Spec: `docs/specs/2026-09-06-fundamentals-ingest.md`.
+
 ## Then, in dependency order
 
 Each needs its own brainstorm → spec → plan cycle; they are too big for one.
@@ -211,10 +247,16 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
    path holds one session for the run — `screener.universe.sources.yahoo` already does this and
    the ingest client should extend that shape rather than start again.
 
-   The price half is implemented — see `docs/specs/2026-09-05-price-ingest.md` and
-   `docs/plans/2026-09-05-price-ingest.md`. Fundamentals remain, per that spec's own
-   "Out of scope" section, along with the dashboard/bot swap off `screener.concept`.
-   Scoring no longer does: it is built, and has moved to "Done" above.
+   **Erratum.** That is true of `quoteSummary` and false of `fundamentals-timeseries`, the
+   endpoint the fundamentals half actually uses: a cold client reaches it with no cookie and no
+   crumb, so the session it needs is the plain one `screener.fetch` already gives every other
+   source.
+
+   Both halves are implemented — see `docs/specs/2026-09-05-price-ingest.md` and
+   `docs/specs/2026-09-06-fundamentals-ingest.md`, moved to "Done" above. The dashboard/bot
+   swap off `screener.concept` remains, and nothing consumes a fundamental fact yet — that is
+   the ratios cycle. Scoring no longer belongs on this list either: it is built, and has moved
+   to "Done" above.
 
    **Not yfinance.** The library emits parsed DataFrames, so a stored payload would be its
    reshaping rather than the response — which breaks the content-hash restatement detector and
@@ -276,6 +318,10 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
   so it belongs in the alerting spec beside the `emits_alerts = false` skip.
 - **Payload volume: 72 MB a night raw, ~20 MB compressed, ~7 GB a year.** Enough to settle the
   open question of where payloads land, which `DESIGN.md` leaves to this spec.
+- **The ratios cycle needs a staleness rule, not only a coverage rule.** Schema D9's `coverage`
+  answers a missing metric, not a missing period, and the point-in-time read will happily pair
+  2025 revenue with 2023 interest expense. F7's measurement: interest expense recently present
+  for 54/60 sampled securities, `CurrentDebt` for 43/60.
 - **The crumb refresh path is correct; a natural expiry has not been seen.** A deliberately
   poisoned crumb produces a 401 the client recognises, refreshes and retries to a 200. But the
   crumb was fetched exactly once across 4.7 minutes, so Yahoo never expired one — treat "a longer
@@ -297,11 +343,11 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 ## Status
 
 Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance
-done. Daily **price** ingest is built and the universe is committed; fundamentals are the next
-ingest cycle. Scoring is built for the Momentum pillar and writes snapshots with alerting
-switched off, verified in reduced form against 60 securities rather than the full universe; no
-alerting code exists yet. `python -m screener.boot selftest` is what exercises the infrastructure
-end to end, and it is worth running after a deploy for exactly that reason.
+done. Daily ingest — **price and fundamentals** — is built and the universe is committed. Scoring
+is built for the Momentum pillar and writes snapshots with alerting switched off, verified in
+reduced form against 60 securities rather than the full universe; no ratio reads a fundamental
+fact yet and no alerting code exists yet. `python -m screener.boot selftest` is what exercises
+the infrastructure end to end, and it is worth running after a deploy for exactly that reason.
 
 The data is now readable from claude.ai as a custom connector, over the same read-only engine the
 `/playground` console uses and a third Postgres role of its own. That is a reading surface and

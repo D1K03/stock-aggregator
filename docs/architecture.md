@@ -631,9 +631,9 @@ year boundary without colliding with a same-named yearly one.
 
 ## The v1 pipeline
 
-The spine. Universe, identity, daily **price** ingest and the Momentum-pillar
-scoring run are built; fundamentals ingest is cycle two, and the snapshot diff
-and alerting remain unwritten — drawn dashed below.
+The spine. Universe, identity, daily ingest — **price and fundamentals** — and
+the Momentum-pillar scoring run are built; the snapshot diff and alerting
+remain unwritten — drawn dashed below.
 
 ```mermaid
 flowchart LR
@@ -642,8 +642,8 @@ flowchart LR
     csv["data/universe.csv"]
     ident["universe load<br/>security, security_symbol,<br/>security_sector, peer_group"]
     ing["ingest prices<br/>Yahoo /v8/finance/chart, raw bars only<br/>content-hash dedup, payload to R2"]
-    ingf["«not built» ingest fundamentals<br/>the crumbed quoteSummary path<br/>cycle two"]
-    facts[("ingest_observation<br/>price_daily<br/>«not built» fundamental_fact")]
+    ingf["ingest fundamentals<br/>Yahoo fundamentals-timeseries, no crumb<br/>append-on-change into the fact layer"]
+    facts[("ingest_observation<br/>price_daily<br/>fundamental_fact")]
     sc["scoring run<br/>percentile within sector peer group,<br/>then average within pillar<br/>one transaction: metric_daily,<br/>peer_group_stat, pillar_score_daily,<br/>snapshot_daily"]
     derived[("metric_daily<br/>peer_group_stat<br/>pillar_score_daily<br/>snapshot_daily<br/>«not built» event_flag_daily")]
     diff["«not built» diff<br/>today vs the last comparable snapshot"]
@@ -665,7 +665,7 @@ flowchart LR
     gate -->|true| cool
     cool --> post
 
-    class ingf,diff,gate,skip,cool,post unbuilt
+    class diff,gate,skip,cool,post unbuilt
 ```
 
 The `emits_alerts` gate is drawn because it is the invariant most likely to be

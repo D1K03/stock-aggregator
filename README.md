@@ -57,6 +57,7 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 | Refresh universe CSV | `python -m screener.universe refresh` |
 | Load universe | `python -m screener.universe load --dry-run` |
 | Ingest prices | `python -m screener.ingest prices` |
+| Ingest fundamentals | `python -m screener.ingest fundamentals` |
 | Score a night | `python -m screener.scoring run` |
 | Run the status service | `python -m screener.boot` (the dashboard API, the playground and the MCP connector) |
 | Check every integration | `python -m screener.boot selftest` |

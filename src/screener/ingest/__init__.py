@@ -1,4 +1,4 @@
-"""Daily ingest. Prices in this cycle; fundamentals in the next."""
+"""Daily ingest: prices and fundamentals into the bitemporal fact layer."""
 
 from screener.ingest.chart import ChartClient
 from screener.ingest.facts import SERIES, Fact, parse as parse_facts

@@ -89,6 +89,13 @@ respect robots.txt and ToS, and treat scrapers as the fragile layer.
   financial data, earnings trend and recommendation trend together — 19 KB raw, 5 KB gzipped.
   A year of daily prices is 28 KB raw, 8 KB gzipped.
 
+  > **Erratum, measured 2026-09-06.** `quoteSummary`'s statement modules now return `endDate`
+  > and `maxAge` only — nothing else. The fundamentals cycle reaches Yahoo through
+  > `fundamentals-timeseries` instead, which needs no crumb. The 43/29/28 stability split above
+  > and the per-module hashing proposal it motivates both describe an endpoint this cycle does
+  > not use; the reasoning stands for whoever reaches for `quoteSummary` again, but not against
+  > current data.
+
   **Direct beats the library, but on structural grounds rather than a throughput race.** One
   request per ticker instead of several, a persistent session, and a crumb fetched once and
   reused are wins that hold regardless of what any timing run shows. The first comparison drawn

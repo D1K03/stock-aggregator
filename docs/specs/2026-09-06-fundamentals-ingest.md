@@ -1,6 +1,6 @@
 # Fundamentals ingest
 
-Status: agreed, not implemented. Written 2026-09-06.
+Status: implemented and verified against the full universe. Written 2026-09-06, implemented 2026-09-06.
 
 Yahoo's fundamentals timeseries into `fundamental_fact` and the `ingest_observation` trail, plus
 the point-in-time read that is the only thing able to prove those writes were correct. Standing
