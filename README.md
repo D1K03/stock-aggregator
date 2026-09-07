@@ -10,15 +10,17 @@ price predictions and no buy or sell recommendations — alerts say "score cross
 
 ## Status
 
-Early. The database schema is built and tested; nothing ingests data yet.
+Ingest and Momentum-pillar scoring are built; diffing and alerting are not. Fundamentals are
+stored and nothing consumes them yet — no ratio, no pillar. The dashboard still draws invented
+data.
 
 | Piece | State |
 |---|---|
-| Database schema | Done — 9 migrations, 44 tests |
+| Database schema | Done — 21 migrations |
 | Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, GitHub sign-in, CI/CD |
-| Universe and identity | Not started |
-| Ingest | Not started |
-| Scoring | Not started |
+| Universe and identity | Done — 1,504 securities across eleven sectors, committed as `data/universe.csv` |
+| Ingest | Done — daily prices and corporate actions, plus fundamentals (28 line items/period); nothing consumes a fundamental fact yet |
+| Scoring | Done for the Momentum pillar only — dated snapshots, alerting switched off; the other four pillars have no scored metrics yet |
 | Diff and alerting | Not started |
 
 ## Getting started
@@ -57,6 +59,7 @@ Port 5432 already taken by a local Postgres install? Set `POSTGRES_PORT` before
 | Refresh universe CSV | `python -m screener.universe refresh` |
 | Load universe | `python -m screener.universe load --dry-run` |
 | Ingest prices | `python -m screener.ingest prices` |
+| Ingest fundamentals | `python -m screener.ingest fundamentals` |
 | Score a night | `python -m screener.scoring run` |
 | Run the status service | `python -m screener.boot` (the dashboard API, the playground and the MCP connector) |
 | Check every integration | `python -m screener.boot selftest` |

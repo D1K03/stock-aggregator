@@ -43,3 +43,17 @@ def test_today_itself_is_still_accepted():
 
     parsed = build_parser().parse_args(["prices", "--today", date.today().isoformat()])
     assert parsed.today == date.today()
+
+
+def test_fundamentals_is_a_command(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "fundamentals" in capsys.readouterr().out
+
+
+def test_fundamentals_accepts_the_same_flags_as_prices():
+    from screener.ingest.cli import build_parser
+
+    parsed = build_parser().parse_args(["fundamentals", "--limit", "5"])
+    assert parsed.command == "fundamentals"
+    assert parsed.limit == 5
