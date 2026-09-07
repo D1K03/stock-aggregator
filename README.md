@@ -10,7 +10,9 @@ price predictions and no buy or sell recommendations — alerts say "score cross
 
 ## Status
 
-Early. The database schema is built and tested; nothing ingests data yet.
+Ingest and Momentum-pillar scoring are built; diffing and alerting are not. Fundamentals are
+stored and nothing consumes them yet — no ratio, no pillar. The dashboard still draws invented
+data.
 
 | Piece | State |
 |---|---|
