@@ -50,6 +50,20 @@ SKYBIRD = {
     "skybird.transcript_segment",
 }
 
+# Granted to all three roles, article text included — and that is the opposite
+# of the line above, so it is here rather than in `granted_in_migration()`,
+# which parses 013 only and cannot see a schema created later.
+#
+# Skybird is denied to Steven because of what the data *is*: speech captured by
+# us, from people who did not publish it to us. A scraped article inverts every
+# part of that — already published, already readable by whoever pasted the link,
+# and fetched precisely so it could be read. Denying it would be copying the
+# shape of 017 without its reason.
+MAGPIE = {
+    "magpie.attempt",
+    "magpie.document",
+}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -415,14 +429,17 @@ def test_the_catalogue_lists_exactly_what_the_migration_grants(playground):
     # beside the editor, and a transcript you may query should be a transcript
     # you can see the shape of.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | SKYBIRD
+    assert listed == granted_in_migration() | SKYBIRD | MAGPIE
 
 
 def test_the_catalogue_shows_steven_a_smaller_database(steven):
     # The same call, the same code, one role along — and skybird is simply not
     # there. He is not told it exists and refused; he cannot see it.
+    #
+    # Magpie is on both sides, which is the point of listing it separately: the
+    # one thing Steven cannot see is the one thing that was never published.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration()
+    assert listed == granted_in_migration() | MAGPIE
     assert listed.isdisjoint(SKYBIRD)
 
 
@@ -456,7 +473,7 @@ def test_every_table_is_either_granted_or_deliberately_denied(playground, fresh_
           and n.nspname not like 'pg\\_%'
         """
     ).fetchall()
-    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | SKYBIRD
+    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE
 
 
 # -- over HTTP ---------------------------------------------------------------
@@ -491,3 +508,20 @@ def test_a_bad_body_is_a_bad_request_rather_than_a_traceback(signed_in):
     url, cookie = signed_in
     status, _ = http(url, "/api/playground/query", cookie, b"not json")
     assert status == 400
+
+
+# -- scraped documents -----------------------------------------------------
+
+
+@pytest.mark.parametrize("table", sorted(MAGPIE))
+def test_the_console_can_read_a_scraped_document(playground, table):
+    assert "permission denied" not in _tried(f"select * from {table}")
+
+
+@pytest.mark.parametrize("table", sorted(MAGPIE))
+def test_steven_can_read_a_scraped_document(steven, table):
+    # The deliberate difference from skybird, asserted rather than assumed. He
+    # is given the text because reading an article back is the whole point of
+    # being able to fetch one — unlike a transcript, which he starts and stops
+    # without ever reading.
+    assert "permission denied" not in _tried(f"select * from {table}")

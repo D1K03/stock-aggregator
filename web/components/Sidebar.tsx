@@ -51,6 +51,7 @@ const ITEMS: Item[] = [
   { label: "Steven", href: "/steven", icon: <Icon d="M21 12a9 9 0 01-9 9 9 9 0 01-4-1l-5 1 1-5a9 9 0 01-1-4 9 9 0 019-9 9 9 0 019 9z" /> },
   { label: "Audit", href: "/audit", icon: <Icon d="M4 4h11l5 5v11H4zM15 4v5h5M8 13h8M8 17h5" /> },
   { label: "Playground", href: "/playground", icon: <Icon d="M4 17l6-6-6-6M13 19h7" /> },
+  { label: "Magpie", href: "/magpie", icon: <Icon d="M4 20s2-8 9-9c3-.4 5-2 6-3 1 2 1 5-1 7s-5 3-8 3M4 20l5-5" /> },
   { label: "Skybird", href: "/skybird", icon: <Icon d="M4.9 4.9a10 10 0 000 14.2M19.1 4.9a10 10 0 010 14.2M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4M12 10.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3" /> },
   { label: "Universe", href: "#", soon: true, icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
   { label: "Alerts", href: "#", soon: true, icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
@@ -80,6 +81,10 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
     const saved = Number(localStorage.getItem(STORAGE_WIDTH));
     if (saved >= MIN_WIDTH && saved <= MAX_WIDTH) setWidth(saved);
     setCollapsed(localStorage.getItem(STORAGE_COLLAPSED) === "1");
+    // The inline script's first-paint class has done its job; from here the
+    // component owns how the rail looks, and leaving it would hide the labels
+    // the moment somebody expanded the rail again.
+    document.documentElement.classList.remove("rail-shut");
     setReady(true);
   }, []);
 
@@ -161,13 +166,19 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
           and the spacer would only push the content sideways. */}
       <div
         className="rail-spacer"
-        style={{ width: phone ? 0 : shown }}
+        // Width is left to CSS until the stored value has been read, so the
+        // first paint uses `--rail-w` — written by the inline script in the
+        // layout — rather than the default this component starts at.
+        style={{ width: phone ? 0 : ready ? shown : undefined }}
         aria-hidden="true"
       />
 
       <aside
         className={`rail${shut ? " collapsed" : ""}${phone ? " bar" : ""}${dragging ? " dragging" : ""}`}
-        style={{ width: phone ? undefined : shown, transition: ready && !dragging ? undefined : "none" }}
+        style={{
+          width: phone || !ready ? undefined : shown,
+          transition: ready && !dragging ? undefined : "none",
+        }}
       >
         <div className="rail-head">
           <span className="wordmark">{shut ? "S" : "Screener"}</span>
@@ -216,8 +227,19 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
         <div className="rail-foot" ref={menuRef}>
           {/* Nothing until it is known. A placeholder commit here is what made
               the rail disagree with the build the bot reports. */}
-          {!shut && gitSha && (
-            <span className="sha" title={`Running ${gitSha}`}>{gitSha.slice(0, 7)}</span>
+          {/* Kept in the layout before it is known, and hidden rather than
+              absent: an element that appears when /status answers shifts
+              everything beside it, and the one thing this chip must never do is
+              show a commit that is not the one running. */}
+          {!shut && (
+            <span
+              className="sha"
+              title={gitSha ? `Running ${gitSha}` : undefined}
+              style={gitSha ? undefined : { visibility: "hidden" }}
+              aria-hidden={gitSha ? undefined : true}
+            >
+              {gitSha ? gitSha.slice(0, 7) : "0000000"}
+            </span>
           )}
           <button className="rail-user" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
             {picture ? (

@@ -476,8 +476,23 @@ def test_the_prompt_stays_small_enough_to_send_on_every_message():
     #
     # Left as tight as the old ones — about 50 characters of headroom — so the
     # next thing that grows the prompt is also a decision and not a drift.
+    # Raised from 3080 when magpie landed: the `scrape` tool's spec, and the
+    # prompt lines saying what it does, that a robots or paywall refusal is
+    # final, and that it must be called every time rather than answered from
+    # memory.
+    #
+    # None of those three is decoration. Without the first he does not reach for
+    # it; without the second he treats a refusal as an ordinary failure and asks
+    # again, which is what this feature is metered to prevent; and without the
+    # third he does what he was observed doing — a document was deleted, he was
+    # asked to scrape it twenty seconds later, and he answered "already stored"
+    # from a memory of the previous reply having called no tool at all. A store
+    # that can change under him is exactly what memory must not be trusted for.
+    #
+    # Left as tight as every raise before it, so the next thing that grows this
+    # is a decision rather than a drift.
     overhead = len(agent.SYSTEM_PROMPT) + len(json.dumps(specs(), separators=(",", ":")))
-    assert overhead < 3080
+    assert overhead < 3620
 
 
 # -- the Discord handoff ---------------------------------------------------
@@ -775,3 +790,14 @@ def test_an_unknown_table_comes_back_with_the_list(monkeypatch):
     monkeypatch.setattr(tool_module, "_known_tables", lambda: "public.security public.metric")
     said = dispatch("sql", {"query": "select * from nope"})
     assert "does not exist" in said and "public.security" in said
+
+
+def test_the_prompt_says_a_scrape_is_never_answered_from_memory():
+    # Observed: a document was deleted, Steven was asked to scrape it twenty
+    # seconds later, and he answered "already stored" having called no tool at
+    # all — the audit row for that reply lists an empty tool list. Remembering
+    # the answer to "how does scoring work" is fine; remembering the state of a
+    # store somebody can delete from is not.
+    prompt = agent.SYSTEM_PROMPT.lower()
+    assert "every time" in prompt
+    assert "stale" in prompt or "changes" in prompt

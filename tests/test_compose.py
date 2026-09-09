@@ -27,6 +27,7 @@ NEEDS_DATABASE = {
     "reddit": "social_item, and the ingest_run rows beside it",
     "skybird": "the control plane -- it polls for a row and writes transcripts",
     "nightly": "it reads and writes every table the pipeline touches",
+    "magpie": "magpie.document and magpie.attempt, which is also its spend meter",
 }
 
 # Every service that must NOT be handed one, each for a stated reason.

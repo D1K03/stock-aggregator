@@ -70,6 +70,12 @@ jobs:
             file: deploy/Dockerfile.transcribe
           # Live stream capture. Root context again for the package, own
           # Dockerfile because it apt-installs ffmpeg, which nothing else wants.
+          # The scraper. Its own image for trafilatura and lxml, and because it
+          # is the only container that holds the Bright Data credentials.
+          - name: magpie
+            image: stock-aggregator-magpie
+            context: .
+            file: deploy/Dockerfile.magpie
           - name: skybird
             image: stock-aggregator-skybird
             context: .

@@ -45,6 +45,12 @@ NEXT_COOKIE = "screener_after_login"
 
 # A dashboard question is a sentence, not an essay. Bounded here so a runaway
 # query string cannot become a bill.
+# A page of each list. Every scrape adds one attempt — including the refused
+# ones, which produce no document — so attempts grow faster than the documents
+# beside them and the two are paged independently.
+ATTEMPT_PAGE = 12
+DOCUMENT_PAGE = 10
+
 MAX_QUESTION = 500
 
 # What the screen description may contribute. Enough for a row and its
@@ -304,6 +310,12 @@ class Handler(BaseHTTPRequestHandler):
         # it sends a Discord message — but a GET that deletes a transcript is
         # one prefetch or one followed link away from deleting it by accident,
         # and that is worth a Content-Length for.
+        elif route == "/api/magpie/scrape":
+            self._magpie_scrape(config)
+
+        elif route == "/api/magpie/delete":
+            self._magpie_delete(config)
+
         elif route == "/api/skybird/start":
             self._skybird_start(config)
         elif route == "/api/skybird/stop":
@@ -969,6 +981,176 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
+    def _magpie(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """What has been gathered, newest first.
+
+        Behind the session for the reason /api/audit is: it names who asked for
+        each page, and a list of what somebody has been reading is not a thing
+        to serve to the internet.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        def wanted(name: str) -> int:
+            try:
+                return max(1, int((query.get(name) or ["1"])[0]))
+            except ValueError:
+                return 1
+
+        docs_page, tries_page = wanted("docs"), wanted("tries")
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                from screener.magpie import store
+
+                documents = store.recent(
+                    conn, limit=DOCUMENT_PAGE, offset=(docs_page - 1) * DOCUMENT_PAGE
+                )
+                documents_total = store.count_documents(conn)
+                with conn.cursor() as cur:
+                    # Paged rather than capped. The attempts list grows on every
+                    # scrape including the refused ones, so a fixed window is a
+                    # list that silently stops being the whole story.
+                    cur.execute("select count(*) from magpie.attempt")
+                    row = cur.fetchone()
+                    total = int(row[0]) if row else 0
+                    cur.execute(
+                        """
+                        select id, url, host, state, reason, strategy, cost_usd,
+                               requested_at, requested_by, document_id
+                          from magpie.attempt
+                         order by requested_at desc, id desc
+                         limit %s offset %s
+                        """,
+                        (ATTEMPT_PAGE, (tries_page - 1) * ATTEMPT_PAGE),
+                    )
+                    attempts = cur.fetchall()
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "documents_page": docs_page,
+                "documents_pages": max(1, -(-documents_total // DOCUMENT_PAGE)),
+                "documents_total": documents_total,
+                "documents": [
+                    {
+                        "id": d.id,
+                        "url": d.url,
+                        "host": d.host,
+                        "title": d.title,
+                        "author": d.author,
+                        "published": d.published.isoformat() if d.published else None,
+                        "word_count": d.word_count,
+                        "strategy": d.strategy,
+                        "fetched_at": d.fetched_at.isoformat(),
+                        # A lead, never the article: the page lists what was
+                        # gathered, and /playground is where it is read.
+                        "lead": d.text[:280],
+                    }
+                    for d in documents
+                ],
+                "attempts": [
+                    {
+                        "id": a[0], "url": a[1], "host": a[2], "state": a[3],
+                        "reason": a[4], "strategy": a[5], "cost_usd": float(a[6]),
+                        "requested_at": a[7].isoformat(), "requested_by": a[8],
+                        "document_id": a[9],
+                    }
+                    for a in attempts
+                ],
+                "attempts_page": tries_page,
+                "attempts_pages": max(1, -(-total // ATTEMPT_PAGE)),
+                "attempts_total": total,
+            },
+        )
+
+    def _magpie_scrape(self, config: AuthConfig) -> None:
+        """Fetch and keep one page, asked for from the dashboard."""
+        login = self._require_login(config)
+        if login is None:
+            return
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        url = body.get("url")
+        if not isinstance(url, str) or not url.strip():
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "give me a link"})
+            return
+
+        from screener.magpie.client import scrape as ask_magpie
+
+        started = time.monotonic()
+        result = ask_magpie(url.strip(), requested_by=login)
+        audit.record(
+            kind="command",
+            operation="magpie.scrape",
+            actor=login,
+            actor_kind="github",
+            outcome="ok" if result.ok else "refused",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            detail={"host": url.strip()[:120], "reason": result.reason},
+        )
+
+        if result.ok:
+            self._respond(HTTPStatus.CREATED, {"document": result.document})
+            return
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "reason": result.reason,
+                "detail": result.detail,
+                "attempts": list(result.attempts),
+            },
+        )
+
+    def _magpie_delete(self, config: AuthConfig) -> None:
+        """Stop keeping one document.
+
+        The attempts that produced it stay: the record that a page was fetched,
+        by whom and at what cost outlives the decision to stop keeping its text,
+        and without it a link that had already been paid for would look new.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        document_id = body.get("id")
+        if not isinstance(document_id, int):
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "which document?"})
+            return
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                from screener.magpie import store
+
+                removed = store.forget(conn, document_id)
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        audit.record(
+            kind="command",
+            operation="magpie.delete",
+            actor=login,
+            actor_kind="github",
+            outcome="ok" if removed else "error",
+            detail={"document_id": document_id},
+        )
+        if not removed:
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "no such document"})
+            return
+        self._respond(HTTPStatus.OK, {"deleted": document_id})
+
     def _skybird_start(self, config: AuthConfig) -> None:
         """Ask for a capture. The supervisor picks it up within a poll."""
         login = self._require_login(config)
@@ -1220,6 +1402,9 @@ class Handler(BaseHTTPRequestHandler):
 
         elif route == "/api/playground":
             self._playground(config)
+        elif route == "/api/magpie":
+            self._magpie(config, query)
+
         elif route == "/api/skybird":
             self._skybird_sessions(config)
 

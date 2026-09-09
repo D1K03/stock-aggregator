@@ -69,6 +69,7 @@ def empty_db(db_url):
         conn.execute("drop schema if exists audit cascade")
         conn.execute("drop schema if exists skybird cascade")
         conn.execute("drop schema if exists mcp cascade")
+        conn.execute("drop schema if exists magpie cascade")
         conn.execute("create schema public")
         yield conn
 

@@ -63,6 +63,19 @@ services:
   # Same image as `api`, so it has to be told to use the one just built rather
   # than pulling the published one — which is how a local run silently tests
   # last week's code.
+  magpie:
+    # Built here rather than pulled, like everything else local. Context is
+    # relative to this file, not to where the command was run.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.magpie
+      args:
+        GIT_SHA: local
+    image: stock-aggregator-magpie:local
+    env_file:
+      - path: local.env
+        required: false
+
   reddit:
     image: stock-aggregator:local
     env_file:

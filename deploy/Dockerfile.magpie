@@ -1,0 +1,38 @@
+# The scraper. Its own image because of one dependency: trafilatura, and the
+# lxml it brings.
+#
+# Not the transcriber's weight class — that image carries ctranslate2,
+# onnxruntime and PyAV, which together are larger than everything else in this
+# repository. This is about fifteen megabytes. What earns it a separate image is
+# not the size but where the credentials live: this is the only process that may
+# reach Bright Data, so it is the only process whose fetches can cost anything,
+# and the api and bot images stay on the three runtime dependencies they had.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+ARG GIT_SHA=unknown
+ENV SCREENER_GIT_SHA=$GIT_SHA
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN pip install --no-cache-dir ".[scrape]"
+
+# Non-root, and the same uid the other images use.
+#
+# The data directory is created and handed over before dropping privileges,
+# because `BLOB_LOCAL_DIR` defaults to a relative `data/blobs` and a non-root
+# process cannot create it under /app. Production writes to R2 and never touches
+# this; local development and the fallback path both do.
+RUN useradd -u 10001 -m screener \
+    && mkdir -p /app/data/blobs \
+    && chown -R screener:screener /app/data
+USER screener
+
+EXPOSE 8082
+CMD ["python", "-m", "screener.magpie"]

@@ -114,6 +114,49 @@ each URL as an independent call, so there is no jar to keep.
 
 ---
 
+## Scraping a page
+
+`screener.magpie` — a link in, an article out.
+
+```python
+from screener.magpie.client import scrape      # what api and bot import
+result = scrape("https://example.com/a-piece", requested_by="ehewes")
+```
+
+**The ladder is the one above.** Magpie names `direct, isp_proxy, unlocker` and
+`screener.fetch` does the escalating; what magpie adds is whether the site
+permits it, what counts as a page rather than a block, what it cost, and where
+it goes. It is the first and only caller in the project that names `unlocker`.
+
+| It stops at | Because |
+|---|---|
+| robots.txt disallows | Escalating would turn respecting robots.txt into routing around it |
+| the body is not a page | `FetchResult` has no Content-Type, so a PDF is mojibake and the ladder would pay to fail |
+| the publisher says it is not free | "The same bytes a browser gets" does not stretch to getting past a subscription check |
+
+Everything else escalates, including a 200 that is really a challenge page —
+that is a `validate` callback rejecting the body, which is what turns a soft
+block into a fallback rather than a stored interstitial.
+
+**What it costs.** Only the last rung. `MAGPIE_UNLOCKER_DAILY_MAX` (default 20)
+caps billed fetches a day, counted out of `magpie.attempt`. Deliberately not
+`DAILY_SPEND_CAP_USD`: that is $0.10 against a reply costing $0.00005, so fifty
+scrapes would empty it and Steven would stop answering. The spend is still on
+`/audit`; the count is the gate. An unreadable meter drops the billed rung and
+tries the free ones, so it fails closed without failing shut.
+
+**Where it lands.** `magpie.document` is one row per canonical URL — tracking
+parameters stripped, so one article shared from three places is one row — and
+`magpie.attempt` is every try including the refusals, which is what stops the
+same dead link being fetched again by whoever asks next. Both are readable in
+`/playground`, by Steven, and by the claude.ai connector. The page as fetched is
+gzipped into the blob store as evidence.
+
+**Do not** point it at a login, a paywall or anything needing a cookie. It holds
+no credentials and is not meant to.
+
+---
+
 ## The payload store
 
 `screener.blobs` — two verbs against one bucket.

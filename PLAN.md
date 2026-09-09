@@ -282,6 +282,17 @@ Each needs its own brainstorm → spec → plan cycle; they are too big for one.
 3. **Diff and alerting** — crossing detection against the last comparable snapshot, cooldown,
    the Discord POST.
 
+## Magpie
+
+Built. A link in, an article out, over the ladder `screener.fetch` already had and nothing had
+ever used. `docs/specs/2026-09-09-magpie-scraping.md`. Deliberately not in it: crawling outward,
+accounts and browser-level acting, and summarisation. What exists is one URL in and one document
+out, readable on `/magpie` and queryable in `/playground` by all three roles.
+
+The crawl is the next cycle and the shape is already laid: `magpie.attempt` has the state column
+and the partial index on the live states that a supervisor polls, which is `skybird`'s control
+plane. That phase is a new process and a compose block rather than a migration over live rows.
+
 ## Carried forward
 
 - **The `emits_alerts = false` skip has no regression test.** Postgres cannot express it as a
