@@ -9,9 +9,30 @@
 # `docker compose down` leaves nothing behind. A separate service with a volume
 # will be needed once ingest exists and there is real data worth keeping.
 
+# Named, and deliberately not the directory default. Compose derives a project
+# name from the directory when none is given, which here is `stock-aggregator` --
+# the same name `deploy/compose.prod.yaml` declares. Two stacks sharing one project
+# name do not coexist: bringing either up makes Compose reconcile the other's
+# container as its own and recreate it, so starting the app stack silently
+# destroyed the test database, and starting the tests took the app's Postgres
+# away from it. Distinct names let both run at once, on their own ports.
+name: stock-aggregator-test
+
 services:
   postgres:
     image: postgres:16
+    # `pytest` runs one worker per core and each worker builds its own database,
+    # so every partitioned table's locks are multiplied by the core count. The
+    # 64-lock default is enough for CI's 2-core runner and runs out on a
+    # developer machine -- 24 workers turn a green suite into 357 errors of
+    # "out of shared memory", which reads as a code fault rather than a setting.
+    # CI does not need this and is not harmed by it.
+    command:
+      - postgres
+      - -c
+      - max_locks_per_transaction=512
+      - -c
+      - max_connections=300
     environment:
       POSTGRES_PASSWORD: screener
       POSTGRES_DB: screener_test

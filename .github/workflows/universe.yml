@@ -1,0 +1,84 @@
+# Seed or reconcile the ticker universe on the VPS, by hand.
+#
+# `screener.universe load` is deliberately a manual, roughly quarterly command:
+# the committed CSV is the review surface, and a sector reclassification moves a
+# ticker between peer groups, so it has to show up in a diff before it can move
+# a score. That makes it exactly the kind of thing that needs a way to be run
+# without a shell on the box -- the VPS holds no checkout, and its SSH key lives
+# only in this repository's secrets.
+#
+# Nothing here is scheduled. The nightly scheduler runs the pipeline; it reads
+# whatever universe is already loaded and never writes one, so a database with
+# an empty `security` table scores nothing until this has been run once.
+name: Universe
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Plan only — print what would change and write nothing.
+        type: boolean
+        required: false
+        default: true
+      force:
+        description: Apply even if more than 10% of the active universe would retire.
+        type: boolean
+        required: false
+        default: false
+
+# Shares the deploy lock. A load racing a rollout would run the old image's
+# loader against the new image's schema, or the reverse.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the Tailscale key has not expired
+        run: |
+          EXPIRES=2026-12-03
+          LEFT=$(( ( $(date -u -d "$EXPIRES" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "TS_AUTHKEY expires $EXPIRES — $LEFT day(s) left"
+          if [ "$LEFT" -lt 0 ]; then
+            echo "::error::TS_AUTHKEY expired on $EXPIRES. Joining the tailnet will fail with a timeout that looks like a network fault."
+            exit 1
+          fi
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Load the universe
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE: ${{ inputs.force }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: DRY_RUN,FORCE
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VPS_APP_DIR }}
+            COMPOSE="docker compose --env-file .env -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml"
+
+            # `if` rather than `[ ... ] && ...`: under `set -e` a false test as
+            # the final command of a script exits non-zero, which would report a
+            # clean plan-only run as a failed job.
+            ARGS=""
+            if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+            if [ "$FORCE" = "true" ]; then ARGS="$ARGS --force"; fi
+
+            # `data/universe.csv` ships in the image; the box has no checkout.
+            # Fail with the reason rather than the loader's FileNotFoundError.
+            if ! $COMPOSE exec -T api test -f data/universe.csv; then
+              echo "::error::data/universe.csv is not in the running image. Deploy a build that includes it before loading."
+              exit 1
+            fi
+
+            $COMPOSE exec -T api python -m screener.universe load $ARGS
