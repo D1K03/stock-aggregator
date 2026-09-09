@@ -18,13 +18,17 @@ from screener.nightly.config import (
     DEFAULT_TRIGGER_HOUR,
     NightlyConfig,
 )
+from screener.nightly.night import NightReport, already_scored, run_night
 from screener.nightly.schedule import is_due, next_trigger
 
 __all__ = [
     "BACKOFF_SECONDS",
     "DEFAULT_ATTEMPTS",
     "DEFAULT_TRIGGER_HOUR",
+    "NightReport",
     "NightlyConfig",
+    "already_scored",
     "is_due",
     "next_trigger",
+    "run_night",
 ]
