@@ -14,7 +14,8 @@ the schema, the pipeline and CI/CD.
 
 The database schema, the infrastructure layer and daily ingest — **price and fundamentals** — are
 built and tested; scoring is built for the Momentum pillar and writes snapshots with alerting
-switched off, and no ratio consumes a fundamental fact yet. No alerting code exists yet. Runtime
+switched off, and no ratio consumes a fundamental fact yet. The pipeline now runs on its own,
+once a night, rather than by hand. No alerting code exists yet. Runtime
 dependencies are `psycopg`, `httpx` and `discord.py`, and nothing else — check `pyproject.toml`
 before assuming a library is available. `faster-whisper` and `yt-dlp` are extras (`voice`,
 `stream`) that one image each installs, and both are imported inside a function so the rest of
@@ -124,6 +125,11 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   (migration 020) is what stops it holding the date; one it cannot — a kill, an OOM — leaves
   `outcome = 'running'`, and the next run's `reconcile` settles it, the way skybird settles a
   capture left by a dead supervisor.
+- Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
+  UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
+  given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
+  container back to exit again, so re-enabling needs the container recreated
+  (`docker compose up -d nightly`) rather than just a restart.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves
@@ -283,6 +289,17 @@ nothing outside imports a submodule directly.
   forwards in time. `read_facts` is the point-in-time read and **includes
   `period_type`**: a fiscal Q4 ends when its fiscal year does, so without it a
   year collapses into its own last quarter.
+- `screener.nightly` — the scheduler, in a container of its own. One pass of the pipeline a
+  night at 23:00 UTC: prices, fundamentals, then scoring, in that order, because ordering by
+  construction beats ordering by clock arithmetic. **23:00 rather than the schema spec's 02:00**
+  — `--as-of` refuses a past date, so a run after midnight scores a day whose market has not
+  opened rather than the one that just closed. Clock-aligned rather than a bare interval, which
+  would drift five hours a month past the hour the design turns on, and it asks on boot whether
+  tonight is already scored, so a deploy at 23:03 finishes the night instead of losing that date
+  for good. Scoring is skipped when prices wholly failed, because `cutoff_offset` filters on
+  `observed_at` and yesterday's bars would otherwise produce a complete-looking snapshot of stale
+  data. A partial ingest is a success: `CWEN-A` fails every night, and a channel that cries wolf
+  nightly is one nobody reads.
 - `screener.scoring` — bars into percentiles, a pillar score and a dated snapshot. Five pure
   modules and two that open a connection, as `screener.ingest` splits `parse` from `load`.
   One pillar this cycle: prices give Momentum and nothing else, so `weight_version` v1 is

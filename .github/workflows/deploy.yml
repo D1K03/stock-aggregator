@@ -211,7 +211,7 @@ jobs:
                 # notice it crash-looping on a token that never reached
                 # Infisical. Give it a moment to fail, then insist it is up.
                 sleep 15
-                for svc in bot transcribe reddit skybird; do
+                for svc in bot transcribe reddit skybird nightly; do
                   if ! $COMPOSE ps --status running --services | grep -qx "$svc"; then
                     echo "::error::the $svc container is not running"
                     $COMPOSE logs --tail=60 "$svc"

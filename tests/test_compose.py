@@ -26,6 +26,7 @@ NEEDS_DATABASE = {
     "bot": "the spend cap, Steven's memory, the audit trail, the skybird tools",
     "reddit": "social_item, and the ingest_run rows beside it",
     "skybird": "the control plane -- it polls for a row and writes transcripts",
+    "nightly": "it reads and writes every table the pipeline touches",
 }
 
 # Every service that must NOT be handed one, each for a stated reason.

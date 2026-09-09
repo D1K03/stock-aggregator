@@ -45,6 +45,7 @@ flowchart LR
         tr["transcribe<br/>ghcr.io/d1k03/stock-aggregator-transcribe<br/>faster-whisper, expose 8081"]
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
         rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
+        night["nightly<br/>same image as api<br/>python -m screener.nightly"]
         pg[("postgres:16<br/>named volume pg_data")]
     end
 
@@ -73,6 +74,7 @@ flowchart LR
     bot --> pg
     sky --> pg
     rdt --> pg
+    night --> pg
     api --> infisical
     api --> ghoauth
     api --> router
@@ -81,6 +83,8 @@ flowchart LR
     bot --> router
     bot --> dgw
     rdt --> infisical
+    night --> infisical
+    night -->|"only when a night is given up"| drest
 ```
 
 Two edges are the ones people get wrong.
@@ -110,6 +114,14 @@ control plane" means in this picture — the arrow from the dashboard to a runni
 capture goes through `pg`, not across the network. It has no healthcheck for the
 same reason the bot has none, and it holds a Postgres advisory lock so a second
 copy stands by rather than capturing the same stream twice.
+
+**`nightly` has no port either, and calls out rather than being called.** It
+wakes once a day, runs prices, fundamentals and scoring in order, and reaches
+Discord only through the same webhook `drest` denotes — a single POST when a
+night is given up, never on a quiet success. No healthcheck for the same
+reason `bot` and `skybird` have none: it spends nearly all its life asleep,
+and a check that cannot tell "waiting for 23:00" from "wedged" would restart a
+container that was about to do its job.
 
 **`api` answers claude.ai as well as the browser.** The connector is not a
 container of its own, and could not be: its OAuth consent screen needs the
@@ -233,6 +245,7 @@ flowchart TD
     ingest["ingest<br/>prices + sweep"]
     scoring["scoring<br/>five pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
+    nightly["nightly<br/>config + schedule + night + __main__"]
 
     boot --> settings
     boot --> secrets
@@ -281,14 +294,23 @@ flowchart TD
     audit --> settings
     health -.->|"lazy, inside a request handler"| skybird
     skybird --> settings
+
+    nightly --> settings
+    nightly --> secrets
+    nightly --> blobs
+    nightly --> ingest
+    nightly --> scoring
+    nightly --> notify
 ```
 
 Two asymmetries are worth reading off it.
 
-**`screener.notify` has exactly one consumer**, `boot/selftest.py`, and even
-that only reads its configuration. Nothing sends an alert, because the alerting
-code is not written yet — the package is a delivery mechanism waiting for
-something to deliver.
+**`screener.notify` has two consumers now, and only one that sends anything.**
+`boot/selftest.py` still only reads its configuration. `screener.nightly` is
+the first thing that calls `send` — not the alerting cycle DESIGN.md describes
+(no `alert_rule`, no crossing, no `emits_alerts`), but a lost night reported
+through the same webhook, because building a second delivery mechanism for
+one message a day would be its own kind of waste.
 
 **`bot` and `health` depend on each other**, but on different leaves and in
 different ways. `health.server` reaches `bot.agent`, `bot.handoff` and
