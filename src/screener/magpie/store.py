@@ -318,13 +318,17 @@ def reconcile(conn: psycopg.Connection) -> int:
     needed here, a container that could not write a blob left two attempts
     reading 'running' for ever, and nothing in the interface could tell them
     from a fetch still in flight.
+
+    The reason is `restarted` and not `all_strategies_failed`, which is what it
+    used to write. No route was tried, so saying every route failed sent the
+    next person looking at the web when the answer was a deploy.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
             update magpie.attempt
-               set state = 'failed', reason = 'all_strategies_failed',
-                   error = 'the scraper restarted while this was in flight',
+               set state = 'failed', reason = 'restarted',
+                   error = 'the scraper was replaced before this was fetched',
                    finished_at = now()
              where state in ('requested', 'running')
             """

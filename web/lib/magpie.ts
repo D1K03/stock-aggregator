@@ -177,6 +177,7 @@ export const WHY: Record<string, string> = {
   not_a_page: "that address is a file, not a web page",
   too_short: "the page came back, but there was no article in it",
   all_strategies_failed: "every route to it failed",
+  restarted: "the scraper was replaced before it could fetch this, so try again",
   unlocker_capped: "every free route failed and the paid one is at its daily limit",
   unavailable: "the scraper is not running",
 };
