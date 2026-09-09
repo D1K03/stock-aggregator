@@ -413,3 +413,55 @@ def test_re_reading_a_page_does_not_forget_what_was_already_followed(fresh_db, b
     link = store.links_for(fresh_db, source.id)[0]
     assert link["scraped_id"] == produced.id
     assert link["anchor"] == "A Study, revised" and link["occurrences"] == 4
+
+
+def test_a_page_that_cannot_be_kept_settles_the_attempt_rather_than_stranding_it(fresh_db):
+    # The fetch worked and the store did not, which is the case none of the
+    # handlers in `scrape` anticipated: the exception went out past all of them,
+    # nothing settled the row, and the attempt read 'running' for ever. On the
+    # interface that is indistinguishable from a scrape still in flight, so a
+    # bucket name nobody could write to looked like a slow page.
+    from screener.blobs import BlobStore, BlobWriteFailed
+    from screener.magpie import robots
+    from screener.magpie.config import MagpieConfig
+    from screener.magpie.run import scrape
+
+    class Full(BlobStore):
+        def put(self, path: str, data: bytes) -> None:
+            raise BlobWriteFailed(f"PUT {path} returned 400 InvalidBucketName")
+
+        def get(self, path: str) -> bytes:
+            raise AssertionError("nothing was written to read back")
+
+    page = "<html><head><title>T</title></head><body><article><p>{}</p></article></body></html>".format(
+        " ".join(f"word{i}" for i in range(200))
+    )
+
+    def site(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="")
+        return httpx.Response(200, text=page)
+
+    robots.forget()
+    # A literal public address, so the reachability guard needs no DNS. Nothing
+    # is ever sent to it: the transport answers every request.
+    outcome = scrape(
+        "http://93.184.216.34/a",
+        config=MagpieConfig(strategies=("direct",), host_delay=0.0),
+        conn=fresh_db,
+        blobs=Full(),
+        transport=httpx.MockTransport(site),
+    )
+    robots.forget()
+
+    assert outcome.document is None
+    assert outcome.refused is not None
+    # Not `all_strategies_failed`: the route worked. Saying otherwise sends the
+    # next person to look at the site when the fault is ours.
+    assert outcome.refused.reason == "not_stored"
+
+    with fresh_db.cursor() as cur:
+        cur.execute("select state, reason, error from magpie.attempt order by id desc limit 1")
+        state, reason, error = cur.fetchone()
+    assert (state, reason) == ("failed", "not_stored")
+    assert "InvalidBucketName" in error

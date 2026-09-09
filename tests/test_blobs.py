@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -115,3 +116,27 @@ def test_a_missing_credential_is_a_clear_error_not_a_403():
     config = BlobConfig(backend="s3", endpoint="https://e", bucket="b")
     with pytest.raises(RuntimeError, match="BLOB_S3_"):
         S3Store(config)
+
+
+def test_a_bucket_name_that_cannot_exist_is_refused_at_startup():
+    # R2 answers a name with an underscore with 400 InvalidBucketName, on every
+    # write, for ever. One character in a secret store stopped every payload
+    # reaching the bucket, and the store carried on constructing happily.
+    transport, seen = recorder()
+    config = s3_config()
+    with pytest.raises(RuntimeError, match="not a valid bucket name"):
+        S3Store(replace(config, bucket="screener_blobs"), transport=transport)
+    assert seen == []
+
+
+def test_a_refusal_repeats_what_the_store_called_it():
+    # "returned 400" is true of a misspelt bucket, an unsigned payload and a
+    # malformed key alike. The store's own code is the whole diagnosis.
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?><Error>'
+        "<Code>InvalidBucketName</Code><Message>The specified bucket name is not valid."
+        "</Message></Error>"
+    )
+    transport, _ = recorder(status=400, body=body.encode())
+    with pytest.raises(BlobWriteFailed, match="InvalidBucketName"):
+        S3Store(s3_config(), transport=transport, now=lambda: WHEN).put("a/b.json.gz", b"x")

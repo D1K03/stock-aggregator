@@ -32,6 +32,7 @@ _WHY = {
     "too_short": "the page came back but there was no article in it",
     "all_strategies_failed": "every route to it failed",
     "restarted": "the scraper restarted before it could fetch that, so it is worth another go",
+    "not_stored": "I reached the page but could not keep it, which is a fault our end rather than the site's",
     "unlocker_capped": "every free route failed and the paid one is over its daily limit",
     "unavailable": "the store is not reachable",
 }
