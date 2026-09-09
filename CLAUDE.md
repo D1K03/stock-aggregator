@@ -92,7 +92,12 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   default: one worker per core, each creating its own database in that server,
   because twenty migrations cost ~320ms and every database test pays it. `-n0`
   puts it back on one process for a debugger or a failure that needs reading in
-  order.
+  order. **Export the variable** — nothing loads `.env` into pytest, and an
+  unset one skips every database test while still reporting green (CI sets it
+  and fails rather than skipping, so this is a local trap only). The Postgres
+  it points at is `compose.yaml`'s, which raises `max_locks_per_transaction`:
+  one worker per core times a partitioned database exhausts the 64-lock default
+  on any machine with more cores than a CI runner.
 - Single test: `pytest tests/test_identity.py::test_overlapping_symbol_periods_for_one_security_are_rejected -v`
 - Typecheck: `pyright` — must report zero errors. psycopg types query parameters as
   `LiteralString`, so SQL assembled at runtime is rejected by design: build DDL with

@@ -26,6 +26,14 @@ RUN pip install --no-cache-dir .
 # and diffs, not something importable.
 COPY migrations ./migrations
 
+# The ticker universe, for the same reason the migrations ship as files: it is
+# a review surface the operator reads and diffs, and `screener.universe load`
+# resolves it relative to the working directory (`--data-dir`, default `data/`).
+# Without it the box cannot seed its own universe -- only compose files travel
+# to the VPS, so there is no checkout there to read the CSV from, and a night
+# with an empty `security` table scores nothing.
+COPY data ./data
+
 # Non-root. Nothing here writes to disk — the database has its own volume and
 # secrets stay in the environment — so the filesystem can stay owned by someone
 # else.
