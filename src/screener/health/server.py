@@ -316,6 +316,9 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/magpie/delete":
             self._magpie_delete(config)
 
+        elif route == "/api/magpie/follow":
+            self._magpie_follow(config)
+
         elif route == "/api/skybird/start":
             self._skybird_start(config)
         elif route == "/api/skybird/stop":
@@ -1070,6 +1073,123 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
+    def _magpie_document(
+        self, config: AuthConfig, query: dict[str, list[str]]
+    ) -> None:
+        """One document, the sites it points at, and the links to them.
+
+        All three in one answer, for the reason `_skybird_transcript` gives: a
+        detail view that had to hold a copy from the list as well would show a
+        stale one the moment anything changed.
+
+        The links are read on the first visit and remembered after, so opening a
+        document is the only thing that ever expands it and opening it twice
+        costs nothing. Reading them opens no socket: the page is already in the
+        blob store.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        document_id = _number(query, "id")
+        if document_id is None:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "which document?"})
+            return
+        host = (query.get("host") or [""])[0].strip() or None
+
+        from screener.magpie import client as magpie_client
+        from screener.magpie import store as magpie_store
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                document = magpie_store.document(conn, document_id)
+                if document is None:
+                    self._respond(HTTPStatus.NOT_FOUND, {"error": "no such document"})
+                    return
+                already = magpie_store.links_read(conn, document_id)
+
+            # Outside the connection, because expanding opens one of its own in
+            # the scraper container and holding two while it parses is a
+            # connection kept for nothing.
+            read = True if already else magpie_client.expand(document_id) is not None
+
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                sites = magpie_store.sites_for(conn, document_id)
+                links = magpie_store.links_for(conn, document_id, host)
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "document": {
+                    "id": document.id,
+                    "url": document.url,
+                    "canonical_url": document.canonical_url,
+                    "host": document.host,
+                    "title": document.title,
+                    "author": document.author,
+                    "published": document.published.isoformat() if document.published else None,
+                    "word_count": document.word_count,
+                    "strategy": document.strategy,
+                    "fetched_at": document.fetched_at.isoformat(),
+                    # The whole article here, unlike the list, which sends a
+                    # lead. This is the page for reading what was kept.
+                    "text": document.text,
+                },
+                "sites": sites,
+                "links": links,
+                # False when the stored page could not be read. The document is
+                # still shown; the sources list says why it is empty.
+                "links_read": read,
+            },
+        )
+
+    def _magpie_follow(self, config: AuthConfig) -> None:
+        """Scrape one link a document points at.
+
+        The same path as a link somebody pasted, metered the same way. One
+        link, once, because somebody clicked it.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        link_id = body.get("link_id")
+        if not isinstance(link_id, int) or isinstance(link_id, bool) or link_id <= 0:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "which link?"})
+            return
+
+        from screener.magpie.client import follow
+
+        started = time.monotonic()
+        result = follow(link_id, requested_by=login)
+        audit.record(
+            kind="command",
+            operation="magpie.follow",
+            actor=login,
+            actor_kind="github",
+            outcome="ok" if result.ok else "refused",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            detail={"link_id": link_id, "reason": result.reason},
+        )
+
+        if result.ok:
+            self._respond(HTTPStatus.CREATED, {"document": result.document})
+            return
+        self._respond(
+            HTTPStatus.OK,
+            {"reason": result.reason, "detail": result.detail,
+             "attempts": list(result.attempts)},
+        )
+
     def _magpie_scrape(self, config: AuthConfig) -> None:
         """Fetch and keep one page, asked for from the dashboard."""
         login = self._require_login(config)
@@ -1404,6 +1524,9 @@ class Handler(BaseHTTPRequestHandler):
             self._playground(config)
         elif route == "/api/magpie":
             self._magpie(config, query)
+
+        elif route == "/api/magpie/document":
+            self._magpie_document(config, query)
 
         elif route == "/api/skybird":
             self._skybird_sessions(config)

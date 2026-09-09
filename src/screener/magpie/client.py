@@ -44,6 +44,33 @@ def enabled() -> bool:
     return bool(os.environ.get("MAGPIE_URL", DEFAULT_URL))
 
 
+def _post(path: str, payload: dict, client: httpx.Client | None = None) -> dict | None:
+    """One call to the scraper. `None` when it could not be reached at all."""
+    try:
+        if client is not None:
+            response = client.post(path, json=payload, timeout=TIMEOUT)
+        else:
+            with httpx.Client(base_url=magpie_url(), timeout=TIMEOUT) as owned:
+                response = owned.post(path, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except Exception as exc:
+        logger.warning("magpie is not answering %s: %s", path, type(exc).__name__)
+        return None
+
+
+def _scraped(body: dict | None) -> Scraped:
+    if body is None:
+        return Scraped(reason="unavailable", detail="the scraper is not reachable")
+    if body.get("document"):
+        return Scraped(document=body["document"])
+    return Scraped(
+        reason=body.get("reason", "failed"),
+        detail=body.get("detail", ""),
+        attempts=tuple(body.get("attempts") or ()),
+    )
+
+
 def scrape(url: str, *, requested_by: str | None = None, client: httpx.Client | None = None) -> Scraped:
     """Ask for one document. Never raises.
 
@@ -51,23 +78,24 @@ def scrape(url: str, *, requested_by: str | None = None, client: httpx.Client | 
     to say why rather than to handle an error — and a scraper whose ordinary
     outcomes are exceptions gets wrapped in a bare `except` by its second caller.
     """
-    payload = {"url": url, "requested_by": requested_by}
-    try:
-        if client is not None:
-            response = client.post("/scrape", json=payload, timeout=TIMEOUT)
-        else:
-            with httpx.Client(base_url=magpie_url(), timeout=TIMEOUT) as owned:
-                response = owned.post("/scrape", json=payload)
-        response.raise_for_status()
-        body = response.json()
-    except Exception as exc:
-        logger.warning("magpie is not answering: %s", type(exc).__name__)
-        return Scraped(reason="unavailable", detail="the scraper is not reachable")
+    return _scraped(_post("/scrape", {"url": url, "requested_by": requested_by}, client))
 
-    if body.get("document"):
-        return Scraped(document=body["document"])
-    return Scraped(
-        reason=body.get("reason", "failed"),
-        detail=body.get("detail", ""),
-        attempts=tuple(body.get("attempts") or ()),
+
+def expand(document_id: int, *, client: httpx.Client | None = None) -> int | None:
+    """Read a stored document for the sites it points at.
+
+    `None` when the scraper could not be reached or the stored page is gone. The
+    caller shows the document either way: a page whose links cannot be read is
+    still a page worth reading.
+    """
+    body = _post("/links", {"document_id": document_id}, client)
+    if body is None or "links" not in body:
+        return None
+    return int(body["links"])
+
+
+def follow(link_id: int, *, requested_by: str | None = None, client: httpx.Client | None = None) -> Scraped:
+    """Scrape one link somebody clicked."""
+    return _scraped(
+        _post("/follow", {"link_id": link_id, "requested_by": requested_by}, client)
     )

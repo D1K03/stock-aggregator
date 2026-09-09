@@ -9,12 +9,15 @@ import gzip
 import hashlib
 import logging
 import re
+from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
+from typing import Any
 import psycopg
+from psycopg import sql
 
 from screener.blobs import BlobStore, check
-from screener.magpie.models import Document, Extracted
+from screener.magpie.models import Document, Extracted, Reference
 from screener.magpie.urls import canonical, host_of
 
 logger = logging.getLogger(__name__)
@@ -346,3 +349,162 @@ def forget(conn: psycopg.Connection, document_id: int) -> bool:
     with conn.cursor() as cur:
         cur.execute("delete from magpie.document where id = %s", (document_id,))
         return cur.rowcount == 1
+
+
+def save_links(
+    conn: psycopg.Connection, document_id: int, found: Sequence[Reference]
+) -> int:
+    """Record what a document points at, and stamp it as read.
+
+    The stamp is written whether or not there were any links, because an article
+    that genuinely cites nothing and one nobody has opened are different states.
+    Without it the second is indistinguishable from the first and the stored
+    page gets parsed again on every page view.
+    """
+    with conn.cursor() as cur:
+        if found:
+            cur.executemany(
+                """
+                insert into magpie.link (document_id, url, host, anchor, occurrences)
+                values (%s, %s, %s, %s, %s)
+                on conflict (document_id, url) do update set
+                    anchor = excluded.anchor,
+                    occurrences = excluded.occurrences
+                """,
+                [
+                    (document_id, r.url, r.host, r.anchor or None, r.occurrences)
+                    for r in found
+                ],
+            )
+        cur.execute(
+            "update magpie.document set links_read_at = now() where id = %s",
+            (document_id,),
+        )
+    return len(found)
+
+
+def links_read(conn: psycopg.Connection, document_id: int) -> bool:
+    """Whether this document's stored page has already been parsed for links."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select links_read_at is not null from magpie.document where id = %s",
+            (document_id,),
+        )
+        row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def sites_for(conn: psycopg.Connection, document_id: int) -> list[dict[str, Any]]:
+    """The sites a document points at, most-cited first.
+
+    Grouped in SQL rather than in Python because the grouping *is* the read: a
+    document with two hundred links to a hundred sites is unreadable as a list
+    of links and obvious as a list of sites.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select host,
+                   count(*) as links,
+                   sum(occurrences) as mentions,
+                   count(scraped_id) as followed,
+                   min(anchor) filter (where anchor is not null and anchor <> '')
+            from magpie.link
+            where document_id = %s
+            group by host
+            order by count(*) desc, host
+            """,
+            (document_id,),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "host": host,
+            "links": int(links),
+            "mentions": int(mentions or 0),
+            "followed": int(followed or 0),
+            "example": example or "",
+        }
+        for host, links, mentions, followed, example in rows
+    ]
+
+
+def links_for(
+    conn: psycopg.Connection, document_id: int, host: str | None = None
+) -> list[dict[str, Any]]:
+    """Every link of a document, or only those pointing at one site."""
+    clause = sql.SQL(" and host = %s") if host else sql.SQL("")
+    params: list[Any] = [document_id]
+    if host:
+        params.append(host)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL(
+                """
+                select id, url, host, coalesce(anchor, ''), occurrences, scraped_id
+                from magpie.link
+                where document_id = %s{}
+                order by occurrences desc, id
+                """
+            ).format(clause),
+            params,
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": link_id,
+            "url": url,
+            "host": host_name,
+            "anchor": anchor,
+            "occurrences": int(occurrences),
+            "scraped_id": scraped_id,
+        }
+        for link_id, url, host_name, anchor, occurrences, scraped_id in rows
+    ]
+
+
+def link(conn: psycopg.Connection, link_id: int) -> dict[str, Any] | None:
+    """One link, by id. What `follow` needs before it fetches anything."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, document_id, url, host, scraped_id from magpie.link where id = %s",
+            (link_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row[0], "document_id": row[1], "url": row[2],
+        "host": row[3], "scraped_id": row[4],
+    }
+
+
+def mark_followed(conn: psycopg.Connection, link_id: int, document_id: int) -> None:
+    """Point a link at the document it produced."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update magpie.link set scraped_id = %s where id = %s",
+            (document_id, link_id),
+        )
+
+
+def document(conn: psycopg.Connection, document_id: int) -> Document | None:
+    """One document, by id, with its text. What the document page reads."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select id, url, host, title, text, word_count, strategy, fetched_at,
+                   author, published, canonical_url, blob_path
+              from magpie.document where id = %s
+            """,
+            (document_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return Document(
+        id=row[0], url=row[1], host=row[2], title=row[3], text=row[4],
+        word_count=row[5], strategy=row[6], fetched_at=row[7], author=row[8],
+        published=row[9], canonical_url=row[10], blob_path=row[11],
+    )

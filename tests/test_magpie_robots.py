@@ -43,6 +43,7 @@ def test_robots_is_read_through_the_fetch_chain_and_not_by_the_stdlib(monkeypatc
     rules = robots.rules(
         "https://example.com/a",
         user_agent="MagpieBot",
+        on_request=None,
         transport=answering("User-agent: *\nAllow: /"),
     )
     assert rules.allowed
@@ -52,6 +53,7 @@ def test_a_disallowed_path_is_not_allowed():
     rules = robots.rules(
         "https://example.com/private/x",
         user_agent="MagpieBot",
+        on_request=None,
         transport=answering("User-agent: *\nDisallow: /private/"),
     )
     assert rules.allowed is False
@@ -78,6 +80,7 @@ def test_a_crawl_delay_the_host_asks_for_is_read_back():
     rules = robots.rules(
         "https://example.com/a",
         user_agent="MagpieBot",
+        on_request=None,
         transport=answering("User-agent: *\nCrawl-delay: 5\nDisallow:"),
     )
     assert rules.crawl_delay == 5.0
@@ -89,16 +92,16 @@ def test_one_host_is_asked_for_its_rules_once_and_then_remembered():
     seen: list[str] = []
     served = answering("User-agent: *\nDisallow: /private/", count=seen)
     for path in ("/a", "/b", "/c"):
-        robots.rules(f"https://example.com{path}", user_agent="MagpieBot", transport=served)
+        robots.rules(f"https://example.com{path}", user_agent="MagpieBot", on_request=None, transport=served)
     assert len(seen) == 1
 
 
 def test_rules_for_a_named_agent_beat_the_general_ones():
     body = "User-agent: *\nDisallow:\n\nUser-agent: MagpieBot\nDisallow: /\n"
     served = answering(body)
-    assert robots.rules("https://e.com/a", user_agent="MagpieBot", transport=served).allowed is False
+    assert robots.rules("https://e.com/a", user_agent="MagpieBot", on_request=None, transport=served).allowed is False
     robots.forget()
-    assert robots.rules("https://e.com/a", user_agent="Other", transport=served).allowed is True
+    assert robots.rules("https://e.com/a", user_agent="Other", on_request=None, transport=served).allowed is True
 
 
 def test_something_that_is_not_a_web_address_is_refused():

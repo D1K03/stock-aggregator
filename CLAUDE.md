@@ -189,6 +189,15 @@ nothing outside imports a submodule directly.
   `DAILY_SPEND_CAP_USD` — a scrape is forty times a reply, and one counter for both would let
   scraping silence Steven. `content_hash` is over the extracted headline and body, never the HTML,
   for the reason `screener.reddit` hashes per item.
+  Opening a document reads its stored page **back out of the blob store** for the sites it points
+  at, which is the first thing here to read a payload rather than only write one, and it opens no
+  socket. The links come from trafilatura's extracted body, not the raw HTML: every anchor on a
+  page includes the site's own furniture, and on one Wikipedia article that is the difference
+  between 248 links led by *Donate* and *Privacy Policy* and 214 real citations. Read once per
+  document and stamped by `links_read_at`, so a document nobody opens is never read.
+  `magpie.link.scraped_id` is the crawler's frontier, `where scraped_id is null` being the queue,
+  and it exists before anything drains it so that cycle is a new process rather than a migration
+  over live rows. **Nothing crawls**: every fetch is still one somebody clicked.
 - `screener.mcp` — claude.ai reading this data as a custom connector, over the
   Model Context Protocol. The transport is Streamable HTTP answered in plain
   JSON: the spec allows a single object in reply to a POST instead of an SSE

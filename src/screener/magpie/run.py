@@ -17,6 +17,7 @@ regretted after it. And the page is only stored once it has proved to be an
 article.
 """
 
+import gzip
 import logging
 import threading
 import time
@@ -30,7 +31,7 @@ from screener.audit import record
 from screener.blobs import BlobStore
 from screener.blobs import store as blob_store
 from screener.config import settings
-from screener.magpie import store
+from screener.magpie import links, store
 from screener.magpie.acquire import NotAPage, NotPermitted, acquire
 from screener.magpie.config import MagpieConfig
 from screener.magpie.extract import NotAnArticle, extract
@@ -239,3 +240,84 @@ def _bill(
             "bytes": len(fetched.html),
         },
     )
+
+
+class PageGone(RuntimeError):
+    """The document exists but the page it was read from does not."""
+
+
+def expand(
+    document_id: int,
+    *,
+    conn: psycopg.Connection | None = None,
+    blobs: BlobStore | None = None,
+) -> int:
+    """Read a stored page for the sites it points at. Returns how many it found.
+
+    **The first thing in this project to read a blob back.** Everything until
+    now wrote payloads as evidence and never opened one; this is the payoff for
+    keeping them, and it means the sites a document cites cost no request at all.
+
+    Idempotent and lazy: a document already stamped returns its stored count
+    without touching the blob store, and a document nobody opens is never read.
+    """
+    if conn is not None:
+        return _expand(document_id, conn, blobs or blob_store())
+    with psycopg.connect(
+        settings().database_url, connect_timeout=CONNECT_TIMEOUT, autocommit=True
+    ) as owned:
+        return _expand(document_id, owned, blobs or blob_store())
+
+
+def _expand(document_id: int, conn: psycopg.Connection, blobs: BlobStore) -> int:
+    if store.links_read(conn, document_id):
+        return len(store.links_for(conn, document_id))
+
+    found = store.document(conn, document_id)
+    if found is None:
+        raise PageGone(f"no document {document_id}")
+
+    try:
+        raw = gzip.decompress(blobs.get(found.blob_path)).decode("utf-8", "replace")
+    except Exception as exc:
+        # Locally the blobs live inside the container and a rebuild takes them
+        # with it; in production they are in R2 and this should not happen. The
+        # document is still readable either way, so this is not fatal to the
+        # page that asked.
+        logger.warning("cannot read the stored page for %s: %s", document_id, exc)
+        raise PageGone("the stored page is no longer available") from exc
+
+    references = links.references(raw, found.url)
+    store.save_links(conn, document_id, references)
+    logger.info(
+        "document %s points at %d sites across %d links",
+        document_id, len({r.host for r in references}), len(references),
+    )
+    return len(references)
+
+
+def follow(
+    link_id: int,
+    *,
+    config: MagpieConfig | None = None,
+    requested_by: str | None = None,
+) -> Outcome:
+    """Scrape one link, and point it at what it produced.
+
+    The same `scrape` path as a link somebody pasted: robots first, the ladder
+    after, the daily meter over the billed rung. Following is one link, once,
+    because somebody clicked it. Nothing here walks.
+    """
+    with psycopg.connect(
+        settings().database_url, connect_timeout=CONNECT_TIMEOUT, autocommit=True
+    ) as conn:
+        found = store.link(conn, link_id)
+        if found is None:
+            return Outcome(refused=Refused(url="", reason="unknown", detail="no such link"))
+
+        outcome = scrape(
+            found["url"], config=config, conn=conn, requested_by=requested_by
+        )
+        if outcome.document is not None:
+            store.mark_followed(conn, link_id, outcome.document.id)
+        return outcome

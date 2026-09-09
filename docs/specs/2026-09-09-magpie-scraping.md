@@ -109,6 +109,20 @@ retries, never throttles, and a source's rate limit is the source's business.
 constant, and `STRATEGIES` is a registry. A Wayback rung before the paid one, or
 a headless rung after it, is one function and one entry. None are added here.
 
+**D11. The scraper has an address policy, and it runs on every hop.** This is
+the only fetcher here whose destination is somebody else's input, and the body
+it fetches is stored and shown back. `screener.magpie.reachable` refuses
+anything that is not on the public internet, and it is installed as a request
+hook rather than run against the submitted URL: with redirects followed, the
+address checked and the address fetched are not the same one, and a page can
+send the client wherever it likes. The same hook covers the robots.txt request,
+which is made before the URL is otherwise permitted.
+
+What it does not defend against is a name that passes and then resolves to
+something else. Pinning the resolved address through the request would close
+that and means replacing the transport rather than inspecting it; recorded as a
+known limit rather than left to look like an oversight.
+
 ## What this deliberately does not do
 
 - **No crawling.** One URL in, one document out. A frontier, a link graph and a

@@ -65,6 +65,21 @@ class Document:
 
 
 @dataclass(frozen=True, slots=True)
+class Reference:
+    """One place a document points at.
+
+    `anchor` is the link's own words, which is the cheapest honest answer to
+    "what is this": the article already described it, and a description written
+    by whoever cited it beats anything we could fetch.
+    """
+
+    url: str
+    host: str
+    anchor: str = ""
+    occurrences: int = 1
+
+
+@dataclass(frozen=True, slots=True)
 class Refused:
     """Why a URL was not fetched.
 

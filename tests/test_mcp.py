@@ -49,7 +49,7 @@ DENIED = {
 # Granting it means article text leaves the box to claude.ai — the same sentence
 # 018 wrote about transcripts, and worth repeating rather than leaving to be
 # discovered. It is public text claude.ai could fetch for itself.
-MAGPIE = {"magpie.attempt", "magpie.document"}
+MAGPIE = {"magpie.attempt", "magpie.document", "magpie.link"}
 
 
 def granted_in_migration() -> set[str]:

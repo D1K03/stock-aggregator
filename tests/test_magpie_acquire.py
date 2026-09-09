@@ -44,7 +44,7 @@ def serving(*, robots_body: str = "", page: str = ARTICLE, code: int = 200):
 
 
 def test_the_ladder_stops_at_the_first_strategy_that_answers():
-    fetched = acquire("https://example.com/a", FREE, transport=serving())
+    fetched = acquire("https://example.com/a", FREE, on_request=None, transport=serving())
     assert fetched.strategy == "direct"
     assert fetched.attempts == ("direct",)
     assert fetched.cost_usd == 0
@@ -63,14 +63,14 @@ def test_a_disallowed_url_is_refused_and_never_escalated(monkeypatch):
         return httpx.Response(200, text=ARTICLE)
 
     with pytest.raises(NotPermitted):
-        acquire("https://example.com/private/a", FREE, transport=transport(handler))
+        acquire("https://example.com/private/a", FREE, on_request=None, transport=transport(handler))
     # Not merely "did not escalate" — the page was never requested at all.
     assert reached == []
 
 
 def test_a_path_the_site_allows_is_fetched():
     served = serving(robots_body="User-agent: *\nDisallow: /private/")
-    assert acquire("https://example.com/public/a", FREE, transport=served).strategy
+    assert acquire("https://example.com/public/a", FREE, on_request=None, transport=served).strategy
 
 
 def test_a_file_is_refused_before_any_request_is_made():
@@ -79,7 +79,7 @@ def test_a_file_is_refused_before_any_request_is_made():
         raise AssertionError("a request was made for a file")
 
     with pytest.raises(NotAPage, match="file"):
-        acquire("https://example.com/report.pdf", FREE, transport=transport(explode))
+        acquire("https://example.com/report.pdf", FREE, on_request=None, transport=transport(explode))
 
 
 def test_something_that_is_not_a_web_address_is_refused():
@@ -119,7 +119,7 @@ def test_a_page_that_says_it_is_not_free_to_read_is_refused_rather_than_paid_for
         "<body><article><p>" + " ".join(["word"] * 200) + "</p></article></body></html>"
     )
     with pytest.raises(NotAPage, match="free to read"):
-        acquire("https://example.com/a", FREE, transport=serving(page=paywalled))
+        acquire("https://example.com/a", FREE, on_request=None, transport=serving(page=paywalled))
 
 
 def test_a_soft_block_on_the_cheap_route_escalates_to_the_next(monkeypatch):
@@ -144,7 +144,7 @@ def test_a_soft_block_on_the_cheap_route_escalates_to_the_next(monkeypatch):
             return httpx.Response(200, text=CHALLENGE)
         return httpx.Response(200, text=ARTICLE)
 
-    fetched = acquire("https://example.com/a", FREE, transport=transport(handler))
+    fetched = acquire("https://example.com/a", FREE, on_request=None, transport=transport(handler))
     assert fetched.strategy == "isp_proxy"
     assert fetched.attempts == ("direct", "isp_proxy")
     # And it stopped there: the billed rung was never reached.

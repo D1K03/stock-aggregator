@@ -9,6 +9,7 @@ asserts the fix rather than assuming it.
 from datetime import date
 from decimal import Decimal
 
+import httpx
 import pytest
 
 from screener.blobs import LocalStore
@@ -198,3 +199,212 @@ def test_a_deleted_document_can_be_scraped_again(fresh_db, blobs):
     again = put(fresh_db, blobs, "https://e.com/a", article())
     assert again.stored is True
     assert again.id != first.id
+
+
+# -- the sites a document points at ----------------------------------------
+
+
+def refs(*pairs) -> list:
+    from screener.magpie.models import Reference
+    from screener.magpie.urls import host_of
+
+    return [
+        Reference(url=u, host=host_of(u), anchor=a, occurrences=n)
+        for u, a, n in pairs
+    ]
+
+
+def test_links_are_stored_and_read_back_grouped_by_site(fresh_db, blobs):
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, saved.id, refs(
+        ("https://doi.org/1", "A Study", 2),
+        ("https://doi.org/2", "Another Study", 1),
+        ("https://sec.gov/x", "The Rule", 1),
+    ))
+    sites = store.sites_for(fresh_db, saved.id)
+    assert [s["host"] for s in sites] == ["doi.org", "sec.gov"]
+    assert sites[0]["links"] == 2 and sites[0]["mentions"] == 3
+    assert sites[0]["followed"] == 0
+
+
+def test_a_document_is_expanded_once_and_then_remembered(fresh_db, blobs):
+    # The stamp rather than "are there rows": an article that genuinely cites
+    # nothing and one nobody has opened are different states, and without the
+    # stamp the stored page is parsed again on every page view.
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    assert store.links_read(fresh_db, saved.id) is False
+    store.save_links(fresh_db, saved.id, [])
+    assert store.links_read(fresh_db, saved.id) is True
+    assert store.links_for(fresh_db, saved.id) == []
+
+
+def test_re_reading_a_page_updates_counts_rather_than_doubling_them(fresh_db, blobs):
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, saved.id, refs(("https://doi.org/1", "A Study", 1)))
+    store.save_links(fresh_db, saved.id, refs(("https://doi.org/1", "A Study", 3)))
+    links = store.links_for(fresh_db, saved.id)
+    assert len(links) == 1 and links[0]["occurrences"] == 3
+
+
+def test_links_can_be_narrowed_to_one_site(fresh_db, blobs):
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, saved.id, refs(
+        ("https://doi.org/1", "A", 1), ("https://sec.gov/x", "B", 1),
+    ))
+    assert [l["host"] for l in store.links_for(fresh_db, saved.id, "sec.gov")] == ["sec.gov"]
+
+
+def test_following_a_link_records_which_document_it_produced(fresh_db, blobs):
+    source = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, source.id, refs(("https://doi.org/1", "A Study", 1)))
+    produced = put(fresh_db, blobs, "https://doi.org/1", article(title="A Study"))
+
+    link_id = store.links_for(fresh_db, source.id)[0]["id"]
+    store.mark_followed(fresh_db, link_id, produced.id)
+
+    assert store.links_for(fresh_db, source.id)[0]["scraped_id"] == produced.id
+    assert store.sites_for(fresh_db, source.id)[0]["followed"] == 1
+
+
+def test_deleting_a_document_takes_its_links_with_it(fresh_db, blobs):
+    # Cascade, unlike attempts. An attempt records that money was spent and a
+    # site was asked; a link is a reading of a page, and once the page is gone
+    # the reading is not evidence of anything.
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, saved.id, refs(("https://doi.org/1", "A", 1)))
+    store.forget(fresh_db, saved.id)
+    with fresh_db.cursor() as cur:
+        cur.execute("select count(*) from magpie.link")
+        assert cur.fetchone() == (0,)
+
+
+def test_deleting_a_followed_document_leaves_the_link_unfollowed(fresh_db, blobs):
+    # Set null rather than cascade: deleting what a link produced should leave
+    # the link, ready to be followed again, not delete the reference to it.
+    source = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, source.id, refs(("https://doi.org/1", "A", 1)))
+    produced = put(fresh_db, blobs, "https://doi.org/1", article(title="A"))
+    link_id = store.links_for(fresh_db, source.id)[0]["id"]
+    store.mark_followed(fresh_db, link_id, produced.id)
+
+    store.forget(fresh_db, produced.id)
+    remaining = store.links_for(fresh_db, source.id)
+    assert len(remaining) == 1 and remaining[0]["scraped_id"] is None
+
+
+def test_the_frontier_is_the_links_nobody_has_followed(fresh_db, blobs):
+    # What a crawler would drain. It exists before anything drains it so that
+    # cycle is a new process rather than a migration over live rows.
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, saved.id, refs(
+        ("https://doi.org/1", "A", 1), ("https://sec.gov/x", "B", 1),
+    ))
+    followed = put(fresh_db, blobs, "https://doi.org/1", article(title="A"))
+    store.mark_followed(fresh_db, store.links_for(fresh_db, saved.id)[0]["id"], followed.id)
+
+    with fresh_db.cursor() as cur:
+        cur.execute("select count(*) from magpie.link where scraped_id is null")
+        assert cur.fetchone() == (1,)
+
+
+def test_a_document_reads_back_whole_with_its_text(fresh_db, blobs):
+    saved = put(fresh_db, blobs, "https://news.com/a", article())
+    read = store.document(fresh_db, saved.id)
+    assert read is not None and read.text == saved.text and read.blob_path == saved.blob_path
+    assert store.document(fresh_db, 999_999) is None
+
+
+# -- reading the stored page back ------------------------------------------
+
+
+def test_expanding_reads_the_stored_page_and_not_the_site(fresh_db, blobs, monkeypatch):
+    # The payoff for keeping payloads: the sources cost no request. Nothing in
+    # this project read a blob back before this, and the guard matters because
+    # trafilatura ships a downloader that would work and route around both the
+    # ladder and the daily meter.
+    import gzip
+
+    from screener.magpie import run
+    from screener.magpie.store import blob_path
+
+    page = f"""<html><head><title>T</title></head><body><article>
+      <p>{BODY} see <a href="https://doi.org/1">A Study</a>.</p>
+      <p>{BODY} and <a href="https://sec.gov/x">The Rule</a>.</p>
+    </article></body></html>"""
+
+    piece = article()
+    digest = store.content_hash(piece)
+    path = blob_path("news.com", date.today(), digest)
+    blobs.put(path, gzip.compress(page.encode()))
+    saved = store.save(fresh_db, url="https://news.com/a", article=piece,
+                       strategy="direct", status_code=200, blob_path=path, digest=digest)
+
+    def explode(*args, **kwargs):
+        raise AssertionError("expanding opened a socket")
+
+    monkeypatch.setattr(httpx.Client, "send", explode)
+
+    assert run.expand(saved.id, conn=fresh_db, blobs=blobs) == 2
+    assert {s["host"] for s in store.sites_for(fresh_db, saved.id)} == {"doi.org", "sec.gov"}
+
+
+def test_expanding_twice_reads_the_page_once(fresh_db, blobs):
+    import gzip
+
+    from screener.magpie import run
+    from screener.magpie.store import blob_path
+
+    page = f"<html><body><article><p>{BODY} <a href='https://doi.org/1'>A</a></p></article></body></html>"
+    piece = article()
+    digest = store.content_hash(piece)
+    path = blob_path("news.com", date.today(), digest)
+    blobs.put(path, gzip.compress(page.encode()))
+    saved = store.save(fresh_db, url="https://news.com/a", article=piece,
+                       strategy="direct", status_code=200, blob_path=path, digest=digest)
+
+    run.expand(saved.id, conn=fresh_db, blobs=blobs)
+
+    reads: list[str] = []
+    original = blobs.get
+    blobs.get = lambda p: (reads.append(p), original(p))[1]  # type: ignore[method-assign]
+    run.expand(saved.id, conn=fresh_db, blobs=blobs)
+    assert reads == []
+
+
+def test_a_document_whose_stored_page_is_gone_says_so(fresh_db, blobs):
+    # Locally the blobs live inside the container and a rebuild takes them with
+    # it. The document is still readable, so this is not fatal to the page.
+    from screener.magpie import run
+
+    saved = store.save(
+        fresh_db, url="https://news.com/a", article=article(), strategy="direct",
+        status_code=200, blob_path="magpie/news.com/2020-01-01/deadbeef.html.gz",
+        digest=store.content_hash(article()),
+    )
+    with pytest.raises(run.PageGone):
+        run.expand(saved.id, conn=fresh_db, blobs=blobs)
+
+
+def test_expanding_something_that_is_not_there_says_so(fresh_db, blobs):
+    from screener.magpie import run
+
+    with pytest.raises(run.PageGone):
+        run.expand(999_999, conn=fresh_db, blobs=blobs)
+
+
+def test_re_reading_a_page_does_not_forget_what_was_already_followed(fresh_db, blobs):
+    # The upsert touches the words and the count and nothing else. If it wrote
+    # the whole row a document re-read after an edit would silently drop every
+    # follow, and the frontier would refill with links already fetched and paid
+    # for.
+    source = put(fresh_db, blobs, "https://news.com/a", article())
+    store.save_links(fresh_db, source.id, refs(("https://doi.org/1", "A Study", 1)))
+    produced = put(fresh_db, blobs, "https://doi.org/1", article(title="A Study"))
+    link_id = store.links_for(fresh_db, source.id)[0]["id"]
+    store.mark_followed(fresh_db, link_id, produced.id)
+
+    store.save_links(fresh_db, source.id, refs(("https://doi.org/1", "A Study, revised", 4)))
+
+    link = store.links_for(fresh_db, source.id)[0]
+    assert link["scraped_id"] == produced.id
+    assert link["anchor"] == "A Study, revised" and link["occurrences"] == 4

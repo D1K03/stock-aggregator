@@ -52,10 +52,13 @@ export default function Ladder({
   busy,
   climb,
   onDone,
+  compact = false,
 }: {
   busy: boolean;
   climb: Climb | null;
   onDone: () => void;
+  /** Under a single link rather than under the page. Same rungs, less chrome. */
+  compact?: boolean;
 }) {
   // How many of the real attempts have been revealed. -1 is "still in flight".
   const [shown, setShown] = useState(-1);
@@ -115,7 +118,7 @@ export default function Ladder({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="lad"
+          className={compact ? "lad lad-small" : "lad"}
           // Height as well as opacity, so this pushes the page down as it
           // arrives rather than covering what is under it.
           initial={{ height: 0, opacity: 0 }}

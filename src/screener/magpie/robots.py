@@ -26,6 +26,8 @@ from urllib.parse import urlsplit
 
 from screener.fetch import fetch
 from screener.fetch.result import FetchError
+from screener.fetch.strategies import OnRequest
+from screener.magpie import reachable
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,10 @@ class _Cache:
         self._lock = threading.Lock()
 
     def get(
-        self, origin: str, transport: httpx.BaseTransport | None = None
+        self,
+        origin: str,
+        transport: httpx.BaseTransport | None = None,
+        on_request: OnRequest = reachable.guard,
     ) -> urllib.robotparser.RobotFileParser | None:
         now = time.monotonic()
         with self._lock:
@@ -72,7 +77,7 @@ class _Cache:
             if found and now - found[0] < TTL_SECONDS:
                 return found[1]
 
-        parser = _read(origin, transport)
+        parser = _read(origin, transport, on_request)
 
         with self._lock:
             self._parsers[origin] = (now, parser)
@@ -86,7 +91,11 @@ class _Cache:
 _CACHE = _Cache()
 
 
-def _read(origin: str, transport: httpx.BaseTransport | None = None) -> urllib.robotparser.RobotFileParser | None:
+def _read(
+    origin: str,
+    transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = reachable.guard,
+) -> urllib.robotparser.RobotFileParser | None:
     """Fetch and parse one host's robots.txt. `None` when there is nothing to obey.
 
     Direct only, deliberately. Reaching for a proxy to read the file that says
@@ -101,6 +110,10 @@ def _read(origin: str, transport: httpx.BaseTransport | None = None) -> urllib.r
             timeout=TIMEOUT,
             allow_empty=True,
             transport=transport,
+            # The same guard the page fetch uses. This request is made before
+            # the URL is otherwise permitted, so without it a refused scrape
+            # still reaches whatever address it was pointed at.
+            on_request=on_request,
         )
     except FetchError as exc:
         # No robots.txt, or unreachable. The standard reads absence as
@@ -113,7 +126,11 @@ def _read(origin: str, transport: httpx.BaseTransport | None = None) -> urllib.r
 
 
 def rules(
-    url: str, *, user_agent: str, transport: httpx.BaseTransport | None = None
+    url: str,
+    *,
+    user_agent: str,
+    transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = reachable.guard,
 ) -> Rules:
     """What this host permits us, for this URL.
 
@@ -127,7 +144,7 @@ def rules(
 
     origin = f"{parts.scheme}://{parts.netloc}"
     try:
-        parser = _CACHE.get(origin, transport)
+        parser = _CACHE.get(origin, transport, on_request)
     except Exception as exc:
         logger.warning("could not read robots.txt for %s: %s", origin, exc)
         return Rules(allowed=True)

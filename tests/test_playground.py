@@ -62,6 +62,7 @@ SKYBIRD = {
 MAGPIE = {
     "magpie.attempt",
     "magpie.document",
+    "magpie.link",
 }
 
 

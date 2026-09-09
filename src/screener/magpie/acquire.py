@@ -20,6 +20,10 @@ strategy".
   browser gets is the justification `screener.fetch` writes down for sending a
   browser User-Agent. Paying a proxy network to get past a subscription check is
   a different act, and not one this should make by default.
+- **The address is not on the public internet.** See `screener.magpie.reachable`:
+  the destination here is somebody else's input, and a scraper that will fetch
+  `169.254.169.254` and show you the answer is a window into the private network
+  rather than a reader of the web.
 
 It also does not sleep or retry inside the chain: D6 of the infrastructure spec
 keeps that out of the fetch layer, and the per-host floor below is the caller's
@@ -35,7 +39,8 @@ import httpx
 
 from screener.fetch import BROWSER_HEADERS, FetchResult, fetch
 from screener.fetch.result import FetchError
-from screener.magpie import robots
+from screener.fetch.strategies import OnRequest
+from screener.magpie import reachable, robots
 from screener.magpie.config import UNLOCKER_USD, MagpieConfig
 from screener.magpie.urls import is_http, looks_binary
 
@@ -129,6 +134,7 @@ def acquire(
     *,
     may_pay: bool = True,
     transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = reachable.guard,
 ) -> Fetched:
     """Fetch one URL over the configured ladder.
 
@@ -145,7 +151,24 @@ def acquire(
         # body that has no Content-Type to check.
         raise NotAPage("that address is a file, not a page")
 
-    permission = robots.rules(url, user_agent=config.user_agent, transport=transport)
+    # Checked here as well as on every hop, so a private address submitted
+    # directly is refused without a request being made at all. The hook is what
+    # actually holds the line, because it is the only thing that sees a
+    # redirect; this only saves a pointless request.
+    #
+    # Both are the same switch. A caller passing no hook has said it does not
+    # want addresses checked, and a test exercising robots parsing behind a
+    # MockTransport is the only caller that ever does — resolving names it never
+    # dials would make the suite depend on DNS.
+    if on_request is not None:
+        try:
+            reachable.check(url)
+        except reachable.NotReachable as exc:
+            raise NotPermitted(str(exc)) from exc
+
+    permission = robots.rules(
+        url, user_agent=config.user_agent, transport=transport, on_request=on_request
+    )
     if not permission.allowed:
         # Deliberately not a FetchError: nothing failed, and nothing should be
         # retried down a more expensive path.
@@ -159,6 +182,11 @@ def acquire(
         headers=headers,
         validate=_looks_like_a_page,
         transport=transport,
+        # Every request, including each redirect followed. Validating only the
+        # URL above would check an address nobody fetches: a public page can
+        # answer `302 Location: http://169.254.169.254/` and the request goes
+        # there with nothing having looked.
+        on_request=on_request,
     )
 
     opening = result.text[:_SNIFF].lstrip().lower()

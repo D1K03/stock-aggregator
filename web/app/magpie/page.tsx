@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import Confirm from "@/components/Confirm";
 import Ladder, { Climb } from "@/components/Ladder";
 import Sidebar from "@/components/Sidebar";
@@ -41,7 +42,6 @@ export default function Magpie() {
   const [notice, setNotice] = useState<string | null>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<number | null>(null);
   // The document the modal is asking about, or null when it is closed. Holding
   // the whole row rather than the id so the question can name it.
   const [asking, setAsking] = useState<MagpieDocument | null>(null);
@@ -174,13 +174,15 @@ export default function Magpie() {
               {gathered.map((document: MagpieDocument, i) => (
                 <motion.article
                   key={document.id}
-                  className={`mag-doc${open === document.id ? " open" : ""}`}
+                  className="mag-doc"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i, 8) * 0.03, duration: 0.32, ease: EASE }}
-                  onClick={() => setOpen(open === document.id ? null : document.id)}
                 >
-                  <div className="mag-doc-body">
+                  {/* The row opens the document rather than expanding in
+                      place: the sources are the reason to open one, and they
+                      do not belong in a list. */}
+                  <Link className="mag-doc-body" href={`/magpie/${document.id}`}>
                     <h3>{document.title || document.url}</h3>
                     <div className="mag-meta">
                       {document.host}
@@ -188,28 +190,15 @@ export default function Magpie() {
                       {document.published ? ` · ${document.published}` : ""}
                       {` · via ${document.strategy} · ${when(document.fetched_at)}`}
                     </div>
-                    {open === document.id && (
-                      <>
-                        <p className="mag-lead">{document.lead}…</p>
-                        <a
-                          className="mag-link"
-                          href={document.url}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Open the original ↗
-                        </a>
-                      </>
-                    )}
-                  </div>
+                  </Link>
                   <button
                       className="mag-x"
                       aria-label={`Delete ${document.title}`}
                       title="Stop keeping this"
                       onClick={(e) => {
-                        // Otherwise the row's own click expands it behind the
+                        // Otherwise the row's link navigates away behind the
                         // dialog that is asking whether to delete it.
+                        e.preventDefault();
                         e.stopPropagation();
                         setAsking(document);
                       }}

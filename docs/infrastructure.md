@@ -152,6 +152,25 @@ same dead link being fetched again by whoever asks next. Both are readable in
 `/playground`, by Steven, and by the claude.ai connector. The page as fetched is
 gzipped into the blob store as evidence.
 
+**The sites a document points at.** Opening one on `/magpie` reads its stored
+page back for the links the article makes, which costs no request: the page is
+already in the blob store, and this is the only thing in the project that reads
+a payload back rather than only writing one. Taken from the extracted article
+rather than the raw HTML, because every anchor on a page includes the site's own
+navigation and footer. Read once and remembered, so a document nobody opens is
+never read.
+
+`magpie.link.scraped_id` is the frontier a crawler would drain. Nothing drains
+it: every fetch is still one somebody clicked.
+
+**Where it may go.** `screener.magpie.reachable` refuses loopback, private,
+link-local, reserved and multicast addresses, and requires every address a name
+resolves to be public. It runs as a hook on each request rather than a check on
+the URL, because with redirects followed the address fetched is not the address
+submitted: a public page can answer `302 Location: http://169.254.169.254/` and
+nothing else would look. `screener.fetch` takes the hook; no other caller passes
+one, because no other caller fetches an address somebody else chose.
+
 **Do not** point it at a login, a paywall or anything needing a cookie. It holds
 no credentials and is not meant to.
 

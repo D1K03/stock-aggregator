@@ -23,6 +23,7 @@ const PAGES = [
   { label: "Overview", href: "/", hint: "Morning snapshot" },
   { label: "Steven", href: "/steven", hint: "The full page, same conversation" },
   { label: "Audit", href: "/audit", hint: "Commands, spend, tool calls" },
+  { label: "Magpie", href: "/magpie", hint: "Scraped articles and their sources" },
   { label: "Playground", href: "/playground", hint: "Read-only SQL over the data" },
   { label: "Skybird", href: "/skybird", hint: "Live stream capture and transcripts" },
 ];
