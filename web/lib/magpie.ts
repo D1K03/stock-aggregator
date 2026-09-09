@@ -178,6 +178,7 @@ export const WHY: Record<string, string> = {
   too_short: "the page came back, but there was no article in it",
   all_strategies_failed: "every route to it failed",
   restarted: "the scraper was replaced before it could fetch this, so try again",
+  not_stored: "we reached the page but could not keep it, which is a fault our end",
   unlocker_capped: "every free route failed and the paid one is at its daily limit",
   unavailable: "the scraper is not running",
 };

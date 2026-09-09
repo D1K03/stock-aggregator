@@ -144,67 +144,84 @@ def _scrape(
     def settle(**kwargs) -> None:
         store.finish_attempt(conn, attempt, **kwargs)
 
+    # Every path out of here settles the row, including one nobody predicted.
+    # Anything raised past this point leaves the attempt reading 'running'
+    # forever, which is indistinguishable from a scrape still in flight.
     try:
-        _POLITE.wait(host, config.host_delay)
-        fetched = acquire(url, config, may_pay=allowed_to_pay, transport=transport)
-    except NotPermitted as exc:
-        settle(state="refused", reason="robots", error=str(exc))
-        return Outcome(refused=Refused(url=key, reason="robots", detail=str(exc)))
-    except NotAPage as exc:
-        reason = "paywall" if "free to read" in str(exc) else "not_a_page"
-        settle(state="refused", reason=reason, error=str(exc))
-        return Outcome(refused=Refused(url=key, reason=reason, detail=str(exc)))
-    except FetchError as exc:
-        reason = "unlocker_capped" if capped and may_pay else "all_strategies_failed"
-        settle(state="failed", reason=reason, error=redact(str(exc)))
-        detail = (
-            "every route failed, and the paid one was over its daily limit"
-            if reason == "unlocker_capped"
-            else "every route failed"
+        try:
+            _POLITE.wait(host, config.host_delay)
+            fetched = acquire(url, config, may_pay=allowed_to_pay, transport=transport)
+        except NotPermitted as exc:
+            settle(state="refused", reason="robots", error=str(exc))
+            return Outcome(refused=Refused(url=key, reason="robots", detail=str(exc)))
+        except NotAPage as exc:
+            reason = "paywall" if "free to read" in str(exc) else "not_a_page"
+            settle(state="refused", reason=reason, error=str(exc))
+            return Outcome(refused=Refused(url=key, reason=reason, detail=str(exc)))
+        except FetchError as exc:
+            reason = "unlocker_capped" if capped and may_pay else "all_strategies_failed"
+            settle(state="failed", reason=reason, error=redact(str(exc)))
+            detail = (
+                "every route failed, and the paid one was over its daily limit"
+                if reason == "unlocker_capped"
+                else "every route failed"
+            )
+            return Outcome(refused=Refused(url=key, reason=reason, detail=detail))
+
+        cost = fetched.cost_usd
+
+        try:
+            article = extract(fetched.html, url=key)
+        except NotAnArticle as exc:
+            settle(
+                state="refused", reason="too_short", strategy=fetched.strategy,
+                attempts=fetched.attempts, status_code=fetched.status_code,
+                payload_bytes=len(fetched.html), cost_usd=cost, error=str(exc),
+            )
+            _bill(cost, fetched, requested_by, key, outcome="error", started=started)
+            return Outcome(refused=Refused(url=key, reason="too_short", detail=str(exc)))
+
+        digest = store.content_hash(article)
+        path = store.put_payload(blobs, host, date.today(), digest, fetched.html)
+        document = store.save(
+            conn,
+            url=key,
+            article=article,
+            strategy=fetched.strategy,
+            status_code=fetched.status_code,
+            blob_path=path,
+            digest=digest,
+            requested_by=requested_by,
         )
-        return Outcome(refused=Refused(url=key, reason=reason, detail=detail))
 
-    cost = fetched.cost_usd
+        # The climb belongs on the document, not only in the attempt row: an
+        # interface showing what a page cost should not have to join to get it.
+        document = replace(document, attempts=fetched.attempts, cost_usd=float(cost))
 
-    try:
-        article = extract(fetched.html, url=key)
-    except NotAnArticle as exc:
         settle(
-            state="refused", reason="too_short", strategy=fetched.strategy,
-            attempts=fetched.attempts, status_code=fetched.status_code,
-            payload_bytes=len(fetched.html), cost_usd=cost, error=str(exc),
+            state="stored" if document.stored else "unchanged",
+            strategy=fetched.strategy,
+            attempts=fetched.attempts,
+            status_code=fetched.status_code,
+            payload_bytes=len(fetched.html),
+            cost_usd=cost,
+            document_id=document.id,
         )
-        _bill(cost, fetched, requested_by, key, outcome="error", started=started)
-        return Outcome(refused=Refused(url=key, reason="too_short", detail=str(exc)))
-
-    digest = store.content_hash(article)
-    path = store.put_payload(blobs, host, date.today(), digest, fetched.html)
-    document = store.save(
-        conn,
-        url=key,
-        article=article,
-        strategy=fetched.strategy,
-        status_code=fetched.status_code,
-        blob_path=path,
-        digest=digest,
-        requested_by=requested_by,
-    )
-
-    # The climb belongs on the document, not only in the attempt row: an
-    # interface showing what a page cost should not have to join to get it.
-    document = replace(document, attempts=fetched.attempts, cost_usd=float(cost))
-
-    settle(
-        state="stored" if document.stored else "unchanged",
-        strategy=fetched.strategy,
-        attempts=fetched.attempts,
-        status_code=fetched.status_code,
-        payload_bytes=len(fetched.html),
-        cost_usd=cost,
-        document_id=document.id,
-    )
-    _bill(cost, fetched, requested_by, key, outcome="ok", started=started)
-    return Outcome(document=document)
+        _bill(cost, fetched, requested_by, key, outcome="ok", started=started)
+        return Outcome(document=document)
+    except Exception as exc:
+        # The page may well have been fetched: what failed is keeping it. Say so,
+        # because "every route failed" would send somebody to look at the site
+        # when the fault is ours.
+        logger.exception("magpie could not keep %s", redact(key))
+        settle(state="failed", reason="not_stored", error=f"{type(exc).__name__}: {exc}")
+        return Outcome(
+            refused=Refused(
+                url=key,
+                reason="not_stored",
+                detail="the page was fetched but could not be filed, so nothing was kept",
+            )
+        )
 
 
 def _bill(
