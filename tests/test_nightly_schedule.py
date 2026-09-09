@@ -70,6 +70,14 @@ def test_a_night_is_not_due_before_the_hour():
     assert is_due(_at(22, 59), 23) is False
 
 
+def test_a_naive_datetime_is_refused_rather_than_answered_on_local_time():
+    # next_trigger already raises on a naive datetime; is_due must match it
+    # rather than silently answering on local wall-clock.
+    naive = datetime(2026, 9, 15, 23, 0)
+    with pytest.raises(ValueError):
+        is_due(naive, 23)
+
+
 def test_the_config_defaults_need_no_environment(monkeypatch):
     for name in ("NIGHTLY_TRIGGER_HOUR", "NIGHTLY_ATTEMPTS", "NIGHTLY_ENABLED"):
         monkeypatch.delenv(name, raising=False)

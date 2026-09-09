@@ -127,7 +127,9 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   capture left by a dead supervisor.
 - Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
   UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
-  given up. `NIGHTLY_ENABLED=false` stops it without a redeploy.
+  given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
+  container back to exit again, so re-enabling needs the container recreated
+  (`docker compose up -d nightly`) rather than just a restart.
 
 Migrations are plain numbered SQL in `migrations/`, applied in filename order and
 recorded in `schema_migration`. Each runs in its own transaction, so a failure leaves

@@ -189,6 +189,29 @@ def test_a_fundamentals_failure_does_not_stop_scoring(two, monkeypatch):
     assert report.ok is True
 
 
+def test_the_counts_reach_the_log(two, monkeypatch, caplog):
+    # Spec S7: a partial night is "counted and logged". The scheduler never
+    # goes through `screener.ingest.cli`'s own aggregate line, so without one
+    # here a night where most securities failed logs identically to a clean
+    # one.
+    class OneBadSymbol(FakeChart):
+        def fetch(self, symbol, start, end):
+            return None if symbol == "BBB" else super().fetch(symbol, start, end)
+
+    monkeypatch.setattr(
+        "screener.nightly.night.run_scoring", lambda *a, **k: "scored",
+    )
+
+    with caplog.at_level("INFO", logger="screener.nightly.night"):
+        run_night(
+            two, today=TODAY, blobs=FakeBlobs(),
+            chart=OneBadSymbol(), timeseries=FakeTimeseries(answer=False),
+        )
+
+    messages = [r.message for r in caplog.records]
+    assert any("prices" in m and "fundamentals" in m for m in messages)
+
+
 def test_scoring_is_asked_for_todays_date(two, monkeypatch):
     seen = {}
     monkeypatch.setattr(

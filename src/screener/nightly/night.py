@@ -80,6 +80,18 @@ def run_night(
         conn, client=timeseries, blobs=blobs, today=today, securities=securities
     )
 
+    # A partial night is "counted and logged" per spec S7 -- without this, a
+    # night where most securities failed logs identically to a clean one,
+    # because the scheduler never goes through `screener.ingest.cli`'s own
+    # aggregate line.
+    logger.info(
+        "night %s: prices %d ok / %d failed, fundamentals %d ok / %d failed / "
+        "%d facts written",
+        today,
+        prices.ok, prices.failed,
+        fundamentals.ok, fundamentals.failed, fundamentals.facts_written,
+    )
+
     if prices.status == "failed":
         # `cutoff_offset` filters on `observed_at`, so yesterday's bars are
         # still visible: scoring now would write a complete-looking snapshot

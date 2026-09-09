@@ -32,6 +32,11 @@ def is_due(now: datetime, hour: int) -> bool:
     `now` must be UTC-aware -- everything here is UTC, because
     `screener.scoring.visibility_cutoff` builds from UTC midnight and a
     local-time trigger would move twice a year against arithmetic defined in
-    UTC.
+    UTC. Enforced rather than merely documented: `next_trigger` already raises
+    on a naive `datetime` (`datetime.combine` with a fixed `tzinfo` refuses to
+    compare against one), and a check here that silently answered on local
+    wall-clock instead would be a worse failure than an exception.
     """
+    if now.tzinfo is None:
+        raise ValueError("is_due() requires a UTC-aware datetime, got a naive one")
     return now.hour >= hour

@@ -241,7 +241,7 @@ the forward log that every later backtest reads through.
 | | |
 |---|---|
 | Cadence | once a night, at `NIGHTLY_TRIGGER_HOUR` UTC (default 23) |
-| Switch | `NIGHTLY_ENABLED=false`; the container keeps running and waiting rather than exiting |
+| Switch | `NIGHTLY_ENABLED=false`; the container exits 0, `restart: unless-stopped` brings it back, and it exits again -- re-enabling needs `docker compose up -d nightly` to recreate it, because `environment:` is baked in at create time |
 | Recovery | asks on boot whether tonight is already scored, so a deploy mid-run finishes the night instead of losing the date |
 | Noise | Discord hears about a night only when one is given up, never on a quiet success |
 

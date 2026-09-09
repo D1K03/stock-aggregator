@@ -1,6 +1,6 @@
 """The loop's judgement: what is retried, what is reported, and what is silent."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -209,3 +209,77 @@ def test_the_switch_stops_the_scheduler_before_it_connects(monkeypatch):
     monkeypatch.setenv("NIGHTLY_ENABLED", "false")
 
     assert module.main() == 0
+
+
+class _FakeConnCM:
+    """Stands in for `psycopg.connect(...)` used as a context manager."""
+
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _patch_tick_db(module, monkeypatch, *, already: bool):
+    """No real database: `_tick` only needs a connection to hand to
+    `already_scored`, and these three tests are about the decision around it,
+    not the connection itself."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused/unused")
+    monkeypatch.setattr(module.psycopg, "connect", lambda *a, **k: _FakeConnCM())
+    monkeypatch.setattr(module, "already_scored", lambda conn, day: already)
+
+
+def test_booting_before_the_trigger_hour_waits_rather_than_running_early(loop, monkeypatch):
+    module, event, sent = loop
+    calls = []
+    monkeypatch.setattr(module, "run_tonight", lambda config, today: calls.append(today))
+    _patch_tick_db(module, monkeypatch, already=False)
+
+    before = datetime(2026, 9, 15, 10, 0, tzinfo=timezone.utc)
+    module._tick(_config(), before)
+
+    assert calls == []
+
+
+def test_booting_after_the_trigger_hour_with_today_unscored_runs_immediately(loop, monkeypatch):
+    module, event, sent = loop
+    calls = []
+    monkeypatch.setattr(module, "run_tonight", lambda config, today: calls.append(today))
+    _patch_tick_db(module, monkeypatch, already=False)
+
+    after = datetime(2026, 9, 15, 23, 30, tzinfo=timezone.utc)
+    module._tick(_config(), after)
+
+    assert calls == [after.date()]
+
+
+def test_booting_with_today_already_scored_waits_for_tomorrow(loop, monkeypatch):
+    module, event, sent = loop
+    calls = []
+    monkeypatch.setattr(module, "run_tonight", lambda config, today: calls.append(today))
+    _patch_tick_db(module, monkeypatch, already=True)
+
+    after = datetime(2026, 9, 15, 23, 30, tzinfo=timezone.utc)
+    module._tick(_config(), after)
+
+    assert calls == []
+
+
+def test_a_dead_database_in_the_catch_up_check_falls_through_rather_than_crashing(loop, monkeypatch):
+    module, event, sent = loop
+    calls = []
+    monkeypatch.setattr(module, "run_tonight", lambda config, today: calls.append(today))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused/unused")
+
+    def boom(*a, **k):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(module.psycopg, "connect", boom)
+
+    after = datetime(2026, 9, 15, 23, 30, tzinfo=timezone.utc)
+    # Must not raise -- a dead database here escaping would restart-loop the
+    # whole process rather than falling through to the next wait.
+    module._tick(_config(), after)
+
+    assert calls == []

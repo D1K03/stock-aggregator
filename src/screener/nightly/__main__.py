@@ -105,7 +105,11 @@ def run_tonight(config: NightlyConfig, today: date) -> bool:
             return False
         except Exception as exc:
             logger.exception("night %s, attempt %d of %d failed", today, attempt, config.attempts)
-            reason = f"{type(exc).__name__}: {exc}"
+            # Bounded: `httpx` and `psycopg` exception text can carry request
+            # URLs and DSNs, and a Bright Data lane URL carries credentials in
+            # the URL itself. This string reaches Discord, so an unlucky
+            # exception must not be able to post one.
+            reason = f"{type(exc).__name__}: {str(exc)[:500]}"
 
         if attempt < config.attempts and not stopping.is_set():
             # Five minutes, then fifteen. A night is ~3,000 Yahoo requests, so
@@ -122,6 +126,30 @@ def run_tonight(config: NightlyConfig, today: date) -> bool:
     return False
 
 
+def _tick(config: NightlyConfig, now: datetime) -> None:
+    """The catch-up decision for one wake-up: D3, extracted so it is testable
+    without a real clock, a real wait or a real database.
+
+    Both halves of the catch-up condition. Without the second a restart would
+    score a night twice; without the first a container starting at 10:00
+    would run the night thirteen hours early, against a market still open.
+    """
+    if not is_due(now, config.trigger_hour):
+        return
+    try:
+        with psycopg.connect(settings().database_url, autocommit=True) as conn:
+            owed = not already_scored(conn, now.date())
+    except Exception:
+        # A dead database here must not escape into a restart loop -- that
+        # would discard `run_tonight`'s own attempt counter and backoffs at
+        # exactly the moment they matter. Fall through to the wait; `is_due`
+        # is still true next pass.
+        logger.exception("could not check whether %s is already scored", now.date())
+        owed = False
+    if owed:
+        run_tonight(config, now.date())
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -135,8 +163,13 @@ def main(argv: list[str] | None = None) -> int:
 
     config = NightlyConfig.from_env()
     if not config.enabled:
-        # Not an error, and exiting zero lets `restart: unless-stopped` leave
-        # it alone rather than restarting it for ever.
+        # Not an error. `restart: unless-stopped` restarts on any exit code,
+        # not just failure, so this process exits and comes straight back --
+        # it will read the same env on the next boot and exit again. That is
+        # a restart loop rather than a wait, but a cheap one: no connection,
+        # no I/O, nothing but reading one env var each time. Re-enabling still
+        # needs the container recreated, because `environment:` is baked in
+        # at create time.
         logger.info("NIGHTLY_ENABLED is false; not scheduling")
         return 0
 
@@ -150,16 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("scheduling a night at %02d:00 UTC", config.trigger_hour)
 
     while not stopping.is_set():
-        now = datetime.now(timezone.utc)
-        # Both halves of the catch-up condition. Without the second a restart
-        # would score a night twice; without the first a container starting at
-        # 10:00 would run the night thirteen hours early, against a market
-        # still open.
-        if is_due(now, config.trigger_hour):
-            with psycopg.connect(settings().database_url, autocommit=True) as conn:
-                owed = not already_scored(conn, now.date())
-            if owed:
-                run_tonight(config, now.date())
+        _tick(config, datetime.now(timezone.utc))
 
         if stopping.is_set():
             break
