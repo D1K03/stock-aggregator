@@ -146,8 +146,10 @@ def test_a_stop_signal_ends_the_retries_early(loop, monkeypatch):
     module.run_tonight(_config(), TODAY)
 
     # Stopped after the first attempt rather than sitting through two backoffs
-    # while the container is being torn down.
+    # while the container is being torn down, and silent: an interrupted night
+    # is not a lost one, because the next boot's catch-up finishes it.
     assert len(calls) == 1
+    assert sent == []
 
 
 def test_the_message_says_the_night_cannot_be_recovered(monkeypatch):
