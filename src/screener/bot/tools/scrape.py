@@ -31,6 +31,7 @@ _WHY = {
     "not_a_page": "that address is a file rather than a web page",
     "too_short": "the page came back but there was no article in it",
     "all_strategies_failed": "every route to it failed",
+    "restarted": "the scraper restarted before it could fetch that, so it is worth another go",
     "unlocker_capped": "every free route failed and the paid one is over its daily limit",
     "unavailable": "the store is not reachable",
 }

@@ -164,8 +164,13 @@ def test_an_attempt_left_by_a_dead_process_is_settled_on_the_next_start(fresh_db
 
     assert store.reconcile(fresh_db) == 1
     with fresh_db.cursor() as cur:
-        cur.execute("select state from magpie.attempt where id = %s", (stuck,))
-        assert cur.fetchone() == ("failed",)
+        cur.execute("select state, reason from magpie.attempt where id = %s", (stuck,))
+        # `restarted`, not `all_strategies_failed`. No route was tried, and
+        # saying every route failed sends the next person looking at the web
+        # when the answer is a deploy. That is not hypothetical: it is what a
+        # deploy replacing the container mid-fetch reported on the day this
+        # shipped.
+        assert cur.fetchone() == ("failed", "restarted")
         cur.execute("select state from magpie.attempt where id = %s", (finished,))
         assert cur.fetchone() == ("stored",)
 
