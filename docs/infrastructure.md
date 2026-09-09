@@ -226,10 +226,9 @@ same table backs Steven's memory.
 ## Nightly scheduling
 
 `screener.nightly` — prices, then fundamentals, then scoring, once a night at 23:00 UTC, in a
-container of its own alongside `reddit` and `skybird`. No ports, no healthcheck, and no ports
-route to it, for the same reason those two have none: it spends almost all of its life asleep,
-and a check that cannot tell "waiting for 23:00" from "wedged" would restart a container that
-was about to do its job.
+container of its own alongside `reddit` and `skybird`. No ports and no healthcheck, for the same
+reason those two have none: it spends almost all of its life asleep, and a check that cannot
+tell "waiting for 23:00" from "wedged" would restart a container that was about to do its job.
 
 No command changed to build this. It is a schedule, not a rewrite: the three commands it runs
 are the ones a person ran by hand before, in the order this cycle already required.
