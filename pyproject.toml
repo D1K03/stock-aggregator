@@ -87,6 +87,14 @@ scrape = [
 ]
 
 dev = [
+    # The one extra that tests install, unlike `voice` and `stream`, whose
+    # libraries the tests replace with an ordinary function because what those
+    # tests defend is the seam rather than the model. Here the library's
+    # behaviour *is* the decision under test: that links come out of the
+    # extracted article and not the raw HTML, which is the difference between
+    # a page's citations and its Donate button. A suite that cannot run that
+    # never checks the thing most likely to break.
+    "screener[scrape]",
     "pytest>=8.0",
     # One worker per core, each with its own throwaway database. Not a nicety:
     # applying eighteen migrations costs ~320ms and every database test pays it,

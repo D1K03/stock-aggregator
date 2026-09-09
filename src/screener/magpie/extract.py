@@ -54,7 +54,8 @@ def extract(html: str, *, url: str | None = None) -> Extracted:
     """
     # Imported here rather than at module scope so the import cost lands on the
     # one process that extracts, and so `screener.magpie.client` stays httpx.
-    from trafilatura import bare_extraction
+    # Installed by the `scrape` extra, which only this container takes.
+    from trafilatura import bare_extraction  # pyright: ignore[reportMissingImports]
 
     try:
         parsed = bare_extraction(html, url=url, with_metadata=True)

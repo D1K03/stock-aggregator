@@ -45,7 +45,8 @@ def references(html: str, url: str) -> list[Reference]:
     view over.
     """
     try:
-        from trafilatura import bare_extraction
+        # Installed by the `scrape` extra, which only this container takes.
+        from trafilatura import bare_extraction  # pyright: ignore[reportMissingImports]
 
         parsed = bare_extraction(html, url=url, with_metadata=True, include_links=True)
     except Exception as exc:
