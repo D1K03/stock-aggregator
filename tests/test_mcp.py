@@ -42,6 +42,16 @@ DENIED = {
 }
 
 
+# Granted by 022, which this parser cannot see: it reads 018, and a schema
+# created later is invisible to it by construction. Listed here so a table added
+# to `magpie` still has to be decided about rather than appearing silently.
+#
+# Granting it means article text leaves the box to claude.ai — the same sentence
+# 018 wrote about transcripts, and worth repeating rather than leaving to be
+# discovered. It is public text claude.ai could fetch for itself.
+MAGPIE = {"magpie.attempt", "magpie.document", "magpie.link"}
+
+
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
     public = text.split("grant select on", 1)[1].split("to playground_mcp", 1)[0]
@@ -309,7 +319,14 @@ def test_every_table_is_granted_or_deliberately_denied(connector, fresh_db):
           and n.nspname not like 'pg\\_%'
         """
     ).fetchall()
-    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED)
+    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | MAGPIE
+
+
+def test_the_connector_can_read_a_scraped_document(connector):
+    # Public text, fetched so it could be read, and readable by every role for
+    # that reason — the opposite of the transcript below, which is granted to
+    # this caller and denied to Steven.
+    assert playground.run("select count(*) from magpie.document").row_count == 1
 
 
 def test_the_connector_can_read_transcripts_and_that_is_deliberate(connector):

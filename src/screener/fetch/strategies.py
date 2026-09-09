@@ -12,8 +12,8 @@ library. Production never passes it.
 import json
 import secrets as token_source
 import urllib.parse
-from collections.abc import Mapping
-from typing import Protocol
+from collections.abc import Callable, Mapping
+from typing import Any, Protocol
 
 import httpx
 
@@ -35,6 +35,23 @@ BROWSER_HEADERS: Mapping[str, str] = {
 UNLOCKER_URL = "https://api.brightdata.com/request"
 
 
+# A callback run before every request a strategy sends, **including each
+# redirect it follows**.
+#
+# It exists because validating a URL before handing it to a client checks the
+# address somebody typed and not the address that is fetched: with
+# `follow_redirects` on, a public URL can send the client anywhere, and the
+# caller never sees the hop. A hook is the only place that sees all of them.
+#
+# Raising from it aborts that strategy, which the chain then treats like any
+# other failure and escalates past.
+OnRequest = Callable[[httpx.Request], None] | None
+
+
+def _hooks(on_request: OnRequest) -> dict[str, list[Callable[..., Any]]]:
+    return {"request": [on_request]} if on_request else {}
+
+
 class Strategy(Protocol):
     def __call__(
         self,
@@ -42,6 +59,7 @@ class Strategy(Protocol):
         timeout: float,
         headers: Mapping[str, str],
         transport: httpx.BaseTransport | None = None,
+        on_request: OnRequest = None,
     ) -> FetchResult: ...
 
 
@@ -50,10 +68,14 @@ def direct(
     timeout: float,
     headers: Mapping[str, str],
     transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = None,
 ) -> FetchResult:
     """A plain request from wherever this process happens to run."""
     with httpx.Client(
-        follow_redirects=True, timeout=timeout, transport=transport
+        follow_redirects=True,
+        timeout=timeout,
+        transport=transport,
+        event_hooks=_hooks(on_request),
     ) as client:
         response = client.get(url, headers=dict(headers))
         response.raise_for_status()
@@ -70,6 +92,7 @@ def isp_proxy(
     timeout: float,
     headers: Mapping[str, str],
     transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = None,
 ) -> FetchResult:
     """A request through a Bright Data ISP proxy, on a fresh session.
 
@@ -96,6 +119,7 @@ def isp_proxy(
         follow_redirects=True,
         timeout=timeout,
         transport=transport,
+        event_hooks=_hooks(on_request),
     ) as client:
         response = client.get(url, headers=dict(headers))
         response.raise_for_status()
@@ -112,6 +136,7 @@ def unlocker(
     timeout: float,
     headers: Mapping[str, str],
     transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = None,
 ) -> FetchResult:
     """Bright Data's Web Unlocker, billed per successful request.
 

@@ -69,7 +69,32 @@ voice = [
 stream = [
     "yt-dlp>=2026.1",
 ]
+# Article extraction, for the magpie container only. trafilatura pulls lxml,
+# courlan, htmldate and justext — mid-weight, and nowhere near the transcriber's
+# class, which is why this is an extra rather than a runtime dependency: the
+# status service and the bot ask magpie for a document over HTTP and never parse
+# one themselves.
+#
+# The library also ships its own downloader. It is never imported: using it
+# would bypass the proxy ladder and the daily meter at once, and the article
+# would arrive looking perfectly correct. `tests/test_magpie_extract.py` is what
+# holds that line.
+#
+# Upper bound for discord.py's reason: this sits on a Python API surface rather
+# than on a stable request and response shape.
+scrape = [
+    "trafilatura>=2.2,<3",
+]
+
 dev = [
+    # The one extra that tests install, unlike `voice` and `stream`, whose
+    # libraries the tests replace with an ordinary function because what those
+    # tests defend is the seam rather than the model. Here the library's
+    # behaviour *is* the decision under test: that links come out of the
+    # extracted article and not the raw HTML, which is the difference between
+    # a page's citations and its Donate button. A suite that cannot run that
+    # never checks the thing most likely to break.
+    "screener[scrape]",
     "pytest>=8.0",
     # One worker per core, each with its own throwaway database. Not a nicety:
     # applying eighteen migrations costs ~320ms and every database test pays it,

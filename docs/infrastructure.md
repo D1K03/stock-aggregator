@@ -114,6 +114,68 @@ each URL as an independent call, so there is no jar to keep.
 
 ---
 
+## Scraping a page
+
+`screener.magpie` — a link in, an article out.
+
+```python
+from screener.magpie.client import scrape      # what api and bot import
+result = scrape("https://example.com/a-piece", requested_by="ehewes")
+```
+
+**The ladder is the one above.** Magpie names `direct, isp_proxy, unlocker` and
+`screener.fetch` does the escalating; what magpie adds is whether the site
+permits it, what counts as a page rather than a block, what it cost, and where
+it goes. It is the first and only caller in the project that names `unlocker`.
+
+| It stops at | Because |
+|---|---|
+| robots.txt disallows | Escalating would turn respecting robots.txt into routing around it |
+| the body is not a page | `FetchResult` has no Content-Type, so a PDF is mojibake and the ladder would pay to fail |
+| the publisher says it is not free | "The same bytes a browser gets" does not stretch to getting past a subscription check |
+
+Everything else escalates, including a 200 that is really a challenge page —
+that is a `validate` callback rejecting the body, which is what turns a soft
+block into a fallback rather than a stored interstitial.
+
+**What it costs.** Only the last rung. `MAGPIE_UNLOCKER_DAILY_MAX` (default 20)
+caps billed fetches a day, counted out of `magpie.attempt`. Deliberately not
+`DAILY_SPEND_CAP_USD`: that is $0.10 against a reply costing $0.00005, so fifty
+scrapes would empty it and Steven would stop answering. The spend is still on
+`/audit`; the count is the gate. An unreadable meter drops the billed rung and
+tries the free ones, so it fails closed without failing shut.
+
+**Where it lands.** `magpie.document` is one row per canonical URL — tracking
+parameters stripped, so one article shared from three places is one row — and
+`magpie.attempt` is every try including the refusals, which is what stops the
+same dead link being fetched again by whoever asks next. Both are readable in
+`/playground`, by Steven, and by the claude.ai connector. The page as fetched is
+gzipped into the blob store as evidence.
+
+**The sites a document points at.** Opening one on `/magpie` reads its stored
+page back for the links the article makes, which costs no request: the page is
+already in the blob store, and this is the only thing in the project that reads
+a payload back rather than only writing one. Taken from the extracted article
+rather than the raw HTML, because every anchor on a page includes the site's own
+navigation and footer. Read once and remembered, so a document nobody opens is
+never read.
+
+`magpie.link.scraped_id` is the frontier a crawler would drain. Nothing drains
+it: every fetch is still one somebody clicked.
+
+**Where it may go.** `screener.magpie.reachable` refuses loopback, private,
+link-local, reserved and multicast addresses, and requires every address a name
+resolves to be public. It runs as a hook on each request rather than a check on
+the URL, because with redirects followed the address fetched is not the address
+submitted: a public page can answer `302 Location: http://169.254.169.254/` and
+nothing else would look. `screener.fetch` takes the hook; no other caller passes
+one, because no other caller fetches an address somebody else chose.
+
+**Do not** point it at a login, a paywall or anything needing a cookie. It holds
+no credentials and is not meant to.
+
+---
+
 ## The payload store
 
 `screener.blobs` — two verbs against one bucket.

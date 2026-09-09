@@ -21,6 +21,7 @@ either would cost more than it could ever be worth as text.
 
 from screener.bot.tools import charts as _charts  # noqa: F401  (registers)
 from screener.bot.tools import deployment as _deployment  # noqa: F401  (registers)
+from screener.bot.tools import scrape as _scrape  # noqa: F401  (registers)
 from screener.bot.tools import query as _query  # noqa: F401  (registers)
 from screener.bot.tools import skybird as _skybird  # noqa: F401  (registers)
 from screener.bot.tools.charts import Chart, Mark, collecting

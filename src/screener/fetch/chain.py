@@ -6,7 +6,13 @@ from collections.abc import Callable, Mapping, Sequence
 import httpx
 
 from screener.fetch.result import EmptyResponse, FetchError, FetchResult
-from screener.fetch.strategies import BROWSER_HEADERS, STRATEGIES, redact, sanitise
+from screener.fetch.strategies import (
+    BROWSER_HEADERS,
+    STRATEGIES,
+    OnRequest,
+    redact,
+    sanitise,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +33,14 @@ def fetch(
     validate: Callable[[FetchResult], None] | None = None,
     allow_empty: bool = False,
     transport: httpx.BaseTransport | None = None,
+    on_request: OnRequest = None,
 ) -> FetchResult:
     """Fetch `url`, trying each strategy in order until one succeeds.
+
+    `on_request` is run before every request a strategy sends, **including each
+    redirect**. Validating a URL before calling this checks the address somebody
+    typed rather than the address that is fetched; a hook is the only place that
+    sees every hop. Raising from it fails that strategy like any other error.
 
     There is no retry and no backoff inside a strategy. The chain is the retry:
     re-issuing the same request down the path that just failed rarely helps,
@@ -59,7 +71,7 @@ def fetch(
 
         attempted.append(name)
         try:
-            result = strategy(url, timeout, merged, transport)
+            result = strategy(url, timeout, merged, transport, on_request)
             if not allow_empty and not result.text.strip():
                 raise EmptyResponse(f"{name} returned {result.status_code} with no body")
             if validate is not None:

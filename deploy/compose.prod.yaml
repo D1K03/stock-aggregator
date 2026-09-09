@@ -80,6 +80,9 @@ services:
       INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      # Where the scraper is. Both the status service and the bot ask it;
+      # neither holds a parser or a proxy credential of its own.
+      MAGPIE_URL: http://magpie:8082
       # The read-only role the playground connects as. One variable is the whole
       # switch: `:+` expands to nothing when the password is unset, and the app
       # already treats an empty variable as absent, so leaving it out means the
@@ -160,6 +163,9 @@ services:
       INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+      # Where the scraper is. Both the status service and the bot ask it;
+      # neither holds a parser or a proxy credential of its own.
+      MAGPIE_URL: http://magpie:8082
       # Steven's `sql` tool, as `playground_bot` -- the console's role minus the
       # skybird schema. Same variable name the api reads, a different role
       # behind it, and deliberately not `PLAYGROUND_DB_PASSWORD`: the split is
@@ -236,6 +242,55 @@ services:
   # No ports and no Caddy route, and no healthcheck for the reason the bot has
   # none: a check cannot tell "sleeping until the next pass" from "wedged", and
   # restarting a worker that was fine is worse than not noticing for six hours.
+  # The scraper. Paste a link, get the article kept.
+  #
+  # Its own image, for one dependency and one credential: trafilatura and lxml
+  # land only here, and this is the only container given the Bright Data
+  # variables — so the only process in the stack whose fetches can cost money is
+  # the one whose job is fetching.
+  magpie:
+    image: ghcr.io/d1k03/stock-aggregator-magpie:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+
+    # No ports and no Caddy route. The browser asks the status service, which
+    # holds the session; the status service asks this over the compose network.
+    expose:
+      - "8082"
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen("http://localhost:8082/health")
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # A page is a page. This parses HTML and writes rows; it does not need much,
+    # and bounding it means a pathological document cannot crowd the scorer.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
+    depends_on:
+      api:
+        condition: service_healthy
+
   reddit:
     image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
     restart: unless-stopped

@@ -174,6 +174,30 @@ nothing outside imports a submodule directly.
   `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
   the web container, which rasterises the same string to PNG for Discord. One renderer, so the
   two surfaces cannot drift — do not add a second way to draw a chart.
+- `screener.magpie` — the scraper, in a container of its own. Paste a link and the article is
+  fetched over the cheapest route that works, read out of the page and kept. **The escalating
+  ladder is not here**: `screener.fetch` already had `direct -> isp_proxy -> unlocker`, and nothing
+  in the project had ever named the billed rung. What this adds is the policy around it — whether
+  the site permits it, what counts as a page rather than a block, what it cost, and where it lands.
+  Three refusals deliberately do **not** escalate, which is the opposite of the rule everywhere
+  else: robots.txt saying no (reaching for a proxy would turn "respect robots.txt" into "route
+  around" it), a body that is not a web page (`FetchResult` has no Content-Type, so a PDF arrives
+  as mojibake and the ladder would climb to the billed rung to fail again), and a publisher marking
+  a page as not free to read. `magpie.attempt` records every try including the refusals, so a dead
+  link and an untried link are not the same thing and the same one is not paid for twice; it is
+  also the meter for the billed rung, which is capped by a **count of its own** and never by
+  `DAILY_SPEND_CAP_USD` — a scrape is forty times a reply, and one counter for both would let
+  scraping silence Steven. `content_hash` is over the extracted headline and body, never the HTML,
+  for the reason `screener.reddit` hashes per item.
+  Opening a document reads its stored page **back out of the blob store** for the sites it points
+  at, which is the first thing here to read a payload rather than only write one, and it opens no
+  socket. The links come from trafilatura's extracted body, not the raw HTML: every anchor on a
+  page includes the site's own furniture, and on one Wikipedia article that is the difference
+  between 248 links led by *Donate* and *Privacy Policy* and 214 real citations. Read once per
+  document and stamped by `links_read_at`, so a document nobody opens is never read.
+  `magpie.link.scraped_id` is the crawler's frontier, `where scraped_id is null` being the queue,
+  and it exists before anything drains it so that cycle is a new process rather than a migration
+  over live rows. **Nothing crawls**: every fetch is still one somebody clicked.
 - `screener.mcp` — claude.ai reading this data as a custom connector, over the
   Model Context Protocol. The transport is Streamable HTTP answered in plain
   JSON: the spec allows a single object in reply to a POST instead of an SSE
