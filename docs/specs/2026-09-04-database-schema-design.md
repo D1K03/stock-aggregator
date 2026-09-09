@@ -593,6 +593,12 @@ facts visible when scoring date D  =  observed_at <= D + cutoff_offset
 A live run scoring D at 02:00 the next morning needs an offset past that fetch — around
 `'1 day 6 hours'`. The value is stamped on the run and covered by `config_hash`.
 
+> **Erratum, from the nightly scheduling cycle.** That worked example describes a run
+> `screener.scoring.cli` refuses: at 02:00 on D+1, the date D is already in the past, and
+> `--as-of` will not accept it. The scheduler that landed in that cycle instead runs at 23:00
+> on D, scoring D while its own market is still the most recent one closed. The offset's value
+> and its reasoning are unaffected — only the hour in the example was wrong.
+
 **It has to be an offset rather than a timestamp**, because a single cutoff cannot survive a
 multi-day backfill: one timestamp applied across a range would let a 2024 scoring date see 2026
 knowledge, which is precisely the lookahead bias D5 exists to prevent. As an offset, live and

@@ -230,6 +230,22 @@ nothing was reading it closely enough to notice.
 
 Spec: `docs/specs/2026-09-06-fundamentals-ingest.md`.
 
+**Nightly scheduling** — the three commands above now run themselves. `screener.nightly` waits
+for 23:00 UTC, runs prices, fundamentals and scoring in that order, and recovers from a restart
+by asking on boot whether tonight is already scored rather than losing the date. Scoring is
+skipped when prices wholly failed, and Discord hears about it only when a night is given up —
+not on every pass, which is why one security failing every night stays quiet. No command
+changed and nothing new is ingested or scored; this decides only when the existing pipeline
+runs. Every run it schedules still writes `emits_alerts = false`, for the same reason scoring's
+own entry above does.
+
+One open parameter carried out of the spec: nothing is sent on a *successful* night, so right
+now a container that never starts looks identical to one that has been running fine — `/status`
+reporting the age of the last successful night is the cheap fix, and belongs with whatever cycle
+next touches that endpoint.
+
+Spec: `docs/specs/2026-09-07-nightly-scheduling.md`.
+
 ## Then, in dependency order
 
 Each needs its own brainstorm → spec → plan cycle; they are too big for one.

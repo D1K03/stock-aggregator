@@ -1,6 +1,6 @@
 # Nightly scheduling
 
-Status: agreed, not implemented. Written 2026-09-07.
+Status: implemented 2026-09-09. Written 2026-09-07.
 
 A container that runs the pipeline once a night: prices, then fundamentals, then scoring, at
 23:00 UTC, recovering from a restart and saying so in Discord when a night is lost. Standing

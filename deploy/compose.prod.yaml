@@ -262,6 +262,42 @@ services:
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
+  # The nightly pipeline: prices, fundamentals, scoring, once a night.
+  #
+  # Its own service rather than a cron on the box, because a schedule outside
+  # this repository is one more thing that fails invisibly -- `CLAUDE.md`
+  # already names two of those, and a third is not worth the simplicity.
+  #
+  # No healthcheck, and no ports. It spends almost all of its life asleep on a
+  # `threading.Event`, so there is nothing to probe that would distinguish
+  # "waiting for 23:00" from "wedged", and a check that could not tell them
+  # apart would restart a container that was about to do its job.
+  nightly:
+    image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "screener.nightly"]
+
+    depends_on:
+      # On `api`, not on `postgres`, for the reason `reddit` gives: a healthy
+      # database is not a migrated one, and this needs `security`, `metric` and
+      # the seeded reference rows to exist before its first night.
+      api:
+        condition: service_healthy
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
+      NIGHTLY_TRIGGER_HOUR: ${NIGHTLY_TRIGGER_HOUR:-23}
+      NIGHTLY_ENABLED: ${NIGHTLY_ENABLED:-true}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+
   # Live stream capture. Its own image, because ffmpeg and yt-dlp belong to
   # nothing else in this stack.
   #

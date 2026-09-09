@@ -223,6 +223,33 @@ same table backs Steven's memory.
 
 ---
 
+## Nightly scheduling
+
+`screener.nightly` — prices, then fundamentals, then scoring, once a night at 23:00 UTC, in a
+container of its own alongside `reddit` and `skybird`. No ports, no healthcheck, and no ports
+route to it, for the same reason those two have none: it spends almost all of its life asleep,
+and a check that cannot tell "waiting for 23:00" from "wedged" would restart a container that
+was about to do its job.
+
+No command changed to build this. It is a schedule, not a rewrite: the three commands it runs
+are the ones a person ran by hand before, in the order this cycle already required.
+
+**What it costs when it is not running:** scoring is forward-only, and a day the container was
+down cannot be filled in later — `screener.scoring.cli` refuses a past `--as-of` on purpose, per
+D2 in its spec. A night this scheduler misses is not a gap in a graph; it is a permanent hole in
+the forward log that every later backtest reads through.
+
+| | |
+|---|---|
+| Cadence | once a night, at `NIGHTLY_TRIGGER_HOUR` UTC (default 23) |
+| Switch | `NIGHTLY_ENABLED=false`; the container keeps running and waiting rather than exiting |
+| Recovery | asks on boot whether tonight is already scored, so a deploy mid-run finishes the night instead of losing the date |
+| Noise | Discord hears about a night only when one is given up, never on a quiet success |
+
+Spec: `docs/specs/2026-09-07-nightly-scheduling.md`.
+
+---
+
 ## The playground
 
 `screener.playground` — read-only SQL over the tables a second Postgres role is
