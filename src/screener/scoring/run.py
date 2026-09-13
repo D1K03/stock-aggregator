@@ -8,6 +8,7 @@ night against ingest's 2.4 million.
 """
 
 import logging
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -15,13 +16,34 @@ from decimal import Decimal
 
 import psycopg
 
+# `screener.ingest` owns the point-in-time fact read, including the `period_type`
+# rule in its `distinct on`. Importing it keeps one definition of what a scoring
+# date may see of the fact layer; `ingest.load` imports scoring lazily for the same
+# reason in the other direction, which is what keeps the pair cycle-free.
+from screener.ingest import read_facts
 from screener.provenance import config_hash, require_git_sha
 from screener.scoring.adjust import Action, adjusted_closes
+from screener.scoring.basis import (
+    ANNUAL_MAX_AGE_DAYS,
+    QUARTER_GAP_MAX_DAYS,
+    QUARTER_GAP_MIN_DAYS,
+    SPLIT_WINDOW_DAYS,
+    TTM_MAX_AGE_DAYS,
+    Item,
+    index_facts,
+)
 from screener.scoring.blend import blend
 from screener.scoring.metrics import CODES, compute, months_before
-from screener.scoring.peers import MIN_PEERS, resolve
-from screener.scoring.percentile import deciles, percentiles
-from screener.scoring.pillars import score_pillar
+from screener.scoring.peers import MIN_PEERS, market_group, resolve
+from screener.scoring.pillars import PillarScore, score_pillar
+from screener.scoring.ranking import rank
+from screener.scoring.ratios import (
+    RATIO_CODES,
+    TAX_RATE_CEILING,
+    Ratio,
+    applicable,
+    compute_ratios,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +141,28 @@ def read_actions(
     return out
 
 
-# Shared with `migrations/019_scoring_reference.sql` by hand, because
+def read_currencies(
+    conn: psycopg.Connection, security_ids: Sequence[int]
+) -> dict[int, str]:
+    """Each security's trading currency: the one its facts must share (spec D9)."""
+    if not security_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, currency from security where id = any(%s)",
+            (list(security_ids),),
+        )
+        return {row[0]: row[1] for row in cur.fetchall()}
+
+
+# Shared with `migrations/022_ratios.sql` by hand, because
 # `scoring_logic_version` has no code column to key on.
-LOGIC_DESCRIPTION = "v1 momentum: four price metrics, sector percentiles"
-WEIGHT_CODE = "v1"
-PILLAR_CODE = "momentum"
+LOGIC_DESCRIPTION = (
+    "v2 momentum, valuation, quality: sector percentiles, industry-applicable ratios"
+)
+WEIGHT_CODE = "v2"
+MOMENTUM = "momentum"
+PILLAR_CODES: tuple[str, ...] = (MOMENTUM, "valuation", "quality")
 
 
 class NoBarsVisible(RuntimeError):
@@ -150,8 +189,9 @@ SCORING_LOCK_ID = 8_119_003
 class Reference:
     logic_version_id: int
     weight_version_id: int
-    pillar_id: int
+    pillar_ids: dict[str, int]
     metric_ids: dict[str, int]
+    metric_pillar: dict[str, str]
     higher_is_better: dict[str, bool]
     weights: dict[str, Decimal]
 
@@ -167,6 +207,7 @@ class ScoringReport:
 
 def reference(conn: psycopg.Connection) -> Reference:
     """The seeded rows this run's numbers are stamped against."""
+    wanted = [*CODES, *RATIO_CODES]
     with conn.cursor() as cur:
         cur.execute(
             "select id from scoring_logic_version where description = %s",
@@ -175,16 +216,20 @@ def reference(conn: psycopg.Connection) -> Reference:
         logic = cur.fetchone()
         cur.execute("select id from weight_version where code = %s", (WEIGHT_CODE,))
         weight = cur.fetchone()
-        cur.execute("select id from pillar where code = %s", (PILLAR_CODE,))
-        pillar = cur.fetchone()
-        if logic is None or weight is None or pillar is None:
+        if logic is None or weight is None:
             raise RuntimeError(
                 "scoring reference data is missing; apply migrations with "
                 "`python -m screener.boot migrate`"
             )
         cur.execute(
-            "select code, id, higher_is_better from metric where code = any(%s)",
-            (list(CODES),),
+            "select code, id from pillar where code = any(%s)", (list(PILLAR_CODES),)
+        )
+        pillars = {row[0]: row[1] for row in cur.fetchall()}
+        cur.execute(
+            """select m.code, m.id, m.higher_is_better, p.code
+                 from metric m join pillar p on p.id = m.pillar_id
+                where m.code = any(%s)""",
+            (wanted,),
         )
         metrics = cur.fetchall()
         cur.execute(
@@ -196,27 +241,33 @@ def reference(conn: psycopg.Connection) -> Reference:
         )
         weights = {row[0]: row[1] for row in cur.fetchall()}
 
-    if len(metrics) != len(CODES):
+    if len(pillars) != len(PILLAR_CODES):
         raise RuntimeError(
-            f"expected {len(CODES)} seeded metrics, found {len(metrics)}"
+            f"expected pillars {', '.join(PILLAR_CODES)}; found {', '.join(sorted(pillars))}"
         )
-    if weights.get(PILLAR_CODE, Decimal(0)) <= 0:
-        # `blend` drops any pillar the weight version doesn't weight
-        # positively, so a zero (or missing) momentum weight here would write
-        # a full `pillar_score_daily` and zero `snapshot_daily` rows -- the
-        # same empty-snapshot night `NoBarsVisible` exists to prevent,
-        # arriving through the weight version instead of the bars.
+    if len(metrics) != len(wanted):
         raise RuntimeError(
-            f"weight version {WEIGHT_CODE!r} does not weight the "
-            f"{PILLAR_CODE!r} pillar positively; add or fix its "
-            "`pillar_weight` row before scoring with it"
+            f"expected {len(wanted)} seeded metrics, found {len(metrics)}"
+        )
+    if not any(weights.get(code, Decimal(0)) > 0 for code in PILLAR_CODES):
+        # `blend` drops any pillar the weight version doesn't weight positively,
+        # so a version weighting none of the computed pillars would write a full
+        # `pillar_score_daily` and zero `snapshot_daily` rows -- the same
+        # empty-snapshot night `NoBarsVisible` exists to prevent, arriving
+        # through the weight version instead of the bars. Zeroing one pillar is
+        # an ordinary weighting; zeroing all of them is not.
+        raise RuntimeError(
+            f"weight version {WEIGHT_CODE!r} weights none of "
+            f"{', '.join(PILLAR_CODES)} positively; fix its `pillar_weight` rows "
+            "before scoring with it"
         )
     return Reference(
         logic_version_id=logic[0],
         weight_version_id=weight[0],
-        pillar_id=pillar[0],
-        metric_ids={code: metric_id for code, metric_id, _ in metrics},
-        higher_is_better={code: flag for code, _, flag in metrics},
+        pillar_ids=pillars,
+        metric_ids={code: metric_id for code, metric_id, _, _ in metrics},
+        metric_pillar={code: pillar for code, _, _, pillar in metrics},
+        higher_is_better={code: flag for code, _, flag, _ in metrics},
         weights=weights,
     )
 
@@ -240,6 +291,12 @@ def open_run(
             "min_peers": MIN_PEERS,
             "metrics": list(CODES),
             "bar_window_months": BAR_WINDOW_MONTHS,
+            "ratios": list(RATIO_CODES),
+            "ttm_max_age_days": TTM_MAX_AGE_DAYS,
+            "quarter_gap_days": [QUARTER_GAP_MIN_DAYS, QUARTER_GAP_MAX_DAYS],
+            "annual_max_age_days": ANNUAL_MAX_AGE_DAYS,
+            "split_window_days": SPLIT_WINDOW_DAYS,
+            "tax_rate_ceiling": str(TAX_RATE_CEILING),
         }
     )
     with conn.cursor() as cur:
@@ -277,11 +334,14 @@ def close_run(conn: psycopg.Connection, run_id: int, outcome: str) -> None:
 
 
 def write_metrics(cur: psycopg.Cursor, rows: Sequence[tuple]) -> None:
+    # `fundamental_fact_id` is left null for every metric: one key cannot hold the
+    # facts a ratio rests on, and traceability is by reproduction (ratios spec
+    # D14). `period_end` and `period_basis` name the period instead.
     cur.executemany(
         """insert into metric_daily
            (as_of, scoring_run_id, security_id, metric_id, raw_value, percentile,
-            peer_group_id, peer_count, fallback_level)
-           values (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            peer_group_id, peer_count, fallback_level, period_end, period_basis)
+           values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         rows,
     )
 
@@ -332,64 +392,115 @@ def score(
             "an empty snapshot is worse than none"
         )
     actions = read_actions(conn, securities, as_of=as_of, cutoff_offset=cutoff_offset)
+    facts = read_facts(conn, securities, as_of=as_of, cutoff_offset=cutoff_offset)
+    currencies = read_currencies(conn, securities)
+    peers = resolve(conn, securities, as_of=as_of)
 
-    raw: dict[int, dict[str, Decimal]] = {}
+    values: dict[int, dict[str, Decimal]] = {}
+    periods: dict[tuple[int, str], Ratio] = {}
+    # How each applicable ratio was assembled tonight, so a Yahoo change -- a
+    # series dropped, a sign convention flipped -- shows in the log as a falling
+    # count before anyone queries for it (spec §7).
+    tally: dict[str, Counter[str]] = {code: Counter() for code in RATIO_CODES}
     for security_id in securities:
-        series = adjusted_closes(bars.get(security_id, []), actions.get(security_id, []))
-        values = compute(series, as_of)
-        if values:
-            raw[security_id] = values
+        security_bars = bars.get(security_id, [])
+        security_actions = actions.get(security_id, [])
+        found = dict(compute(adjusted_closes(security_bars, security_actions), as_of))
 
-    peers = resolve(conn, list(raw), as_of=as_of)
+        industry = peers[security_id].industry
+        held = index_facts(
+            (
+                Item(f.metric_code, f.period_end, f.period_type, f.value, f.currency)
+                for f in facts.get(security_id, [])
+            ),
+            currency=currencies[security_id],
+        )
+        ratios = compute_ratios(
+            held,
+            industry=industry,
+            # The raw close of the latest visible bar: total-return adjustment is
+            # anchored at the present, so it would not change this one (spec D8).
+            close=security_bars[-1][1] if security_bars else None,
+            split_dates=[
+                action.effective_date
+                for action in security_actions
+                if action.action_type == "split"
+            ],
+            as_of=as_of,
+        )
+        for codes in applicable(industry).values():
+            for code in codes:
+                ratio = ratios.get(code)
+                if ratio is None:
+                    tally[code]["absent"] += 1
+                else:
+                    tally[code][ratio.basis or "date"] += 1
+        for code, ratio in ratios.items():
+            found[code] = ratio.value
+            periods[(security_id, code)] = ratio
 
-    # Grouped by (metric, peer group), because a percentile is only defined
-    # within one of those.
-    buckets: dict[tuple[str, int], list[tuple[int, Decimal]]] = {}
-    for security_id, values in raw.items():
-        group = peers[security_id].peer_group_id
-        for code, value in values.items():
-            buckets.setdefault((code, group), []).append((security_id, value))
+        if found:
+            values[security_id] = found
+
+    placed, stats = rank(
+        values,
+        {sid: (peers[sid].peer_group_id, peers[sid].level) for sid in values},
+        market_id=market_group(conn),
+        higher_is_better=ref.higher_is_better,
+        min_peers=MIN_PEERS,
+    )
 
     metric_rows: list[tuple] = []
-    stat_rows: list[tuple] = []
-    scored_percentiles: dict[int, dict[str, Decimal]] = {}
-    for (code, group_id), members in buckets.items():
-        values = [value for _, value in members]
-        ranked = percentiles(values, higher_is_better=ref.higher_is_better[code])
-        for (security_id, value), percentile in zip(members, ranked):
-            metric_rows.append(
-                (
-                    as_of, run_id, security_id, ref.metric_ids[code], value,
-                    percentile, group_id,
-                    # The peers that actually produced this metric today, not
-                    # everything the group holds: a percentile is worth exactly
-                    # the number of values it was computed from.
-                    len(members),
-                    peers[security_id].level,
-                )
+    ranked: dict[int, dict[str, dict[str, Decimal]]] = {}
+    levels: dict[int, list[int]] = {}
+    for place in placed:
+        ratio = periods.get((place.security_id, place.code))
+        metric_rows.append(
+            (
+                as_of, run_id, place.security_id, ref.metric_ids[place.code],
+                place.value, place.percentile, place.peer_group_id,
+                # The peers that actually produced this metric today, not
+                # everything the group holds: a percentile is worth exactly the
+                # number of values it was computed from.
+                place.peer_count,
+                place.level,
+                ratio.period_end if ratio is not None else None,
+                ratio.basis if ratio is not None else None,
             )
-            scored_percentiles.setdefault(security_id, {})[code] = percentile
-        stat_rows.append(
-            (as_of, run_id, group_id, ref.metric_ids[code], len(members), deciles(values))
         )
+        pillar_code = ref.metric_pillar[place.code]
+        ranked.setdefault(place.security_id, {}).setdefault(pillar_code, {})[
+            place.code
+        ] = place.percentile
+        levels.setdefault(place.security_id, []).append(place.level)
+
+    stat_rows = [
+        (as_of, run_id, stat.peer_group_id, ref.metric_ids[stat.code], stat.member_count, stat.deciles)
+        for stat in stats
+    ]
 
     pillar_rows: list[tuple] = []
     snapshot_rows: list[tuple] = []
-    for security_id, ranked in scored_percentiles.items():
-        pillar = score_pillar(ranked, expected=len(CODES))
-        if pillar is None:
-            continue
-        pillar_rows.append(
-            (
-                as_of, run_id, security_id, ref.pillar_id,
-                pillar.score, pillar.metric_count, pillar.coverage,
+    for security_id, by_pillar in ranked.items():
+        # Coverage's denominator is what applies to this security, so a bank whose
+        # one applicable Quality ratio is present is fully covered (spec D10).
+        expected = {MOMENTUM: len(CODES), **{
+            pillar_code: len(codes)
+            for pillar_code, codes in applicable(peers[security_id].industry).items()
+        }}
+        scored: dict[str, PillarScore] = {}
+        for pillar_code, percentiles_by_code in by_pillar.items():
+            pillar = score_pillar(percentiles_by_code, expected=expected[pillar_code])
+            if pillar is None:
+                continue
+            scored[pillar_code] = pillar
+            pillar_rows.append(
+                (
+                    as_of, run_id, security_id, ref.pillar_ids[pillar_code],
+                    pillar.score, pillar.metric_count, pillar.coverage,
+                )
             )
-        )
-        snapshot = blend(
-            {PILLAR_CODE: pillar},
-            ref.weights,
-            [peers[security_id].level] * len(ranked),
-        )
+        snapshot = blend(scored, ref.weights, levels[security_id])
         if snapshot is None:
             continue
         snapshot_rows.append(
@@ -406,12 +517,20 @@ def score(
         write_pillar_scores(cur, pillar_rows)
         write_snapshots(cur, snapshot_rows)
 
+    for code in RATIO_CODES:
+        counts = tally[code]
+        if counts:
+            logger.info(
+                "%s: %d TTM, %d annual, %d at a date, %d absent",
+                code, counts["TTM"], counts["A"], counts["date"], counts["absent"],
+            )
+
     return ScoringReport(
         as_of=as_of,
         run_id=run_id,
         scored=len(snapshot_rows),
-        skipped=len(securities) - len(raw),
-        groups=len({group for _, group in buckets}),
+        skipped=len(securities) - len(values),
+        groups=len({place.peer_group_id for place in placed}),
     )
 
 
