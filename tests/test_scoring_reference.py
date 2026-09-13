@@ -4,6 +4,8 @@
 together (spec D11). These tests are what makes "together" checkable.
 """
 
+from decimal import Decimal
+
 import psycopg
 import pytest
 
@@ -60,7 +62,7 @@ def test_weight_version_v1_puts_all_weight_on_momentum(fresh_db):
              join weight_version v on v.id = w.weight_version_id
             where v.code = 'v1'"""
     ).fetchall()
-    assert rows == [("momentum", 1)]
+    assert rows == [("momentum", Decimal("1.0"))]
 
 
 def test_weight_version_v2_weights_the_three_computed_pillars_equally(fresh_db):
