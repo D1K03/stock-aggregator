@@ -21,6 +21,15 @@ anticipate them.
 2. **Raw prices only, never `adj_close`.** Schema D6 stores raw OHLCV plus a separate
    `corporate_action` table and computes adjustment at scoring time. A stored adjusted price is
    mutable history in disguise.
+
+   > **Erratum (2026-09-13).** The premise is false for splits. Yahoo's `quote.close` is already
+   > adjusted for every split up to the moment of the fetch; only dividends are left out (its
+   > `adjclose` includes them). So `price_daily.close` is split-adjusted as of `observed_at`, and a
+   > bar stored before a later split keeps the old scale — the restatement D6 anticipated, arriving
+   > through every split rather than through corrections. Scoring now applies a split only to bars
+   > fetched before it (scoring spec D4 erratum), which needs no schema change while `observed_at`
+   > moves with `close`. D8's sweep will report every pre-split bar as a changed close after each
+   > future split; that is this, not corruption.
 3. **Every score traces back to the stored response.** Schema D1 and `ingest_observation.blob_path`
    being `not null` make that a claim the database enforces, so the payload store cannot be
    something a cron job empties.

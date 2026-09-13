@@ -348,8 +348,11 @@ nothing outside imports a submodule directly.
   deliberately unlike ingest's per-security commits: a half-scored day would read as a crossing
   for every security that never got scored. Adjustment is total return — splits and dividends,
   anchored at the present — and is the one piece of arithmetic here where a wrong answer looks
-  entirely plausible, so it is a pure function with its own tests. A run that dies is settled
-  rather than left to block its date: `reconcile` under an advisory lock, on skybird's terms.
+  entirely plausible, so it is a pure function with its own tests. **Yahoo's close is already
+  split-adjusted as of the fetch**, so a split adjusts only bars whose `observed_at` precedes it;
+  applied to every earlier bar it double-counted, and APH's +9% read as +118.6%. A run that dies
+  is settled rather than left to block its date: `reconcile` under an advisory lock, on skybird's
+  terms.
   The three read-only roles already hold `select` on all four derived tables from 013, 017 and 018, so the console,
   Steven's `sql` tool and the claude.ai connector see real scores the night this first runs,
   with no migration and no code change.
