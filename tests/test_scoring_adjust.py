@@ -188,3 +188,24 @@ def test_a_dividend_adjusts_whenever_the_bar_was_fetched():
 
     assert adjusted[0][1] == Decimal(99)
     assert adjusted[-1][1] == Decimal(100)
+
+
+def test_two_splits_adjust_each_bar_for_only_those_fetched_before():
+    # A 2:1 on the 5th and a 3:1 on the 10th. The 2nd was fetched before both
+    # and still reads 600; the 7th was fetched between them, after Yahoo applied
+    # the first, and reads 300 -- it owes only the second split.
+    between = datetime(2026, 1, 7, 23, 0, tzinfo=timezone.utc)
+    bars = [
+        (date(2026, 1, 2), Decimal(600), EARLY),
+        (date(2026, 1, 7), Decimal(300), between),
+        (date(2026, 1, 12), Decimal(100), LATE),
+    ]
+    actions = [
+        Action(date(2026, 1, 5), "split", ratio=Decimal(2)),
+        Action(date(2026, 1, 10), "split", ratio=Decimal(3)),
+    ]
+
+    adjusted = adjusted_closes(bars, actions)
+
+    # A third has no exact decimal; ten places is far below a cent.
+    assert [round(c, 10) for _, c in adjusted] == [Decimal(100)] * 3

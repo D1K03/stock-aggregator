@@ -120,6 +120,14 @@ def adjusted_closes(
 
 def _start_of(day: date) -> datetime:
     # A bar fetched at any point on the effective date counts as already
-    # restated: the nightly fetch runs after that day's close, and a bar Yahoo
-    # had not yet restated sits inside the settling window and is refetched.
+    # restated, because the nightly fetch runs after that day's US close.
+    #
+    # **Known gap.** That is an assumption about Yahoo's timing, not a fact the
+    # data proves. If Yahoo restates late, or an ingest runs past midnight UTC
+    # before the ex-date, bars fetched unadjusted on or after the effective date
+    # get no factor; those still inside the settling window are refetched
+    # restated, but the oldest one ages out of the window first and keeps the
+    # old scale. The stronger rule compares a bar's `observed_at` with the split
+    # row's own `observed_at`, which is set by the same payload that restated
+    # the closes -- the follow-up recorded in the scoring spec's D4 erratum.
     return datetime.combine(day, time.min, tzinfo=timezone.utc)
