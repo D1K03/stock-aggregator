@@ -46,9 +46,11 @@ from screener.scoring.ratios import (
     STANDARD,
     TAX_RATE_CEILING,
     VALUATION,
+    Explained,
     Ratio,
     applicable,
     compute_ratios,
+    explain_ratios,
     industry_class,
 )
 from screener.scoring.run import (
@@ -103,6 +105,7 @@ __all__ = [
     "Absent",
     "Action",
     "Basis",
+    "Explained",
     "GroupStat",
     "Held",
     "Item",
@@ -125,6 +128,7 @@ __all__ = [
     "compute_ratios",
     "deciles",
     "explain_market_cap",
+    "explain_ratios",
     "first_missing_balance",
     "flow_basis",
     "index_facts",
