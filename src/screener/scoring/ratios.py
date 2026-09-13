@@ -21,6 +21,7 @@ from screener.scoring.basis import (
     Absent,
     Basis,
     Held,
+    Item,
     balance_at,
     explain_market_cap,
     first_missing_balance,
@@ -90,15 +91,29 @@ class _Inputs:
     held: Held
     as_of: date
     currency: str | None
-    foreign: Mapping[str, frozenset[str]]
+    dropped: Mapping[str, Sequence[Item]]
 
 
-def _unavailable(inputs: _Inputs, codes: Sequence[str], reason: str) -> Absent:
-    # A figure reported in another currency was dropped before any formula saw
-    # it, so "no figure" would be the wrong story: say where it went instead.
-    dropped = sorted({c for code in codes for c in inputs.foreign.get(code, frozenset())})
-    if dropped and inputs.currency is not None:
-        return Absent(f"facts reported in {', '.join(dropped)}, not {inputs.currency}")
+def _combined(inputs: _Inputs, codes: Sequence[str]) -> dict[str, list[Item]]:
+    """Held plus dropped facts for these codes, for the counterfactual retry."""
+    return {code: [*inputs.held.get(code, ()), *inputs.dropped.get(code, ())] for code in codes}
+
+
+def _unavailable(
+    inputs: _Inputs, codes: Sequence[str], reason: str, retry: Callable[[Held], bool]
+) -> Absent:
+    # A dropped foreign-currency fact is the reason only if including it would
+    # actually have made the lookup succeed -- otherwise "no figure" is the true
+    # story and blaming an unrelated old fact in another currency is a lie.
+    if inputs.currency is not None and retry(_combined(inputs, codes)):
+        names = sorted(
+            {
+                item.currency or "an unknown currency"
+                for code in codes
+                for item in inputs.dropped.get(code, ())
+            }
+        )
+        return Absent(f"facts reported in {', '.join(names)}, not {inputs.currency}")
     return Absent(reason)
 
 
@@ -106,7 +121,10 @@ def _basis(inputs: _Inputs, codes: Sequence[str]) -> Basis | Absent:
     basis = flow_basis(inputs.held, codes, inputs.as_of)
     if basis is None:
         return _unavailable(
-            inputs, codes, f"no clean TTM or annual figure for {', '.join(codes)}"
+            inputs,
+            codes,
+            f"no clean TTM or annual figure for {', '.join(codes)}",
+            lambda combined: flow_basis(combined, codes, inputs.as_of) is not None,
         )
     return basis
 
@@ -115,7 +133,10 @@ def _newest(inputs: _Inputs, codes: Sequence[str]) -> tuple[date, dict[str, Deci
     found = newest_balance(inputs.held, codes, inputs.as_of)
     if found is None:
         return _unavailable(
-            inputs, codes, f"no date within 15 months holding all of {', '.join(codes)}"
+            inputs,
+            codes,
+            f"no date within 15 months holding all of {', '.join(codes)}",
+            lambda combined: newest_balance(combined, codes, inputs.as_of) is not None,
         )
     return found
 
@@ -124,7 +145,12 @@ def _at(inputs: _Inputs, codes: Sequence[str], day: date) -> dict[str, Decimal] 
     balances = balance_at(inputs.held, codes, day)
     if balances is None:
         missing = first_missing_balance(inputs.held, codes, day) or ", ".join(codes)
-        return _unavailable(inputs, codes, f"no {missing} at {day.isoformat()}")
+        return _unavailable(
+            inputs,
+            codes,
+            f"no {missing} at {day.isoformat()}",
+            lambda combined: balance_at(combined, codes, day) is not None,
+        )
     return balances
 
 
@@ -324,20 +350,27 @@ def explain_ratios(
     close_date: date | None,
     split_dates: Sequence[date],
     as_of: date,
-    currency: str | None = None,
-    foreign: Mapping[str, frozenset[str]] | None = None,
+    currency: str | None,
+    dropped: Mapping[str, Sequence[Item]] | None,
 ) -> dict[str, Explained]:
     """Every applicable ratio, as its value or the reason it has none (ui-swap D12).
 
-    `currency` and `foreign` come from `index_facts_explained`; without them an
-    absence caused by a dropped currency reads as a missing figure, which is all
-    scoring needs and all `compute_ratios` passes.
+    `currency` and `dropped` come from `index_facts_explained` and are keyword-only
+    with no default so a caller cannot forget them; without them an absence caused
+    by a dropped currency reads as a missing figure, which is all `compute_ratios`
+    needs and passes.
     """
     wanted = {code for codes in applicable(industry).values() for code in codes}
     cap = explain_market_cap(
-        held, close=close, close_date=close_date, split_dates=split_dates, as_of=as_of
+        held,
+        close=close,
+        close_date=close_date,
+        split_dates=split_dates,
+        as_of=as_of,
+        currency=currency,
+        dropped=dropped,
     )
-    inputs = _Inputs(held, as_of, currency, foreign or {})
+    inputs = _Inputs(held, as_of, currency, dropped or {})
     return {code: _FORMULAS[code](inputs, cap) for code in RATIO_CODES if code in wanted}
 
 
@@ -358,5 +391,7 @@ def compute_ratios(
         close_date=close_date,
         split_dates=split_dates,
         as_of=as_of,
+        currency=None,
+        dropped=None,
     )
     return {code: value for code, value in explained.items() if isinstance(value, Ratio)}

@@ -45,19 +45,22 @@ def cap(held: Any = None, *, close: str | None = "20", close_date: date | None =
 # -- basis: index_facts ----------------------------------------------------------
 
 
-def test_index_facts_explained_reports_the_currencies_it_dropped_per_code():
+def test_index_facts_explained_reports_the_dropped_facts_per_code():
+    eur_income = Item("net_income", QUARTER, "Q", Decimal(1), "EUR")
+    aud_revenue = Item("revenue", QUARTER, "Q", Decimal(1), "AUD")
+    no_currency_revenue = Item("revenue", date(2025, 9, 30), "Q", Decimal(1), None)
     items = [
-        Item("net_income", QUARTER, "Q", Decimal(1), "EUR"),
+        eur_income,
         Item("net_income", date(2025, 9, 30), "Q", Decimal(1), "USD"),
-        Item("revenue", QUARTER, "Q", Decimal(1), "AUD"),
-        Item("revenue", date(2025, 9, 30), "Q", Decimal(1), None),
+        aud_revenue,
+        no_currency_revenue,
     ]
 
-    held, foreign = index_facts_explained(items, currency="USD")
+    held, dropped = index_facts_explained(items, currency="USD")
 
     assert [item.period_end for item in held["net_income"]] == [date(2025, 9, 30)]
     assert "revenue" not in held
-    assert foreign == {"net_income": frozenset({"EUR"}), "revenue": frozenset({"AUD", "no currency"})}
+    assert dropped == {"net_income": [eur_income], "revenue": [aud_revenue, no_currency_revenue]}
     assert index_facts(items, currency="USD") == held
 
 
@@ -142,9 +145,18 @@ def company_items(*, drop=(), currency_of=None, **overrides):
     return items
 
 
-def explain(industry="software", close: str | None = "20", *, drop=(), currency_of=None, **overrides):
-    held, foreign = index_facts_explained(
-        company_items(drop=drop, currency_of=currency_of, **overrides), currency="USD"
+def explain(
+    industry="software",
+    close: str | None = "20",
+    *,
+    drop=(),
+    currency_of=None,
+    extra_items=(),
+    **overrides,
+):
+    held, dropped = index_facts_explained(
+        [*company_items(drop=drop, currency_of=currency_of, **overrides), *extra_items],
+        currency="USD",
     )
     return explain_ratios(
         held,
@@ -154,7 +166,7 @@ def explain(industry="software", close: str | None = "20", *, drop=(), currency_
         split_dates=[],
         as_of=AS_OF,
         currency="USD",
-        foreign=foreign,
+        dropped=dropped,
     )
 
 
@@ -190,6 +202,86 @@ def test_facts_in_another_currency_are_the_reason_rather_than_no_figure():
     got = explain(currency_of={"net_income": "EUR"})
 
     assert got["earnings_yield"] == Absent("facts reported in EUR, not USD")
+
+
+def test_an_old_irrelevant_foreign_fact_does_not_blame_the_currency():
+    # The dropped AUD fact is 2021 annual, far outside the 456-day annual window,
+    # and ebit has no annual figures at all: including it would still leave
+    # interest_cover with no basis, so the ordinary reason stands.
+    got = explain(
+        drop=("interest_expense",),
+        extra_items=[Item("interest_expense", date(2021, 12, 31), "A", Decimal(5), "AUD")],
+    )
+
+    assert got["interest_cover"] == Absent("no clean TTM or annual figure for ebit, interest_expense")
+
+
+def test_an_irrelevant_foreign_fact_at_the_at_path_does_not_blame_the_currency():
+    # The dropped EUR fact is total_debt at 2022-12-31, not the code and date
+    # roic is actually missing: cash_and_equivalents at 2025-12-31.
+    got = explain(
+        drop=("cash_and_equivalents",),
+        extra_items=[Item("total_debt", date(2022, 12, 31), "A", Decimal(400), "EUR")],
+    )
+
+    assert got["roic"] == Absent("no cash_and_equivalents at 2025-12-31")
+
+
+def test_a_relevant_foreign_fact_at_the_at_path_is_blamed():
+    got = explain(currency_of={"stockholders_equity": "EUR"})
+
+    assert got["roic"] == Absent("facts reported in EUR, not USD")
+
+
+def test_a_relevant_foreign_fact_at_the_newest_path_is_blamed():
+    got = explain(currency_of={"total_debt": "EUR"})
+
+    assert got["debt_to_equity"] == Absent("facts reported in EUR, not USD")
+
+
+def test_a_relevant_foreign_fact_is_blamed_for_market_cap():
+    held, dropped = index_facts_explained(
+        [Item("shares_outstanding", QUARTER, "Q", Decimal(100), "AUD")], currency="USD"
+    )
+
+    got = explain_market_cap(
+        held,
+        close=Decimal(20),
+        close_date=AS_OF,
+        split_dates=[],
+        as_of=AS_OF,
+        currency="USD",
+        dropped=dropped,
+    )
+
+    assert got == Absent("no market cap: facts reported in AUD, not USD")
+
+
+def test_no_currency_or_dropped_context_gives_the_ordinary_reason():
+    held, _ = index_facts_explained(
+        company_items(currency_of={"net_income": "EUR"}), currency="USD"
+    )
+
+    got = explain_ratios(
+        held,
+        industry="software",
+        close=Decimal("20"),
+        close_date=AS_OF,
+        split_dates=[],
+        as_of=AS_OF,
+        currency=None,
+        dropped=None,
+    )
+
+    assert got["earnings_yield"] == Absent("no clean TTM or annual figure for net_income")
+
+
+def test_a_dropped_fact_with_no_currency_names_it_unknown():
+    extra = [Item("interest_expense", end, "Q", Decimal("5"), None) for end in QUARTERS]
+
+    got = explain(drop=("interest_expense",), extra_items=extra)
+
+    assert got["interest_cover"] == Absent("facts reported in an unknown currency, not USD")
 
 
 def test_a_missing_newest_balance_names_every_item_it_needed():

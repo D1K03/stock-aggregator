@@ -67,21 +67,25 @@ Held = Mapping[str, Sequence[Item]]
 
 def index_facts_explained(
     items: Iterable[Item], *, currency: str
-) -> tuple[dict[str, list[Item]], dict[str, frozenset[str]]]:
+) -> tuple[dict[str, list[Item]], dict[str, list[Item]]]:
     """Facts by code without any not in the security's currency, and what was dropped.
 
     Dropped here rather than checked per ratio, so a figure in another currency
-    cannot reach a formula by any route (spec D9). The second mapping is what lets
-    an absence say "reported in EUR" instead of the misleading "no figure".
+    cannot reach a formula by any route (spec D9). The second mapping holds the
+    dropped facts themselves, not just their currencies, so a caller can retry a
+    lookup with them included and learn whether they would have supplied the
+    missing figure -- an absence can then say "reported in EUR" only when that is
+    actually why the figure is missing, rather than whenever any dropped fact
+    exists anywhere in the group.
     """
     held: dict[str, list[Item]] = {}
-    dropped: dict[str, set[str]] = {}
+    dropped: dict[str, list[Item]] = {}
     for item in items:
         if item.currency == currency:
             held.setdefault(item.code, []).append(item)
         else:
-            dropped.setdefault(item.code, set()).add(item.currency or "no currency")
-    return held, {code: frozenset(found) for code, found in dropped.items()}
+            dropped.setdefault(item.code, []).append(item)
+    return held, dropped
 
 
 def index_facts(items: Iterable[Item], *, currency: str) -> dict[str, list[Item]]:
@@ -207,6 +211,8 @@ def explain_market_cap(
     close_date: date | None,
     split_dates: Sequence[date],
     as_of: date,
+    currency: str | None = None,
+    dropped: Mapping[str, Sequence[Item]] | None = None,
 ) -> Decimal | Absent:
     """Close times Yahoo's share count as it stands, or why there is none (spec D8).
 
@@ -223,6 +229,11 @@ def explain_market_cap(
     market cap rather than a wrong one.
 
     Checked in this order, and the first failure is the reason reported.
+
+    `currency` and `dropped` (from `index_facts_explained`) let a missing share
+    count blame a dropped foreign-currency fact, but only when including it would
+    actually have produced a count -- the same counterfactual rule `ratios.py`
+    applies (spec D9, plan amendment P2).
     """
     if close is None or close_date is None:
         return Absent("no market cap: no close visible")
@@ -235,6 +246,12 @@ def explain_market_cap(
             return Absent(f"no market cap: split on {split.isoformat()}")
     found = newest_balance(held, ("shares_outstanding",), as_of)
     if found is None:
+        foreign = (dropped or {}).get("shares_outstanding", ())
+        if currency is not None and foreign:
+            combined = {"shares_outstanding": [*held.get("shares_outstanding", ()), *foreign]}
+            if newest_balance(combined, ("shares_outstanding",), as_of) is not None:
+                names = sorted({item.currency or "an unknown currency" for item in foreign})
+                return Absent(f"no market cap: facts reported in {', '.join(names)}, not {currency}")
         return Absent("no market cap: no share count within 15 months")
     cap = close * found[1]["shares_outstanding"]
     if cap <= 0:
