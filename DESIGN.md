@@ -30,6 +30,10 @@ went up") produces one signal with ten names and false confidence.
 | Insider / institutional | Net insider buying, 13F holding changes | What are informed holders doing? |
 | Event risk | Days to earnings, litigation, dividend cut history | Penalty/flag layer, not a score |
 
+The metrics above are examples. What is computed, and why three of them are not yet — PEG needs
+forward estimates, and a margin trend or earnings consistency would rest on four annual points — is in
+`docs/specs/2026-09-13-ratios.md`.
+
 ## Scoring rules
 
 - Normalise each metric to a **percentile within its sector** — 15x P/E means opposite things

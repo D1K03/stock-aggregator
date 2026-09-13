@@ -243,7 +243,7 @@ flowchart TD
     universe["universe"]
     blobs["blobs<br/>local + s3, hand-rolled SigV4"]
     ingest["ingest<br/>prices + sweep"]
-    scoring["scoring<br/>five pure modules + peers + run<br/>advisory lock, reconcile"]
+    scoring["scoring<br/>eight pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
     nightly["nightly<br/>config + schedule + night + __main__"]
 
@@ -654,7 +654,7 @@ year boundary without colliding with a same-named yearly one.
 ## The v1 pipeline
 
 The spine. Universe, identity, daily ingest — **price and fundamentals** — and
-the Momentum-pillar scoring run are built; the snapshot diff and alerting
+the three-pillar scoring run are built; the snapshot diff and alerting
 remain unwritten — drawn dashed below.
 
 ```mermaid

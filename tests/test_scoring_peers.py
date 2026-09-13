@@ -1,4 +1,4 @@
-"""Security to peer group, up through `sector_node.parent_id` (spec D7).
+"""Security to peer group and industry, up through sector_node.parent_id (spec D7).
 
 Every `security_sector` row points at a level-2 industry node while the peer
 groups v1 scores are level 1, so reaching a security's peers means following
@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from screener.scoring import MIN_PEERS, resolve
+from screener.scoring import MIN_PEERS, market_group, resolve
 
 AS_OF = date(2026, 3, 2)
 
@@ -73,38 +73,39 @@ def _securities(conn, count: int, industry_id: int | None) -> list[int]:
     return ids
 
 
-def test_a_sector_above_the_floor_scores_against_its_sector_group(fresh_db, taxonomy):
-    ids = _securities(fresh_db, MIN_PEERS, taxonomy["industry"])
+def test_a_classified_security_gets_its_sector_group_and_industry(fresh_db, taxonomy):
+    ids = _securities(fresh_db, 3, taxonomy["industry"])
+
+    got = resolve(fresh_db, ids, as_of=AS_OF)
+
+    assert {(p.peer_group_id, p.level, p.industry) for p in got.values()} == {
+        (taxonomy["sector_group"], 1, "software")
+    }
+
+
+def test_resolve_assigns_the_sector_however_few_it_holds(fresh_db, taxonomy):
+    # The floor belongs to ranking now, per metric (ratios spec D12): a sector of
+    # 112 can hold only 8 that produced a ratio, which only ranking can see.
+    ids = _securities(fresh_db, MIN_PEERS - 1, taxonomy["industry"])
 
     got = resolve(fresh_db, ids, as_of=AS_OF)
 
     assert {p.peer_group_id for p in got.values()} == {taxonomy["sector_group"]}
     assert {p.level for p in got.values()} == {1}
-    assert {p.member_count for p in got.values()} == {MIN_PEERS}
 
 
-def test_a_sector_below_the_floor_falls_back_to_the_market_group(fresh_db, taxonomy):
-    # Unexercised in practice -- the thinnest real sector holds 49 -- and
-    # implemented anyway, because the ladder is what `fallback_level` records.
-    ids = _securities(fresh_db, MIN_PEERS - 1, taxonomy["industry"])
-
-    got = resolve(fresh_db, ids, as_of=AS_OF)
-
-    assert {p.peer_group_id for p in got.values()} == {taxonomy["market"]}
-    assert {p.level for p in got.values()} == {0}
-
-
-def test_a_security_with_no_sector_still_gets_an_answer(fresh_db, taxonomy):
+def test_a_security_with_no_sector_gets_the_market_group(fresh_db, taxonomy):
     ids = _securities(fresh_db, 1, None)
 
     got = resolve(fresh_db, ids, as_of=AS_OF)
 
-    assert got[ids[0]].peer_group_id == taxonomy["market"]
-    assert got[ids[0]].level == 0
+    assert (got[ids[0]].peer_group_id, got[ids[0]].level, got[ids[0]].industry) == (
+        taxonomy["market"], 0, None
+    )
 
 
 def test_a_classification_that_had_not_started_by_as_of_is_not_used(fresh_db, taxonomy):
-    ids = _securities(fresh_db, MIN_PEERS, taxonomy["industry"])
+    ids = _securities(fresh_db, 3, taxonomy["industry"])
     fresh_db.execute(
         "update security_sector set valid_from = '2026-06-01' where security_id = %s",
         (ids[0],),
@@ -112,9 +113,8 @@ def test_a_classification_that_had_not_started_by_as_of_is_not_used(fresh_db, ta
 
     got = resolve(fresh_db, ids, as_of=AS_OF)
 
-    assert got[ids[0]].level == 0
-    # And the sector it left is now one short of the floor, so nobody is in it.
-    assert {p.level for p in got.values()} == {0}
+    assert (got[ids[0]].level, got[ids[0]].industry) == (0, None)
+    assert {got[i].level for i in ids[1:]} == {1}
 
 
 def test_every_id_asked_about_gets_an_answer(fresh_db, taxonomy):
@@ -125,3 +125,11 @@ def test_every_id_asked_about_gets_an_answer(fresh_db, taxonomy):
 
 def test_asking_about_nothing_returns_nothing(fresh_db, taxonomy):
     assert resolve(fresh_db, [], as_of=AS_OF) == {}
+
+
+def test_the_market_group_is_found_and_its_absence_is_explained(fresh_db, taxonomy):
+    assert market_group(fresh_db) == taxonomy["market"]
+
+    fresh_db.execute("delete from peer_group where level = 0")
+    with pytest.raises(RuntimeError, match="universe load"):
+        market_group(fresh_db)

@@ -401,10 +401,10 @@ def read_facts(
     """
     if not security_ids:
         return {}
-    # Imported here rather than at module scope: `screener.scoring` imports
-    # nothing from `screener.ingest`, and keeping the edge one-directional at
-    # the top of the file would be a lie about a dependency that only exists
-    # inside this function.
+    # Imported here rather than at module scope, and it has to stay here:
+    # `screener.scoring.run` imports this function at *its* module scope, so a
+    # top-level import in this direction would make the two packages a cycle
+    # that fails on whichever is imported first.
     from screener.scoring import visibility_cutoff
 
     out: dict[int, list[HeldFact]] = {}

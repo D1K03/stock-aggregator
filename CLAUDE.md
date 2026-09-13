@@ -13,13 +13,12 @@ the schema, the pipeline and CI/CD.
 ## Status
 
 The database schema, the infrastructure layer and daily ingest — **price and fundamentals** — are
-built and tested; scoring is built for the Momentum pillar and writes snapshots with alerting
-switched off, and no ratio consumes a fundamental fact yet. The pipeline now runs on its own,
-once a night, rather than by hand. No alerting code exists yet. Runtime
-dependencies are `psycopg`, `httpx` and `discord.py`, and nothing else — check `pyproject.toml`
-before assuming a library is available. `faster-whisper` and `yt-dlp` are extras (`voice`,
-`stream`) that one image each installs, and both are imported inside a function so the rest of
-the tree stays importable without them.
+built and tested; scoring is built for Momentum, Valuation and Quality and writes snapshots with
+alerting switched off. The pipeline now runs on its own, once a night, rather than by hand. No
+alerting code exists yet. Runtime dependencies are `psycopg`, `httpx` and `discord.py`, and
+nothing else — check `pyproject.toml` before assuming a library is available. `faster-whisper`
+and `yt-dlp` are extras (`voice`, `stream`) that one image each installs, and both are imported
+inside a function so the rest of the tree stays importable without them.
 
 ## What it does
 
@@ -329,15 +328,23 @@ nothing outside imports a submodule directly.
   `observed_at` and yesterday's bars would otherwise produce a complete-looking snapshot of stale
   data. A partial ingest is a success: `CWEN-A` fails every night, and a channel that cries wolf
   nightly is one nobody reads.
-- `screener.scoring` — bars into percentiles, a pillar score and a dated snapshot. Five pure
-  modules and two that open a connection, as `screener.ingest` splits `parse` from `load`.
-  One pillar this cycle: prices give Momentum and nothing else, so `weight_version` v1 is
-  `{Momentum: 1.0}` and `snapshot_daily.min_coverage` says so on every row. **Every run this
-  cycle writes has `emits_alerts = false`** — not because a one-pillar blend is embarrassing,
-  but because deduplication and the per-ticker cooldown do not exist yet and these scores are
-  incomparable with everything after fundamentals land. Percentiles are computed within a
-  security's *sector* group, reached by walking `sector_node.parent_id` up from the level-2
-  industry node every `security_sector` row points at. The whole night is one transaction,
+- `screener.scoring` — bars and facts into percentiles, three pillar scores and a dated snapshot.
+  Eight pure modules and two that open a connection, as `screener.ingest` splits `parse` from
+  `load`. Three pillars: Momentum from bars, Valuation and Quality from ten ratios over stored
+  line items, under `weight_version` v2 at equal weight. **A ratio never mixes two periods**: flow
+  items are four consecutive quarters or one annual figure for *every* input to that ratio,
+  balance items are read at a date, and anything outside the bounds is absent, never imputed
+  (`basis.py`, spec `docs/specs/2026-09-13-ratios.md`). Ratios are yields, so a loss-maker ranks
+  as expensive rather than on top. Which ratios apply is decided by industry — banks and insurers
+  get book yield and ROE, REITs get FFO yield — while percentiles stay at sector level. Yahoo
+  reports capex negative, so free cash flow adds it; and it restates share counts for splits, so
+  no split factor is applied and market cap is absent for a week after one, or when the latest
+  close is more than a week old. The peer floor is counted per metric, and a thin bucket ranks
+  against every producer in the market. `min_coverage` counts a weighted pillar that produced
+  nothing as 0. **Every run writes `emits_alerts = false`** — deduplication and the per-ticker
+  cooldown do not exist yet. Percentiles are computed within a security's *sector* group, reached
+  by walking `sector_node.parent_id` up from the level-2 industry node every `security_sector`
+  row points at. The whole night is one transaction,
   deliberately unlike ingest's per-security commits: a half-scored day would read as a crossing
   for every security that never got scored. Adjustment is total return — splits and dividends,
   anchored at the present — and is the one piece of arithmetic here where a wrong answer looks

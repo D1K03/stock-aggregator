@@ -4,7 +4,9 @@
 pillar rows -- it is a derivation, and the three columns beside it are what keep
 it from being read as ground truth. Under a one-pillar weight version the
 blended score *is* the momentum score, and `pillar_agreement` and `min_coverage`
-say so on every row.
+say so on every row. Under a version weighting several pillars, `min_coverage`
+counts one that produced nothing as 0, so a partial score cannot pass for a
+complete one.
 """
 
 from collections.abc import Mapping, Sequence
@@ -55,7 +57,14 @@ def blend(
         pillar_agreement=sum(
             1 for p in contributing.values() if p.score >= AGREEMENT_THRESHOLD
         ),
-        min_coverage=min(p.coverage for p in contributing.values()),
+        # Over every pillar the version weights, an absent one at 0 (ratios spec
+        # D11). Over the pillars present, a security scored on momentum alone read
+        # as fully covered beside complete three-pillar scores.
+        min_coverage=min(
+            pillars[code].coverage if code in pillars else Decimal(0)
+            for code, weight in weights.items()
+            if weight > 0
+        ),
         # The minimum, because a higher level is more specific: 2 industry ->
         # 1 sector -> 0 market. "Worst" is the least specific group any of this
         # security's metrics had to fall back to.

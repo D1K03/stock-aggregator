@@ -12,9 +12,12 @@ from decimal import Decimal
 import pytest
 
 from screener.scoring import (
+    CODES,
     CUTOFF_OFFSET,
     MIN_PEERS,
+    RATIO_CODES,
     NoBarsVisible,
+    applicable,
     reference,
     run_scoring,
 )
@@ -272,21 +275,18 @@ def test_a_date_with_no_visible_bars_fails_before_writing_anything(fresh_db, uni
     assert _counts(fresh_db)["snapshot_daily"] == 0
 
 
-def test_a_zero_momentum_weight_fails_loudly_rather_than_writing_an_empty_snapshot(
-    fresh_db, universe
-):
+def test_a_weight_version_weighting_no_computed_pillar_fails_loudly(fresh_db, universe):
     # Pillar weights live in the database precisely so they can be tuned
-    # without a redeploy -- so a weight version that zeroes momentum out is an
+    # without a redeploy -- so a version that zeroes every computed pillar is an
     # ordinary change, not a corrupt one, and it must not silently produce a
     # night with pillar rows but no snapshot rows (the same empty-snapshot
     # failure mode `NoBarsVisible` exists to prevent).
     fresh_db.execute(
         "update pillar_weight set weight = 0"
-        " where weight_version_id = (select id from weight_version where code = 'v1')"
-        "   and pillar_id = (select id from pillar where code = 'momentum')"
+        " where weight_version_id = (select id from weight_version where code = 'v2')"
     )
 
-    with pytest.raises(RuntimeError, match="momentum"):
+    with pytest.raises(RuntimeError, match="weights none of"):
         run_scoring(fresh_db, as_of=AS_OF)
 
     assert fresh_db.execute(
@@ -300,6 +300,28 @@ def test_a_zero_momentum_weight_fails_loudly_rather_than_writing_an_empty_snapsh
 def test_reference_reads_what_the_migration_seeded(fresh_db):
     ref = reference(fresh_db)
 
-    assert set(ref.metric_ids) == {"ret_3m", "ret_6m", "ret_12m", "off_52w_high"}
-    assert ref.higher_is_better == {code: True for code in ref.metric_ids}
-    assert ref.weights == {"momentum": Decimal(1)}
+    assert set(ref.metric_ids) == set(CODES) | set(RATIO_CODES)
+    assert ref.higher_is_better == {
+        code: code != "debt_to_equity" for code in ref.metric_ids
+    }
+    assert ref.weights == {
+        "momentum": Decimal(1),
+        "valuation": Decimal(1),
+        "quality": Decimal(1),
+    }
+    assert set(ref.pillar_ids) == {"momentum", "valuation", "quality"}
+    assert ref.metric_pillar["roe"] == "quality"
+    assert ref.metric_pillar["fcf_yield"] == "valuation"
+    assert ref.metric_pillar["ret_3m"] == "momentum"
+
+
+def test_the_seeded_metric_pillar_mapping_agrees_with_applicable(fresh_db):
+    ref = reference(fresh_db)
+
+    covered: set[str] = set()
+    for industry in ("software", "banks-regional", "reit-retail"):
+        for pillar, codes in applicable(industry).items():
+            for code in codes:
+                assert ref.metric_pillar[code] == pillar
+                covered.add(code)
+    assert covered == set(RATIO_CODES)

@@ -1,25 +1,24 @@
-"""Which securities a security is scored against.
+"""Which peer group, and which industry, a security is scored under.
 
 Every `security_sector` row points at a level-2 industry node; the peer groups
-v1 scores are the eleven level-1 sectors, so reaching one means following
-`sector_node.parent_id`. `metric_daily.fallback_level` therefore mirrors
-`peer_group.level`: normally 1, dropping to 0 only if a sector fell below the
-floor.
+scored are the eleven level-1 sectors, so reaching one means following
+`sector_node.parent_id`. The industry itself is returned too, because which
+ratios apply to a security is decided by its industry (ratios spec D4) while its
+percentiles stay at sector level.
 
-The ladder is unexercised in practice -- the thinnest real sector holds 49 --
-and implemented anyway, because a floor that has never been tested is a floor
-nobody can rely on.
+**No floor is applied here.** A sector's membership says nothing about how many
+of its members produced a given ratio, so `MIN_PEERS` is checked per metric in
+`ranking.py` (ratios spec D12). This module only says where a security belongs.
 """
 
-from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
 import psycopg
 
-# A safety check rather than a routine mechanism: v1 groups at sector level,
-# where every sector clears it comfortably.
+# Checked per (metric, peer group) bucket in `ranking.py`. At sector level on
+# momentum every sector clears it; ratios are what make it bite.
 MIN_PEERS = 20
 
 
@@ -27,12 +26,16 @@ MIN_PEERS = 20
 class Peer:
     peer_group_id: int
     level: int
-    member_count: int
+    # The level-2 industry code, for ratio applicability. None for an
+    # unclassified security, or one classified straight at a sector.
+    industry: str | None
 
 
-def _market_group(cur: psycopg.Cursor) -> tuple[int, int]:
-    cur.execute("select id from peer_group where level = 0 order by id limit 1")
-    row = cur.fetchone()
+def market_group(conn: psycopg.Connection) -> int:
+    """The level-0 group every fallback ranks under."""
+    with conn.cursor() as cur:
+        cur.execute("select id from peer_group where level = 0 order by id limit 1")
+        row = cur.fetchone()
     if row is None:
         # Created by the universe load, so its absence means the universe was
         # never loaded -- worth saying plainly rather than failing later on a
@@ -40,7 +43,7 @@ def _market_group(cur: psycopg.Cursor) -> tuple[int, int]:
         raise RuntimeError(
             "no level-0 peer group; run `python -m screener.universe load` first"
         )
-    return row[0], 0
+    return row[0]
 
 
 def resolve(
@@ -51,10 +54,11 @@ def resolve(
         return {}
 
     ids = list(security_ids)
+    market_id = market_group(conn)
     with conn.cursor() as cur:
-        market_id, market_level = _market_group(cur)
         cur.execute(
-            """select s.id, pg.id, pg.level
+            """select s.id, pg.id, pg.level,
+                      case when industry.level = 2 then industry.code end
                  from security s
                  left join security_sector ss
                    on ss.security_id = s.id
@@ -71,25 +75,13 @@ def resolve(
                 where s.id = any(%(ids)s)""",
             {"as_of": as_of, "ids": ids},
         )
-        assigned = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
-
-    counts = Counter(
-        group for group, _ in assigned.values() if group is not None
-    )
-    # The floor is measured against the securities being scored, not against
-    # everything the sector ever held: a percentile is only as meaningful as
-    # the number of peers that actually produced a value today.
-    market_count = sum(
-        1
-        for group, _ in assigned.values()
-        if group is None or counts[group] < MIN_PEERS
-    )
+        assigned = {row[0]: (row[1], row[2], row[3]) for row in cur.fetchall()}
 
     out: dict[int, Peer] = {}
     for security_id in ids:
-        group, level = assigned.get(security_id, (None, None))
-        if group is None or level is None or counts[group] < MIN_PEERS:
-            out[security_id] = Peer(market_id, market_level, market_count)
+        group, level, industry = assigned.get(security_id, (None, None, None))
+        if group is None or level is None:
+            out[security_id] = Peer(market_id, 0, industry)
         else:
-            out[security_id] = Peer(group, level, counts[group])
+            out[security_id] = Peer(group, level, industry)
     return out
