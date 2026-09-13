@@ -81,14 +81,19 @@ def read_bars(
     *,
     as_of: date,
     cutoff_offset: timedelta,
-) -> dict[int, list[tuple[date, Decimal]]]:
-    """Visible closes per security, ascending. One query for the whole night."""
+) -> dict[int, list[tuple[date, Decimal, datetime]]]:
+    """Visible `(trade_date, close, observed_at)` per security, ascending.
+
+    One query for the whole night. `observed_at` travels with each close because
+    whether a split still needs applying to it depends on when it was fetched
+    (see `adjust.py`).
+    """
     if not security_ids:
         return {}
-    out: dict[int, list[tuple[date, Decimal]]] = {}
+    out: dict[int, list[tuple[date, Decimal, datetime]]] = {}
     with conn.cursor() as cur:
         cur.execute(
-            """select security_id, trade_date, close
+            """select security_id, trade_date, close, observed_at
                  from price_daily
                 where security_id = any(%(ids)s)
                   and trade_date > %(start)s
@@ -102,8 +107,8 @@ def read_bars(
                 "cutoff": visibility_cutoff(as_of, cutoff_offset),
             },
         )
-        for security_id, trade_date, close in cur.fetchall():
-            out.setdefault(security_id, []).append((trade_date, close))
+        for security_id, trade_date, close, observed_at in cur.fetchall():
+            out.setdefault(security_id, []).append((trade_date, close, observed_at))
     return out
 
 
