@@ -6,9 +6,6 @@ together (spec D11). These tests are what makes "together" checkable.
 
 from decimal import Decimal
 
-import psycopg
-import pytest
-
 
 def test_five_pillars_are_seeded_and_event_risk_is_not_one(fresh_db):
     codes = [

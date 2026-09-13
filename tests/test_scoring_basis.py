@@ -139,6 +139,15 @@ def test_a_balance_item_is_read_at_a_date_under_either_label():
     assert balance_at(held(q("stockholders_equity", day, "800")), ("stockholders_equity",), date(2025, 9, 30)) is None
 
 
+def test_the_annual_value_wins_when_a_quarterly_and_an_annual_disagree_at_one_date():
+    # A fiscal Q4 and the fiscal year end can share a date under different reports
+    # (spec D7); the annual figure is the audited statement.
+    day = date(2025, 12, 31)
+    facts = held(q("stockholders_equity", day, "790"), a("stockholders_equity", day, "800"))
+
+    assert balance_at(facts, ("stockholders_equity",), day) == {"stockholders_equity": Decimal(800)}
+
+
 def test_the_newest_balance_date_is_one_where_every_item_is_held():
     facts = held(
         q("total_debt", date(2025, 12, 31), "400"),

@@ -17,6 +17,7 @@ from screener.scoring import (
     MIN_PEERS,
     RATIO_CODES,
     NoBarsVisible,
+    applicable,
     reference,
     run_scoring,
 )
@@ -312,3 +313,15 @@ def test_reference_reads_what_the_migration_seeded(fresh_db):
     assert ref.metric_pillar["roe"] == "quality"
     assert ref.metric_pillar["fcf_yield"] == "valuation"
     assert ref.metric_pillar["ret_3m"] == "momentum"
+
+
+def test_the_seeded_metric_pillar_mapping_agrees_with_applicable(fresh_db):
+    ref = reference(fresh_db)
+
+    covered: set[str] = set()
+    for industry in ("software", "banks-regional", "reit-retail"):
+        for pillar, codes in applicable(industry).items():
+            for code in codes:
+                assert ref.metric_pillar[code] == pillar
+                covered.add(code)
+    assert covered == set(RATIO_CODES)

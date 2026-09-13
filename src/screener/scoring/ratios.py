@@ -218,8 +218,9 @@ def _debt_to_equity(held: Held, cap: Decimal | None, as_of: date) -> Ratio | Non
 
 
 def _interest_cover(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    # A debt-free company loses this metric, but debt/equity of 0 still ranks it
-    # best, so the signal survives in the pillar.
+    # A debt-free company loses this metric, and the signal survives in the
+    # pillar only while Yahoo still reports total_debt as 0 -- once it stops
+    # publishing the series, debt_to_equity is absent too rather than zero.
     basis = flow_basis(held, ("ebit", "interest_expense"), as_of)
     if basis is None or basis.values["interest_expense"] <= 0:
         return None

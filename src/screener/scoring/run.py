@@ -66,10 +66,9 @@ def visibility_cutoff(as_of: date, cutoff_offset: timedelta) -> datetime:
 def active_securities(conn: psycopg.Connection) -> list[int]:
     """Every active security's id.
 
-    Ids only, unlike `screener.ingest.active_securities`, which needs the
-    current symbol because it is about to fetch one. Scoring never names a
-    security to anything outside the database, so importing that function to
-    throw half of it away would couple the two cycles for nothing.
+    Ids only, because `screener.ingest.active_securities`' version carries the
+    current symbol it needs for a fetch, and scoring never names a security
+    to anything outside the database.
     """
     with conn.cursor() as cur:
         cur.execute("select id from security where is_active order by id")

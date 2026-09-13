@@ -81,7 +81,7 @@ def derived_setup(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        # Use the existing 'roic' metric seeded by migration 022 instead of creating one
+        # Seeded by migration 022 under a unique code, so it is looked up rather than inserted.
         cur.execute("select id from metric where code = 'roic'")
         metric = cur.fetchone()[0]
         cur.execute("insert into sector_scheme (code, name) values ('yf', 'yf') returning id")
