@@ -28,8 +28,9 @@ from screener.scoring.basis import (
 from screener.scoring.blend import AGREEMENT_THRESHOLD, Snapshot, blend
 from screener.scoring.metrics import CODES, compute, months_before
 from screener.scoring.percentile import deciles, percentiles
-from screener.scoring.peers import MIN_PEERS, Peer, resolve
+from screener.scoring.peers import MIN_PEERS, Peer, market_group, resolve
 from screener.scoring.pillars import PillarScore, score_pillar
+from screener.scoring.ranking import GroupStat, Placed, rank
 from screener.scoring.ratios import (
     BALANCE_SHEET,
     QUALITY,
@@ -92,9 +93,11 @@ __all__ = [
     "Basis",
     "Held",
     "Item",
+    "GroupStat",
     "NoBarsVisible",
     "Peer",
     "PillarScore",
+    "Placed",
     "Ratio",
     "Reference",
     "ScoringInProgress",
@@ -113,9 +116,11 @@ __all__ = [
     "index_facts",
     "industry_class",
     "market_cap",
+    "market_group",
     "months_before",
     "newest_balance",
     "percentiles",
+    "rank",
     "read_actions",
     "read_bars",
     "reconcile",
