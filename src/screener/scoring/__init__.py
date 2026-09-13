@@ -6,6 +6,25 @@ are the two that open a connection, and nothing here opens a socket.
 """
 
 from screener.scoring.adjust import Action, adjusted_closes
+from screener.scoring.basis import (
+    ANNUAL,
+    ANNUAL_MAX_AGE_DAYS,
+    QUARTER_GAP_MAX_DAYS,
+    QUARTER_GAP_MIN_DAYS,
+    SPLIT_WINDOW_DAYS,
+    TTM,
+    TTM_MAX_AGE_DAYS,
+    Basis,
+    Held,
+    Item,
+    annual_basis,
+    balance_at,
+    flow_basis,
+    index_facts,
+    market_cap,
+    newest_balance,
+    ttm_basis,
+)
 from screener.scoring.blend import AGREEMENT_THRESHOLD, Snapshot, blend
 from screener.scoring.metrics import CODES, compute, months_before
 from screener.scoring.percentile import deciles, percentiles
@@ -34,15 +53,25 @@ from screener.scoring.run import (
 
 __all__ = [
     "AGREEMENT_THRESHOLD",
+    "ANNUAL",
+    "ANNUAL_MAX_AGE_DAYS",
     "BAR_WINDOW_MONTHS",
     "CODES",
     "CUTOFF_OFFSET",
     "LOGIC_DESCRIPTION",
     "MIN_PEERS",
     "PILLAR_CODE",
+    "QUARTER_GAP_MAX_DAYS",
+    "QUARTER_GAP_MIN_DAYS",
     "SCORING_LOCK_ID",
+    "SPLIT_WINDOW_DAYS",
+    "TTM",
+    "TTM_MAX_AGE_DAYS",
     "WEIGHT_CODE",
     "Action",
+    "Basis",
+    "Held",
+    "Item",
     "NoBarsVisible",
     "Peer",
     "PillarScore",
@@ -52,10 +81,16 @@ __all__ = [
     "Snapshot",
     "active_securities",
     "adjusted_closes",
+    "annual_basis",
+    "balance_at",
     "blend",
     "compute",
     "deciles",
+    "flow_basis",
+    "index_facts",
+    "market_cap",
     "months_before",
+    "newest_balance",
     "percentiles",
     "read_actions",
     "read_bars",
@@ -65,5 +100,6 @@ __all__ = [
     "run_scoring",
     "score",
     "score_pillar",
+    "ttm_basis",
     "visibility_cutoff",
 ]
