@@ -25,6 +25,7 @@ from screener.provenance import config_hash, require_git_sha
 from screener.scoring.adjust import Action, adjusted_closes
 from screener.scoring.basis import (
     ANNUAL_MAX_AGE_DAYS,
+    CLOSE_MAX_AGE_DAYS,
     QUARTER_GAP_MAX_DAYS,
     QUARTER_GAP_MIN_DAYS,
     SPLIT_WINDOW_DAYS,
@@ -296,6 +297,7 @@ def open_run(
             "quarter_gap_days": [QUARTER_GAP_MIN_DAYS, QUARTER_GAP_MAX_DAYS],
             "annual_max_age_days": ANNUAL_MAX_AGE_DAYS,
             "split_window_days": SPLIT_WINDOW_DAYS,
+            "close_max_age_days": CLOSE_MAX_AGE_DAYS,
             "tax_rate_ceiling": str(TAX_RATE_CEILING),
         }
     )
@@ -421,6 +423,7 @@ def score(
             # The raw close of the latest visible bar: total-return adjustment is
             # anchored at the present, so it would not change this one (spec D8).
             close=security_bars[-1][1] if security_bars else None,
+            close_date=security_bars[-1][0] if security_bars else None,
             split_dates=[
                 action.effective_date
                 for action in security_actions

@@ -247,12 +247,13 @@ def compute_ratios(
     *,
     industry: str | None,
     close: Decimal | None,
+    close_date: date | None,
     split_dates: Sequence[date],
     as_of: date,
 ) -> dict[str, Ratio]:
     """Every applicable ratio that can be honestly computed, keyed by code."""
     wanted = {code for codes in applicable(industry).values() for code in codes}
-    cap = market_cap(held, close=close, split_dates=split_dates, as_of=as_of)
+    cap = market_cap(held, close=close, close_date=close_date, split_dates=split_dates, as_of=as_of)
     out: dict[str, Ratio] = {}
     for code in RATIO_CODES:
         if code not in wanted:

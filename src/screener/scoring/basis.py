@@ -22,6 +22,9 @@ QUARTER_GAP_MIN_DAYS = 80
 QUARTER_GAP_MAX_DAYS = 100
 ANNUAL_MAX_AGE_DAYS = 456
 SPLIT_WINDOW_DAYS = 7
+# A close older than a week cannot describe today's market cap; covers weekends
+# and exchange holidays (spec amendment A5).
+CLOSE_MAX_AGE_DAYS = 7
 
 TTM = "TTM"
 ANNUAL = "A"
@@ -170,6 +173,7 @@ def market_cap(
     held: Held,
     *,
     close: Decimal | None,
+    close_date: date | None,
     split_dates: Sequence[date],
     as_of: date,
 ) -> Decimal | None:
@@ -179,8 +183,15 @@ def market_cap(
     so multiplying by the ratio again doubles the cap (F4). What is unsafe is the
     gap before it restates, so for a week after a split there is no market cap --
     a missing Valuation rather than a wrong one.
+
+    The close itself is bounded too (spec amendment A5): a security whose bars
+    stopped before a split pairs a pre-split close with a restated share count,
+    a failing price ingest never writes split rows so that window never
+    triggers, and a halted or acquired security stays valued on a months-old
+    price. A close more than `CLOSE_MAX_AGE_DAYS` before `as_of` gives no
+    market cap rather than a wrong one.
     """
-    if close is None:
+    if close is None or close_date is None or (as_of - close_date).days > CLOSE_MAX_AGE_DAYS:
         return None
     window = timedelta(days=SPLIT_WINDOW_DAYS)
     if any(split <= as_of < split + window for split in split_dates):

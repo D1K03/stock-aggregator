@@ -164,7 +164,10 @@ def test_the_newest_balance_date_honours_its_age_bound():
 def test_market_cap_takes_the_share_count_as_it_stands():
     facts = held(q("shares_outstanding", date(2025, 12, 31), "100"))
 
-    assert market_cap(facts, close=Decimal(20), split_dates=[], as_of=AS_OF) == Decimal(2000)
+    assert (
+        market_cap(facts, close=Decimal(20), close_date=AS_OF, split_dates=[], as_of=AS_OF)
+        == Decimal(2000)
+    )
 
 
 def test_a_split_never_multiplies_a_share_count():
@@ -173,7 +176,9 @@ def test_a_split_never_multiplies_a_share_count():
     # the count alone rather than doubling the cap.
     facts = held(q("shares_outstanding", date(2025, 12, 31), "100"))
 
-    got = market_cap(facts, close=Decimal(20), split_dates=[date(2026, 1, 15)], as_of=AS_OF)
+    got = market_cap(
+        facts, close=Decimal(20), close_date=AS_OF, split_dates=[date(2026, 1, 15)], as_of=AS_OF
+    )
 
     assert got == Decimal(2000)
 
@@ -184,17 +189,61 @@ def test_market_cap_is_absent_for_seven_days_after_a_split():
     six_days_ago = AS_OF - timedelta(days=6)
     seven_days_ago = AS_OF - timedelta(days=7)
 
-    assert market_cap(facts, close=Decimal(20), split_dates=[AS_OF], as_of=AS_OF) is None
-    assert market_cap(facts, close=Decimal(20), split_dates=[six_days_ago], as_of=AS_OF) is None
-    assert market_cap(facts, close=Decimal(20), split_dates=[seven_days_ago], as_of=AS_OF) == Decimal(2000)
+    assert (
+        market_cap(facts, close=Decimal(20), close_date=AS_OF, split_dates=[AS_OF], as_of=AS_OF)
+        is None
+    )
+    assert (
+        market_cap(
+            facts, close=Decimal(20), close_date=AS_OF, split_dates=[six_days_ago], as_of=AS_OF
+        )
+        is None
+    )
+    assert (
+        market_cap(
+            facts, close=Decimal(20), close_date=AS_OF, split_dates=[seven_days_ago], as_of=AS_OF
+        )
+        == Decimal(2000)
+    )
 
 
 def test_market_cap_is_absent_without_a_close_or_a_recent_share_count():
     fresh = held(q("shares_outstanding", date(2025, 12, 31), "100"))
     stale = held(q("shares_outstanding", date(2024, 9, 30), "100"))
 
-    assert market_cap(fresh, close=None, split_dates=[], as_of=AS_OF) is None
-    assert market_cap(stale, close=Decimal(20), split_dates=[], as_of=AS_OF) is None
+    assert market_cap(fresh, close=None, close_date=AS_OF, split_dates=[], as_of=AS_OF) is None
+    assert (
+        market_cap(stale, close=Decimal(20), close_date=AS_OF, split_dates=[], as_of=AS_OF)
+        is None
+    )
+
+
+def test_market_cap_is_absent_when_the_close_is_more_than_a_week_old():
+    facts = held(q("shares_outstanding", date(2025, 12, 31), "100"))
+
+    assert (
+        market_cap(
+            facts,
+            close=Decimal(20),
+            close_date=AS_OF - timedelta(days=7),
+            split_dates=[],
+            as_of=AS_OF,
+        )
+        == Decimal(2000)
+    )
+    assert (
+        market_cap(
+            facts,
+            close=Decimal(20),
+            close_date=AS_OF - timedelta(days=8),
+            split_dates=[],
+            as_of=AS_OF,
+        )
+        is None
+    )
+    assert (
+        market_cap(facts, close=Decimal(20), close_date=None, split_dates=[], as_of=AS_OF) is None
+    )
 
 
 def test_a_fact_in_another_currency_is_not_held():

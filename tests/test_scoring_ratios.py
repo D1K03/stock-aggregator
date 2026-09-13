@@ -65,6 +65,7 @@ def ratios(industry: str | None = "software", close: str | None = "20", **overri
         company(**overrides),
         industry=industry,
         close=Decimal(close) if close is not None else None,
+        close_date=AS_OF,
         split_dates=[],
         as_of=AS_OF,
     )
