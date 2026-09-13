@@ -62,7 +62,7 @@ def test_a_bar_observed_after_the_cutoff_is_not_visible(fresh_db, priced):
 
     got = read_bars(fresh_db, [security], as_of=AS_OF, cutoff_offset=CUTOFF_OFFSET)
 
-    assert got[security] == [(date(2026, 2, 27), Decimal(100))]
+    assert got[security] == [(date(2026, 2, 27), Decimal(100), inside)]
 
 
 def test_bars_after_the_scoring_date_are_not_read(fresh_db, priced):
@@ -73,7 +73,7 @@ def test_bars_after_the_scoring_date_are_not_read(fresh_db, priced):
 
     got = read_bars(fresh_db, [security], as_of=AS_OF, cutoff_offset=CUTOFF_OFFSET)
 
-    assert [day for day, _ in got[security]] == [date(2026, 3, 2)]
+    assert [day for day, _, _ in got[security]] == [date(2026, 3, 2)]
 
 
 def test_bars_come_back_in_date_order_per_security(fresh_db, priced):
@@ -84,7 +84,7 @@ def test_bars_come_back_in_date_order_per_security(fresh_db, priced):
 
     got = read_bars(fresh_db, [security], as_of=AS_OF, cutoff_offset=CUTOFF_OFFSET)
 
-    assert [day for day, _ in got[security]] == sorted(day for day, _ in got[security])
+    assert [day for day, _, _ in got[security]] == sorted(day for day, _, _ in got[security])
 
 
 def test_a_security_with_no_visible_bars_is_absent_from_the_mapping(fresh_db, priced):
