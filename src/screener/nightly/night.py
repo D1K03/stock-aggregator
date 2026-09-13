@@ -103,9 +103,12 @@ def run_night(
         )
         return NightReport(prices, fundamentals, None)
 
-    # Gated on prices alone, deliberately. Scoring reads bars and nothing else
-    # this cycle -- no ratio consumes a fundamental fact yet -- so a
-    # fundamentals failure must not block a run that does not depend on it.
-    # **When the ratios cycle lands, this gate widens to fundamentals.**
+    # Gated on prices alone, deliberately, and it stays that way now that ratios
+    # read fundamentals (ratios spec D15). A wholly failed *prices* night is
+    # dangerous because yesterday's bars make a wrong snapshot of today. A wholly
+    # failed *fundamentals* night leaves yesterday's facts, which describe
+    # quarters that have not changed, and the staleness bounds already refuse
+    # facts that are genuinely old. Blocking here would lose a correct night to
+    # guard against a harmless one.
     scoring = run_scoring(conn, as_of=today)
     return NightReport(prices, fundamentals, scoring)

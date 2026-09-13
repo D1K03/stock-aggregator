@@ -756,3 +756,13 @@ These are parameters, not unresolved design:
 - **Partition pre-creation window** — one year ahead for every partitioned table. Partition
   existence is decided by actual bound coverage read from the catalogue, not by name, so the
   documented yearly→monthly migration path cannot collide with itself.
+
+---
+
+## Errata
+
+- **`metric_daily.fundamental_fact_id`** is commented "null for price-derived metrics", implying that a
+  metric derived from fundamentals carries one. A ratio rests on up to sixteen facts, which one key
+  cannot hold, so the column stays null for ratios too. Traceability is by reproduction — facts are
+  append-only and the run records `as_of`, `cutoff_offset` and `git_sha` — and migration 022's
+  `period_basis`, with `period_end`, names the period used. See `docs/specs/2026-09-13-ratios.md` D14.
