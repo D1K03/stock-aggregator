@@ -8,10 +8,12 @@ version:
 
     CAPTURE_SCORING_GOLDEN=1 .venv/bin/python -m pytest tests/test_scoring_golden.py -n0
 
-The fixture is built to reach every absence path the refactor touches: a bank,
-a REIT, a thin bucket, a split inside its market-cap window, a stale close,
-negative equity and a fact in another currency. The second test checks it still
-does, so the golden file cannot quietly become a record of a trivial night.
+The fixture reaches a bank, a REIT, a thin bucket, a split inside its
+market-cap window, a stale close, negative equity for debt/equity, and a
+net-income fact in another currency. The second test checks it still does, so
+the golden file cannot quietly become a record of a trivial night. The
+remaining absence paths are pinned by the unedited `tests/test_scoring_ratios.py`
+and `tests/test_scoring_metrics.py` instead of by this fixture.
 """
 
 import json
