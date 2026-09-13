@@ -375,10 +375,11 @@ and a compose block rather than a migration over live rows.
 
 Schema, infrastructure, CI and contributor docs merged and green on `main`. Sector reconnaissance
 done. Daily ingest — **price and fundamentals** — is built and the universe is committed. Scoring
-is built for the Momentum pillar and writes snapshots with alerting switched off, verified in
-reduced form against 60 securities rather than the full universe; no ratio reads a fundamental
-fact yet and no alerting code exists yet. `python -m screener.boot selftest` is what exercises
-the infrastructure end to end, and it is worth running after a deploy for exactly that reason.
+runs Momentum, Valuation and Quality under logic v2 (`docs/specs/2026-09-13-ratios.md`) and writes
+snapshots with alerting switched off, verified in reduced form against 60 securities rather than
+the full universe; no alerting code exists yet. `python -m screener.boot selftest` is what
+exercises the infrastructure end to end, and it is worth running after a deploy for exactly that
+reason.
 
 The data is now readable from claude.ai as a custom connector, over the same read-only engine the
 `/playground` console uses and a third Postgres role of its own. That is a reading surface and

@@ -15,11 +15,10 @@ the schema, the pipeline and CI/CD.
 The database schema, the infrastructure layer and daily ingest — **price and fundamentals** — are
 built and tested; scoring is built for Momentum, Valuation and Quality and writes snapshots with
 alerting switched off. The pipeline now runs on its own, once a night, rather than by hand. No
-alerting code exists yet. Runtime
-dependencies are `psycopg`, `httpx` and `discord.py`, and nothing else — check `pyproject.toml`
-before assuming a library is available. `faster-whisper` and `yt-dlp` are extras (`voice`,
-`stream`) that one image each installs, and both are imported inside a function so the rest of
-the tree stays importable without them.
+alerting code exists yet. Runtime dependencies are `psycopg`, `httpx` and `discord.py`, and
+nothing else — check `pyproject.toml` before assuming a library is available. `faster-whisper`
+and `yt-dlp` are extras (`voice`, `stream`) that one image each installs, and both are imported
+inside a function so the rest of the tree stays importable without them.
 
 ## What it does
 
@@ -339,13 +338,13 @@ nothing outside imports a submodule directly.
   as expensive rather than on top. Which ratios apply is decided by industry — banks and insurers
   get book yield and ROE, REITs get FFO yield — while percentiles stay at sector level. Yahoo
   reports capex negative, so free cash flow adds it; and it restates share counts for splits, so
-  no split factor is applied and market cap is absent for a week after one. The peer floor is
-  counted per metric, and a thin bucket ranks against every producer in the market.
-  `min_coverage` counts a weighted pillar that produced nothing as 0. **Every run writes
-  `emits_alerts = false`** — deduplication and the per-ticker cooldown do not exist yet.
-  Percentiles are computed within a
-  security's *sector* group, reached by walking `sector_node.parent_id` up from the level-2
-  industry node every `security_sector` row points at. The whole night is one transaction,
+  no split factor is applied and market cap is absent for a week after one, or when the latest
+  close is more than a week old. The peer floor is counted per metric, and a thin bucket ranks
+  against every producer in the market. `min_coverage` counts a weighted pillar that produced
+  nothing as 0. **Every run writes `emits_alerts = false`** — deduplication and the per-ticker
+  cooldown do not exist yet. Percentiles are computed within a security's *sector* group, reached
+  by walking `sector_node.parent_id` up from the level-2 industry node every `security_sector`
+  row points at. The whole night is one transaction,
   deliberately unlike ingest's per-security commits: a half-scored day would read as a crossing
   for every security that never got scored. Adjustment is total return — splits and dividends,
   anchored at the present — and is the one piece of arithmetic here where a wrong answer looks
