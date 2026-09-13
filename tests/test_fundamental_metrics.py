@@ -34,7 +34,9 @@ def test_the_momentum_metrics_are_not_inputs(fresh_db):
         "select code from metric where not is_input order by code"
     ).fetchall()
     assert [r[0] for r in rows] == [
-        "off_52w_high", "ret_12m", "ret_3m", "ret_6m"
+        "book_yield", "debt_to_equity", "earnings_yield", "ebitda_ev",
+        "fcf_yield", "ffo_yield", "gross_margin", "interest_cover",
+        "off_52w_high", "ret_12m", "ret_3m", "ret_6m", "roe", "roic"
     ]
 
 

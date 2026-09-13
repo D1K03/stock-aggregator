@@ -22,15 +22,8 @@ def fact_setup(fresh_db):
             """
         )
         security = cur.fetchone()[0]
-        cur.execute("select id from pillar where code = 'quality'")
-        pillar = cur.fetchone()[0]
-        cur.execute(
-            """
-            insert into metric (code, name, pillar_id, unit, higher_is_better, cadence)
-            values ('roic', 'ROIC', %s, 'ratio', true, 'quarterly') returning id
-            """,
-            (pillar,),
-        )
+        # Use the existing 'roic' metric seeded by migration 022 instead of creating one
+        cur.execute("select id from metric where code = 'roic'")
         metric = cur.fetchone()[0]
         cur.execute("insert into data_source (code, name) values ('yf', 'yfinance') returning id")
         source = cur.fetchone()[0]
