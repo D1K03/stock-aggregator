@@ -341,7 +341,11 @@ nothing outside imports a submodule directly.
   no split factor is applied and market cap is absent for a week after one, or when the latest
   close is more than a week old. The peer floor is counted per metric, and a thin bucket ranks
   against every producer in the market. `min_coverage` counts a weighted pillar that produced
-  nothing as 0. **Every run writes `emits_alerts = false`** — deduplication and the per-ticker
+  nothing as 0. The market-cap, ratio and momentum functions each have an explaining form
+  (`explain_market_cap`, `explain_ratios`, `explain_momentum`) that returns a value or
+  `Absent(reason)`; the scoring functions are filters over them, so a reason can never drift
+  from the rule that produced the absence, and `tests/test_scoring_golden.py` pins that what
+  scoring writes did not change. **Every run writes `emits_alerts = false`** — deduplication and the per-ticker
   cooldown do not exist yet. Percentiles are computed within a security's *sector* group, reached
   by walking `sector_node.parent_id` up from the level-2 industry node every `security_sector`
   row points at. The whole night is one transaction,

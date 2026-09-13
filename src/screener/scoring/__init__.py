@@ -33,7 +33,7 @@ from screener.scoring.basis import (
     ttm_basis,
 )
 from screener.scoring.blend import AGREEMENT_THRESHOLD, Snapshot, blend
-from screener.scoring.metrics import CODES, compute, months_before
+from screener.scoring.metrics import CODES, compute, explain_momentum, months_before
 from screener.scoring.percentile import deciles, percentiles
 from screener.scoring.peers import MIN_PEERS, Peer, market_group, resolve
 from screener.scoring.pillars import PillarScore, score_pillar
@@ -128,6 +128,7 @@ __all__ = [
     "compute_ratios",
     "deciles",
     "explain_market_cap",
+    "explain_momentum",
     "explain_ratios",
     "first_missing_balance",
     "flow_basis",

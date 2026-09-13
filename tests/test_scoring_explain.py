@@ -14,7 +14,9 @@ from screener.scoring import (
     Absent,
     Item,
     Ratio,
+    compute,
     explain_market_cap,
+    explain_momentum,
     explain_ratios,
     first_missing_balance,
     index_facts,
@@ -216,3 +218,54 @@ def test_each_sign_rule_has_its_reason():
     bank = explain(industry="banks-regional", stockholders_equity="-100")
     assert bank["roe"] == Absent("equity ≤ 0")
     assert bank["book_yield"] == Absent("equity ≤ 0")
+
+
+# -- momentum ------------------------------------------------------------------
+
+
+def bars(*pairs):
+    """(days before AS_OF, close) pairs into a series."""
+    return [(AS_OF - timedelta(days=days), Decimal(close)) for days, close in pairs]
+
+
+def test_no_visible_bars_is_the_reason_for_all_four():
+    assert explain_momentum([], AS_OF) == {
+        code: Absent("no visible bars") for code in ("ret_3m", "ret_6m", "ret_12m", "off_52w_high")
+    }
+
+
+def test_a_short_history_names_each_window_it_does_not_cover():
+    got = explain_momentum(bars((100, "100"), (0, "110")), AS_OF)
+
+    assert got["ret_3m"] == Decimal("0.1")
+    assert got["ret_6m"] == Absent("price history shorter than the 6-month window")
+    assert got["ret_12m"] == Absent("price history shorter than the 12-month window")
+    assert got["off_52w_high"] == Absent("price history shorter than the 52-week window")
+
+
+def test_a_non_positive_past_close_or_high_has_its_reason():
+    got = explain_momentum(bars((380, "0"), (200, "0"), (100, "0"), (0, "0")), AS_OF)
+
+    assert got["ret_3m"] == Absent("a past close ≤ 0")
+    assert got["off_52w_high"] == Absent("52-week high ≤ 0")
+
+
+def test_an_empty_52_week_window_is_absent_instead_of_crashing_the_night():
+    # Bars only between 52 weeks and 13 months old: inside read_bars' window,
+    # outside the 52-week one. Before plan amendment P1 this raised ValueError
+    # from max() and failed every security's night.
+    series = bars((380, "100"), (370, "101"))
+
+    got = explain_momentum(series, AS_OF)
+
+    assert got["off_52w_high"] == Absent("no bars in the 52-week window")
+    assert "off_52w_high" not in compute(series, AS_OF)
+
+
+def test_compute_is_explain_momentum_without_the_absences():
+    series = bars((380, "100"), (200, "90"), (100, "95"), (30, "120"), (0, "110"))
+
+    explained = explain_momentum(series, AS_OF)
+
+    assert all(isinstance(value, Decimal) for value in explained.values())
+    assert compute(series, AS_OF) == explained

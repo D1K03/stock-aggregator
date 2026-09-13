@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from decimal import Decimal
 
+from screener.scoring.basis import Absent
+
 # The same four `metric.code` values migration 019 seeds. They agree with that
 # file by hand, which is the whole reason the seed is a migration and not a
 # command.
@@ -44,28 +46,54 @@ def _at_or_before(
     return series[index][1] if index >= 0 else None
 
 
-def compute(
+def explain_momentum(
     series: Sequence[tuple[date, Decimal]], as_of: date
-) -> dict[str, Decimal]:
-    """The computable metrics for one security, keyed by `metric.code`."""
+) -> dict[str, Decimal | Absent]:
+    """All four momentum metrics, each as its value or the reason it has none.
+
+    The coverage rule is spec D8's: a window the history does not reach gives no
+    value rather than one computed from less history than it claims.
+    """
     ordered = sorted(series)
     latest = _at_or_before(ordered, as_of)
     if latest is None:
-        return {}
+        return {code: Absent("no visible bars") for code in CODES}
 
-    out: dict[str, Decimal] = {}
+    out: dict[str, Decimal | Absent] = {}
     for code, months in _RETURN_MONTHS.items():
         past = _at_or_before(ordered, months_before(as_of, months))
-        if past is None or past <= 0:
-            continue
-        out[code] = latest / past - 1
+        if past is None:
+            out[code] = Absent(f"price history shorter than the {months}-month window")
+        elif past <= 0:
+            out[code] = Absent("a past close ≤ 0")
+        else:
+            out[code] = latest / past - 1
 
     window_start = as_of - timedelta(days=_52W_DAYS)
     # The same coverage rule as the return windows: a series that begins inside
     # the window would otherwise report "at its 52-week high" off a fortnight.
-    if ordered[0][0] <= window_start:
+    if ordered[0][0] > window_start:
+        out["off_52w_high"] = Absent("price history shorter than the 52-week window")
+    else:
         window = [close for day, close in ordered if window_start <= day <= as_of]
-        high = max(window)
-        if high > 0:
-            out["off_52w_high"] = latest / high - 1
-    return out
+        # A series can start before the window and still have nothing in it:
+        # read_bars reaches back 13 months, so prices that stopped about a year
+        # ago land here. `max([])` used to raise and fail the whole night (plan
+        # amendment P1).
+        if not window:
+            out["off_52w_high"] = Absent("no bars in the 52-week window")
+        else:
+            high = max(window)
+            out["off_52w_high"] = latest / high - 1 if high > 0 else Absent("52-week high ≤ 0")
+    return {code: out[code] for code in CODES}
+
+
+def compute(
+    series: Sequence[tuple[date, Decimal]], as_of: date
+) -> dict[str, Decimal]:
+    """The computable metrics for one security, keyed by `metric.code`."""
+    return {
+        code: value
+        for code, value in explain_momentum(series, as_of).items()
+        if not isinstance(value, Absent)
+    }
