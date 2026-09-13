@@ -80,3 +80,29 @@ def test_no_pillars_is_no_snapshot():
 
 def test_no_weight_on_any_present_pillar_is_no_snapshot():
     assert blend({"sentiment": _pillar("10")}, {"momentum": Decimal(1)}, [1]) is None
+
+
+def test_a_weighted_pillar_that_produced_nothing_counts_as_no_coverage():
+    # A security scored on momentum alone must not read as fully covered beside
+    # complete three-pillar scores (ratios spec D11). The blended score still
+    # normalises over the pillars present, so it is not dragged towards zero.
+    got = blend(
+        {"momentum": _pillar("80")},
+        {"momentum": Decimal(1), "valuation": Decimal(1), "quality": Decimal(1)},
+        [1],
+    )
+
+    assert got is not None
+    assert got.blended_score == Decimal(80)
+    assert got.min_coverage == Decimal(0)
+
+
+def test_an_unweighted_absent_pillar_does_not_lower_coverage():
+    got = blend(
+        {"momentum": _pillar("80")},
+        {"momentum": Decimal(1), "sentiment": Decimal(0)},
+        [1],
+    )
+
+    assert got is not None
+    assert got.min_coverage == Decimal(1)
