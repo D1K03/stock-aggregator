@@ -152,6 +152,8 @@ def newest_balance(
     max_age_days: int = ANNUAL_MAX_AGE_DAYS,
 ) -> tuple[date, dict[str, Decimal]] | None:
     """The newest date at which every code is held, within the age bound."""
+    if not codes:
+        return None
     dates = sorted({item.period_end for item in held.get(codes[0], ())}, reverse=True)
     for day in dates:
         if day > as_of:

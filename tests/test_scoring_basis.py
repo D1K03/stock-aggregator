@@ -210,3 +210,7 @@ def test_a_fact_in_another_currency_is_not_held():
 
     assert [item.period_end for item in facts["revenue"]] == [QUARTERS[0], QUARTERS[2], QUARTERS[3]]
     assert ttm_basis(facts, ("revenue",), AS_OF) is None
+
+
+def test_asking_for_no_balance_items_finds_nothing_rather_than_crashing():
+    assert newest_balance(held(), (), AS_OF) is None
