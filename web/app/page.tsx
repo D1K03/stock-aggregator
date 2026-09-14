@@ -14,6 +14,7 @@ import {
   screenErrorText, summarise, summariseDetail,
 } from "@/lib/screen";
 import { usePublishScreen } from "@/lib/screen-context";
+import { usePublishTop } from "@/lib/top-security";
 
 /* A reply, stamped with the request it answers. What is drawn is checked against
    the request wanted now, so a slow reply to an old filter is never drawn as the
@@ -124,6 +125,13 @@ export default function Page() {
     partial === "only" ? "partial scores only" : partial === "hide" ? "partial scores hidden" : null,
     sort !== "score" ? `sorted by ${SORTS.find((s) => s.value === sort)?.label}` : null,
   ].filter((f): f is string => f !== null);
+  /* The first row of the table as it currently stands, for Steven's chart
+     suggestion. Read from `page` rather than `night`, so a sort or a filter
+     moves it; null while the next page is in flight, which falls the suggestion
+     back to the unfiltered leader rather than freezing a ticker the table no
+     longer shows. */
+  usePublishTop(page?.rows[0]?.symbol ?? null);
+
   const rowOnPage = page?.rows.find((r) => r.symbol === selected);
   usePublishScreen(
     "Overview",

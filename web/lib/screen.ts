@@ -84,6 +84,9 @@ export type ScreenQuery = {
   partial: string;
   sort: Sort;
   offset: number;
+  /** Rows wanted. The Overview reads a page of them; a caller that only needs to
+      know which security the screen ranks first asks for one. */
+  limit?: number;
 };
 
 export type Status = "ok" | "mismatch" | "absent" | "unexpected" | "refreshed" | "unchecked";
@@ -189,7 +192,7 @@ export function fetchScreen(q: ScreenQuery): Promise<ScreenPage | Awaiting> {
   if (q.partial) query.set("partial", q.partial);
   query.set("sort", q.sort);
   query.set("offset", String(q.offset));
-  query.set("limit", String(PAGE_SIZE));
+  query.set("limit", String(q.limit ?? PAGE_SIZE));
   return get("/api/screen", query);
 }
 
