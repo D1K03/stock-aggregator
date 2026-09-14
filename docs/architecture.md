@@ -232,7 +232,6 @@ flowchart TD
     secrets["secrets<br/>stdlib urllib only"]
     prov["provenance"]
     screen["screen<br/>queries + rows + params + shape + read + explain"]
-    concept["concept<br/>delete when ingest lands"]
     migrate["migrate + partitions"]
     checks["health.checks"]
 
@@ -278,7 +277,7 @@ flowchart TD
     bot --> botcfg
     bot --> tools
 
-    tools --> concept
+    tools --> screen
     tools --> skybird
     tools --> audit
     tools --> checks
