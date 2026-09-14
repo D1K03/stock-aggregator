@@ -262,7 +262,12 @@ def security_payload(
                 "code": pillar,
                 "key": PILLAR_KEYS[pillar],
                 "score": one_decimal(scores[pillar].score) if pillar in scores else None,
-                "present": sum(1 for code in shown[pillar] if code in stored),
+                # A stored code the run's industry no longer applies stays listed
+                # as its own row (a mismatch/absent check), but does not count
+                # towards `present`, which is a count against `expected` alone.
+                "present": sum(
+                    1 for code in shown[pillar] if code in stored and code in expected[pillar]
+                ),
                 "expected": len(expected[pillar]),
                 "metrics": [
                     {

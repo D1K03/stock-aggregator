@@ -11,10 +11,18 @@ from screener.screen import (
     UNITS,
     ActionRow,
     BarRow,
+    Check,
+    ClassificationRow,
+    MetricInfoRow,
+    MetricRow,
+    PillarRow,
     PreviousRunRow,
+    Reproduction,
     RunRow,
     ScreenRow,
     SectorRow,
+    SnapshotRow,
+    SymbolRow,
     TilesRow,
     closes,
     delta,
@@ -23,6 +31,7 @@ from screener.screen import (
     price,
     screen_payload,
     screen_row,
+    security_payload,
 )
 
 GEF = ScreenRow(
@@ -158,3 +167,45 @@ def test_the_page_carries_its_run_its_previous_night_and_its_tiles():
     }
     assert shown["sectors"] == [{"code": "technology", "name": "Technology"}]
     assert shown["rows"][0]["closes"] == []
+
+
+def test_present_only_counts_stored_metrics_still_applicable_after_a_reclassification():
+    # Stored under STANDARD (earnings_yield, ebitda_ev, fcf_yield); reclassified
+    # since to a class expecting only earnings_yield and book_yield (fix round 1).
+    expected = {"valuation": ("earnings_yield", "book_yield"), "quality": (), "momentum": ()}
+    stored_codes = ("earnings_yield", "ebitda_ev", "fcf_yield")
+    metrics = [
+        MetricRow(code, Decimal("0.1"), Decimal("50"), "Technology", 30, 1, "TTM", date(2026, 3, 2))
+        for code in stored_codes
+    ]
+    shown_codes = ("earnings_yield", "book_yield", "ebitda_ev", "fcf_yield")
+    # `listed` walks every code scoring knows, so `info` needs a pillar for each
+    # even though only the valuation four end up shown for this security.
+    valuation_codes = {"earnings_yield", "ebitda_ev", "fcf_yield", "book_yield", "ffo_yield"}
+    info = {
+        code: MetricInfoRow(
+            code, code, True, "valuation" if code in valuation_codes else "quality"
+        )
+        for code in RATIO_CODES
+    } | {code: MetricInfoRow(code, code, True, "momentum") for code in CODES}
+    checks = {code: Check("ok", Decimal("0.1"), None) for code in shown_codes}
+
+    shown = security_payload(
+        run=RUN,
+        latest=True,
+        match=SymbolRow(11, "GEF", "Greif", "XNYS", True),
+        where=ClassificationRow("industrials", "Industrials", "packaging", "Packaging"),
+        snapshot=SnapshotRow(Decimal("70"), 1, Decimal("1")),
+        pillars=[PillarRow("valuation", Decimal("70"), 1, Decimal("1"))],
+        metrics=metrics,
+        info=info,
+        expected=expected,
+        checks=checks,
+        reproduction=Reproduction(datetime(2026, 3, 3, 6, tzinfo=timezone.utc), {}, frozenset()),
+        running_build="6b1c111",
+        closes=[],
+    )
+
+    valuation = next(p for p in shown["pillars"] if p["code"] == "valuation")
+    assert (valuation["present"], valuation["expected"]) == (1, 2)
+    assert {m["code"] for m in valuation["metrics"]} == set(shown_codes)
