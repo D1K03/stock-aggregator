@@ -66,6 +66,14 @@ MAGPIE = {
     "magpie.link",
 }
 
+# Granted by 026, which this parser cannot see either: it reads 013.
+#
+# A row here says a stretch of a subreddit was never walked. It holds no text
+# and nobody's name — two timestamps and a reason — and it is the only place
+# that records a hole in the social data, so "is the sentiment feed actually
+# complete" is answerable on the console rather than only in the logs.
+SOCIAL_GAP = {"public.social_gap"}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -437,7 +445,7 @@ def test_the_catalogue_lists_exactly_what_the_migration_grants(playground):
     # beside the editor, and a transcript you may query should be a transcript
     # you can see the shape of.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | SKYBIRD | MAGPIE
+    assert listed == granted_in_migration() | SKYBIRD | MAGPIE | SOCIAL_GAP
 
 
 def test_the_catalogue_shows_steven_a_smaller_database(steven):
@@ -447,7 +455,7 @@ def test_the_catalogue_shows_steven_a_smaller_database(steven):
     # Magpie is on both sides, which is the point of listing it separately: the
     # one thing Steven cannot see is the one thing that was never published.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | MAGPIE
+    assert listed == granted_in_migration() | MAGPIE | SOCIAL_GAP
     assert listed.isdisjoint(SKYBIRD)
 
 
@@ -481,7 +489,9 @@ def test_every_table_is_either_granted_or_deliberately_denied(playground, fresh_
           and n.nspname not like 'pg\\_%'
         """
     ).fetchall()
-    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE
+    assert {r[0] for r in rows} == (
+        granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE | SOCIAL_GAP
+    )
 
 
 # -- over HTTP ---------------------------------------------------------------

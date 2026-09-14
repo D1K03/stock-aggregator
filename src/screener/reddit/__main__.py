@@ -3,6 +3,12 @@
 Wakes every `REDDIT_REFRESH_HOURS`, backfilling the first time it sees a
 subreddit and keeping up after that.
 
+`backfill [days] [subreddit/kind ...]` is the one other thing it does: queue a
+stretch of the timeline for re-walking and exit. It walks nothing itself, so it
+is safe to run against a live deployment — a second process reading the same
+subreddit would race the scheduled one for the same rows, and the loop below
+already drains what is queued.
+
 The wait is a `threading.Event`, not `time.sleep`. A signal handler cannot
 interrupt a six-hour sleep, so SIGTERM would be answered whenever it happened to
 finish and every deploy would sit through the full SIGKILL timeout. This is PID
@@ -12,14 +18,19 @@ finish and every deploy would sit through the full SIGKILL timeout. This is PID
 
 import logging
 import signal
+import sys
 import threading
 from typing import Any
 
 from screener.reddit.config import RedditConfig
-from screener.reddit.ingest import once
+from screener.reddit.ingest import once, queue
 from screener.secrets import SecretsError, load_into_environ
 
 logger = logging.getLogger(__name__)
+
+USAGE = (
+    "usage: python -m screener.reddit [backfill [days] [subreddit/kind ...]]"
+)
 
 stopping = threading.Event()
 
@@ -36,6 +47,33 @@ def main() -> int:
         return 1
 
     config = RedditConfig.from_env()
+
+    # `backfill N [subreddit/kind ...]` queues a stretch and exits, leaving the
+    # running container to drain it a span at a time. Deliberately not a walk of
+    # its own: a second process walking the same subreddit would race the
+    # scheduled one for the same rows, and the drain already exists.
+    argv = sys.argv[1:]
+    if argv and argv[0] == "backfill":
+        if not config.enabled:
+            logger.error("REDDIT_SUBREDDITS is empty; nothing to queue")
+            return 1
+        try:
+            days = int(argv[1]) if len(argv) > 1 else config.backfill_days
+        except ValueError:
+            logger.error("%s", USAGE)
+            return 1
+        if days < 1:
+            logger.error("days must be at least 1")
+            return 1
+        try:
+            queue(days, config, streams=argv[2:])
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 1
+        return 0
+    if argv:
+        logger.error("%s", USAGE)
+        return 1
     if not config.enabled:
         # Not an error. An empty subreddit list is how this is switched off, and
         # exiting zero lets `restart: unless-stopped` leave it alone.

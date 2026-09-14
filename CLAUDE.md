@@ -246,6 +246,16 @@ nothing outside imports a submodule directly.
   security or scores it. `content_hash` is taken per item rather than per response, which is the
   remedy `DESIGN.md` proposes for Yahoo applied where it works — a comment body almost never
   changes, so a re-fetch writes nothing.
+  The mirror's **422 is its query timing out, not a rate limit** — it reproduces from an address
+  with no history and `limit=10` fails as `limit=100` does — so a refusal halves how much of the
+  timeline one request asks for rather than sleeping and asking again, which measurably does not
+  work. 429 is the real throttle and still backs off. A span that dies anyway lands in
+  `social_gap`: the walk runs backwards, so an interruption banks everything newer than the point
+  it died and `max(created_utc)` jumps to the present, and **two aggregates cannot describe a hole
+  between them** — that is how 36 of 168 hours of r/stocks went missing while the mirror still
+  held every one. Gaps drain *after* the catch-up span, never before, because a repair has no
+  upper bound and fresh comments should not wait behind one. `python -m screener.reddit backfill
+  [days]` queues a stretch and exits; the running container drains it.
 - `screener.transcribe` — speech to text, in a container of its own. The client half is
   `httpx` and nothing else and is what the bot and the status service import; the server half
   holds faster-whisper and is the only thing that installs the `voice` extra, so the three
