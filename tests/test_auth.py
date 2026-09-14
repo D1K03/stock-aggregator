@@ -357,6 +357,8 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         ("/api/ask?q=hi", None),
         ("/api/audit", None),
         ("/api/handoff", None),
+        ("/api/screen", None),
+        ("/api/screen/security?symbol=JPM", None),
         # There is no decorator on these routes — each repeats the same six
         # lines, and forgetting them makes a route public in silence. A POST
         # checked only by a test of its own would be one list away from being

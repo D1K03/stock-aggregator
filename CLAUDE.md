@@ -279,6 +279,9 @@ nothing outside imports a submodule directly.
   deploy smoke test cannot hold a session. Everything else requires one
   **unconditionally** — never `config.enabled and login is None`, which makes an
   unconfigured sign-in open the endpoints rather than close them.
+  `/api/screen` and `/api/screen/security` serve the scored screen through `screener.screen`,
+  on the application's own connection: the SQL is fixed and only bound parameters vary, which
+  is not what the playground's read-only roles guard.
 - `screener.bot.budget` — the daily spend cap, per person, from `DAILY_SPEND_CAP_USD`
   (default $0.10). Checked before the model is called, folds Discord onto GitHub through
   `DISCORD_USER_MAP` so it cannot be doubled by switching surface, and **fails open** when the
@@ -362,3 +365,14 @@ nothing outside imports a submodule directly.
   The three read-only roles already hold `select` on all four derived tables from 013, 017 and 018, so the console,
   Steven's `sql` tool and the claude.ai connector see real scores the night this first runs,
   with no migration and no code change.
+- `screener.screen` — the scored screen, read for the dashboard's two endpoints and, from piece
+  (c) of the UI swap, for Steven's chart. `queries` holds every statement as a literal; `rows`
+  parses a psycopg row or a `playground.Result` row into one typed record, because the
+  playground's cells come back as JSON-safe strings; `params` refuses a wrong query-string value
+  by name; `shape` builds JSON whose every figure is a decimal string, never a float. `read`
+  serves the latest good v2 night, keeps serving a pinned one after a newer lands, and measures
+  Δ against the previous night under the same weights. `explain` re-runs scoring's explaining
+  forms for one security under `least(cutoff, started_at)` — the run's actual view — and gives
+  each metric one status: ok, mismatch, absent, unexpected, refreshed or unchecked. **Display
+  closes ignore the cutoff**, because ingest re-stamps the last week of bars every night; a
+  reproduction never does. Spec `docs/specs/2026-09-13-ui-swap.md`.
