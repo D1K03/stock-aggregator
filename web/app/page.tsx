@@ -11,7 +11,7 @@ import { shortDate } from "@/lib/chart-svg";
 import {
   type Awaiting, type ScreenPage, type SecurityDetail, type Sort,
   SORTS, clock, fetchScreen, fetchSecurity, longDate, pageRange, priceSpec,
-  screenErrorText, summarise,
+  screenErrorText, summarise, summariseDetail,
 } from "@/lib/screen";
 import { usePublishScreen } from "@/lib/screen-context";
 
@@ -32,6 +32,10 @@ export default function Page() {
      first page, and pinning must not request that same page again. */
   const pinned = useRef<number | undefined>(undefined);
   const chartRef = useRef<HTMLDivElement>(null);
+  /* Mirrors `reloads`, read inside the screen effect's `.then` so a reply from
+     before a `refresh()` can be told apart from one after it, even when it
+     resolves before the effect's own cleanup runs. */
+  const reloadsRef = useRef(0);
 
   /* The last night served. Kept across requests so the header, filters and tiles
      do not blink out while the next page is read; they describe the night, which
@@ -42,9 +46,10 @@ export default function Page() {
   const [screen, setScreen] = useState<Answer<ScreenPage | Awaiting> | null>(null);
   useEffect(() => {
     let live = true;
+    const requestedReloads = reloadsRef.current;
     fetchScreen({ run: pinned.current, sector, agree, partial, sort, offset }).then(
       (value) => {
-        if (!live) return;
+        if (!live || requestedReloads !== reloadsRef.current) return;
         if (value.state === "ready") {
           pinned.current ??= value.run.id;
           setNight(value);
@@ -52,7 +57,9 @@ export default function Page() {
         setScreen({ key: screenKey, value, error: null });
       },
       (exc: unknown) => {
-        if (live) setScreen({ key: screenKey, value: null, error: screenErrorText(exc) });
+        if (live && requestedReloads === reloadsRef.current) {
+          setScreen({ key: screenKey, value: null, error: screenErrorText(exc) });
+        }
       },
     );
     return () => {
@@ -103,10 +110,11 @@ export default function Page() {
   };
   const refresh = () => {
     pinned.current = undefined;
+    reloadsRef.current += 1;
     setNight(null);
     setChosen(null);
     setOffset(0);
-    setReloads((n) => n + 1);
+    setReloads(reloadsRef.current);
   };
 
   const sectorName = night?.sectors.find((s) => s.code === sector)?.name;
@@ -116,11 +124,16 @@ export default function Page() {
     partial === "only" ? "partial scores only" : partial === "hide" ? "partial scores hidden" : null,
     sort !== "score" ? `sorted by ${SORTS.find((s) => s.value === sort)?.label}` : null,
   ].filter((f): f is string => f !== null);
+  const rowOnPage = page?.rows.find((r) => r.symbol === selected);
   usePublishScreen(
     "Overview",
     awaiting
       ? "no night has been scored under v2 yet"
-      : summarise(page?.rows.find((r) => r.symbol === selected), filters),
+      : rowOnPage
+        ? summarise(rowOnPage, filters)
+        : security?.scored
+          ? summariseDetail(security, filters)
+          : summarise(undefined, filters),
   );
 
   const run = night?.run;
@@ -145,10 +158,10 @@ export default function Page() {
           ) : null}
         </motion.header>
 
-        {page && !page.latest ? (
+        {night && !night.latest ? (
           <div className="notice-bar">
             <b>A newer night is available.</b>
-            <span>This view stays on {longDate(page.run.as_of)} so its pages never mix two nights.</span>
+            <span>This view stays on {longDate(night.run.as_of)} so its pages never mix two nights.</span>
             <button className="chip-toggle" onClick={refresh}>Refresh</button>
           </div>
         ) : null}
@@ -191,7 +204,7 @@ export default function Page() {
                   ))}
                 </select>
                 <span className="range">
-                  {page ? pageRange(offset, page.rows.length, page.total) : "reading…"}
+                  {answer?.error ? null : page ? pageRange(offset, page.rows.length, page.total) : "reading…"}
                 </span>
               </div>
             ) : null}

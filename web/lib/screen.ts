@@ -309,3 +309,20 @@ export function summarise(row: ScreenRow | undefined, filters: string[]): string
     .filter((part): part is string => part !== null)
     .join(", ");
 }
+
+/* Same as `summarise`, for when the selected security has fallen off the current
+   page (a filter or a sort moved it) but the chart and the why-panel still show
+   it (D18). Built the same way, most important first; it has no Δ because a
+   `Scored` detail does not carry one. */
+export function summariseDetail(detail: Scored, filters: string[]): string {
+  return [
+    `${detail.symbol} (${detail.name})`,
+    `blended score ${detail.score}${detail.partial ? ", partial" : ""}`,
+    PILLAR_KEYS.map((key) => `${key} ${detail.pillars.find((p) => p.key === key)?.score ?? "—"}`).join(" "),
+    `${detail.agreement} of 3 pillars top-quartile`,
+    (detail.industry ?? detail.sector).name,
+    filters.length ? `filters: ${filters.join(", ")}` : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(", ");
+}

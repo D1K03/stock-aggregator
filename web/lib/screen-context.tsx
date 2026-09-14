@@ -8,9 +8,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
  * and sends it with the question, so "what am I looking at?" and "explain
  * this" have an answer. It is a description, not a data feed: a sentence or
  * two that a model can read, assembled by the page that actually knows what is
- * on screen.
- *
- */
+ * on screen. */
 
 export type ScreenContext = {
   page: string;
