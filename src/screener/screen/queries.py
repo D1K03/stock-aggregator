@@ -188,12 +188,18 @@ select security_id, trade_date, close, observed_at
  order by security_id, trade_date
 """
 
+# A split after `as_of` still applies per bar by `observed_at` (D11): the
+# settling window re-stamps the last ~7 bars with Yahoo's already
+# split-adjusted close once the split lands, so a bar dated on or before
+# `as_of` can already be restated for a split whose effective date is not. A
+# dividend after `as_of` would rescale every served bar uniformly and move the
+# anchor off the night's own close, so only splits go unbounded above.
 ACTIONS: LiteralString = """
 select security_id, effective_date, action_type, ratio, amount
   from corporate_action
  where security_id = any(%(ids)s)
    and effective_date > %(since)s
-   and effective_date <= %(as_of)s
+   and (effective_date <= %(as_of)s or action_type = 'split')
  order by security_id, effective_date
 """
 

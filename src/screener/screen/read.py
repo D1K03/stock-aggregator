@@ -193,7 +193,7 @@ def read_security(conn: psycopg.Connection, params: SecurityParams) -> dict[str,
     if not matches:
         raise UnknownSymbol(params.symbol)
     if len(matches) > 1:
-        raise AmbiguousSymbol(params.symbol, tuple(match.mic for match in matches))
+        raise AmbiguousSymbol(params.symbol, tuple(sorted(match.mic for match in matches)))
     match = matches[0]
     security_id = match.security_id
     bind = {"id": security_id, "run": run.id, "as_of": run.as_of}

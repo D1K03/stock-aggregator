@@ -141,6 +141,20 @@ class World:
              self.observations[security_id]),
         )
 
+    def split(
+        self, security_id: int, effective_date: date, ratio: str, *, observed_at: datetime = SEEN
+    ) -> None:
+        if security_id not in self.observations:
+            self.observations[security_id] = self.observe(security_id)
+        self.conn.execute(
+            """insert into corporate_action
+               (security_id, effective_date, action_type, ratio, amount, currency,
+                observed_at, ingest_observation_id)
+               values (%s, %s, 'split', %s, null, 'USD', %s, %s)""",
+            (security_id, effective_date, Decimal(ratio), observed_at,
+             self.observations[security_id]),
+        )
+
 
 @pytest.fixture
 def world(fresh_db, an_observation) -> World:
@@ -435,3 +449,30 @@ def test_closes_are_the_newest_thirty_including_a_bar_restamped_since_the_run(wo
     assert len(closes) == 30
     assert closes[0] == [(AS_OF - timedelta(days=29)).isoformat(), "129.00"]
     assert closes[-1] == [AS_OF.isoformat(), "100.00"]
+
+
+def test_a_split_dated_after_the_run_still_applies_to_bars_it_already_restated(world):
+    run = world.run()
+    security_id = world.security("SPLT")
+    world.snapshot(run, security_id, "50")
+    # Older bars, fetched before the split, still at the pre-split close.
+    for back in range(9, 4, -1):
+        world.bar(
+            security_id, AS_OF - timedelta(days=back), "100",
+            observed_at=datetime(2026, 2, 20, tzinfo=timezone.utc),
+        )
+    # The newest bars, re-stamped by the settling window after the split's
+    # effective date, already carry Yahoo's split-adjusted close.
+    for back in range(4, -1, -1):
+        world.bar(
+            security_id, AS_OF - timedelta(days=back), "50",
+            observed_at=datetime(2026, 3, 5, tzinfo=timezone.utc),
+        )
+    world.split(
+        security_id, AS_OF + timedelta(days=2), "2",
+        observed_at=datetime(2026, 3, 5, tzinfo=timezone.utc),
+    )
+
+    closes = ask(world)["rows"][0]["closes"]
+
+    assert [close for _, close in closes] == ["50.00"] * len(closes)
