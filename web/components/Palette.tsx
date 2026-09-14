@@ -12,7 +12,8 @@ import Orb, { OrbState } from "@/components/Orb";
 import ToolTrace from "@/components/ToolTrace";
 import { renderMarkdown } from "@/lib/markdown";
 import { useSteven } from "@/lib/steven";
-import { SKILLS, Thread, whenever } from "@/lib/threads";
+import { skills, whenever } from "@/lib/threads";
+import { useTopSecurity } from "@/lib/top-security";
 
 const EASE = [0, 0, 0.2, 1] as const;
 
@@ -51,6 +52,10 @@ export default function Palette() {
     turns, threads, thinking, settling, conversing, seeing,
     ask, newChat, openThread, removeThread,
   } = useSteven();
+
+  // Whatever the screen ranks first — the Overview's top row while it is the
+  // page underneath, the unfiltered leader otherwise.
+  const suggestions = skills(useTopSecurity());
 
   const [open, setOpen] = useState(false);
   // The side, unless you have moved it. A panel you can talk to while using
@@ -302,7 +307,7 @@ export default function Palette() {
               rather than a menu competing with the answer. */}
           {!thinking && (
             <div className="pal-skills">
-              {SKILLS.map((skill) => (
+              {suggestions.map((skill) => (
                 <button key={skill.label} onClick={() => runSkill(skill.prompt)}>
                   {skill.label}
                 </button>
@@ -327,7 +332,7 @@ export default function Palette() {
 
           <div className="pal-group">Ask Steven</div>
           <div className="pal-skills in-list">
-            {SKILLS.map((skill) => (
+            {suggestions.map((skill) => (
               <button key={skill.label} onClick={() => runSkill(skill.prompt)}>
                 {skill.label}
               </button>

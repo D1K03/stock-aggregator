@@ -11,7 +11,8 @@ import Sidebar from "@/components/Sidebar";
 import ToolTrace from "@/components/ToolTrace";
 import { renderMarkdown } from "@/lib/markdown";
 import { useSteven } from "@/lib/steven";
-import { SKILLS, whenever } from "@/lib/threads";
+import { skills, whenever } from "@/lib/threads";
+import { useTopSecurity } from "@/lib/top-security";
 
 const EASE = [0, 0, 0.2, 1] as const;
 
@@ -31,6 +32,9 @@ export default function StevenPage() {
     turns, threads, threadId, thinking, settling, conversing,
     ask, newChat, openThread, removeThread,
   } = useSteven();
+  // No table on this page, so the ticker offered is the one the screen leads
+  // with, read by the provider rather than published by anything here.
+  const suggestions = skills(useTopSecurity());
   const [query, setQuery] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -110,7 +114,7 @@ export default function StevenPage() {
                     draws the chart from stored, adjusted closes and marks what you asked about.
                   </p>
                   <div className="stv-skills">
-                    {SKILLS.map((skill) => (
+                    {suggestions.map((skill) => (
                       <button key={skill.label} onClick={() => void ask(skill.prompt)}>
                         {skill.label}
                       </button>
@@ -206,7 +210,7 @@ export default function StevenPage() {
             {conversing && (
               <div className="stv-next">
                 <div className="stv-skills">
-                  {SKILLS.map((skill) => (
+                  {suggestions.map((skill) => (
                     <button key={skill.label} onClick={() => void ask(skill.prompt)}>
                       {skill.label}
                     </button>

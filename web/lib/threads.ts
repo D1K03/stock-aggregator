@@ -108,13 +108,30 @@ export function whenever(ts: number): string {
   return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+export type Skill = { label: string; prompt: string };
+
 /* Suggestions, not commands. Each is a question Steven can genuinely answer
    today: one draws a real chart, the rest are things he knows about himself or
-   the design. */
-export const SKILLS: { label: string; prompt: string }[] = [
-  { label: "Deployment status", prompt: "Is the deployment healthy?" },
-  { label: "What can you do?", prompt: "What can you do and what do you have access to?" },
-  { label: "How scoring works", prompt: "How does the scoring model work?" },
-  { label: "Why alerts fire", prompt: "When does an alert fire, and why on the crossing?" },
-  { label: "Chart NVDA", prompt: "Show me NVDA's 60-day chart and mark its biggest surge." },
-];
+   the design.
+
+   The chart names `top` — whichever security the screen ranks first, from
+   `useTopSecurity` — rather than a ticker written down here, which would be a
+   claim about the data made by the source. With nothing ranked there is nothing
+   to chart, and the suggestion is left out rather than offered against a
+   fallback nobody scored. */
+export function skills(top: string | null): Skill[] {
+  return [
+    { label: "Deployment status", prompt: "Is the deployment healthy?" },
+    { label: "What can you do?", prompt: "What can you do and what do you have access to?" },
+    { label: "How scoring works", prompt: "How does the scoring model work?" },
+    { label: "Why alerts fire", prompt: "When does an alert fire, and why on the crossing?" },
+    ...(top
+      ? [
+          {
+            label: `Chart ${top}`,
+            prompt: `Show me ${top}'s 60-day chart and mark its biggest surge.`,
+          },
+        ]
+      : []),
+  ];
+}
