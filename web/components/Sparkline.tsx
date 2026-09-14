@@ -3,6 +3,8 @@
 import { motion } from "framer-motion";
 
 export default function Sparkline({ h }: { h: number[] }) {
+  // A security with fewer than two stored bars has no line to draw.
+  if (h.length < 2) return <svg width={84} height={26} aria-hidden="true" />;
   const w = 84, ht = 26, pad = 2;
   const min = Math.min(...h), max = Math.max(...h);
   const x = (i: number) => (i / (h.length - 1)) * w;

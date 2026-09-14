@@ -10,17 +10,12 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
  * two that a model can read, assembled by the page that actually knows what is
  * on screen.
  *
- * `illustrative` travels with it and is not decoration. The dashboard renders
- * invented, schema-shaped numbers, and without saying so every question about
- * a row would get an answer that treats them as real market data, which is the
- * one thing Steven is most carefully told not to do. */
+ */
 
 export type ScreenContext = {
   page: string;
   /** A short prose summary of the current view. Kept brief; it is sent as tokens. */
   summary: string;
-  /** Whether the figures in `summary` are the concept's invented data. */
-  illustrative?: boolean;
 };
 
 type Store = {
@@ -41,20 +36,17 @@ export function useScreenContext() {
 }
 
 /** Publish this page's state. Pass a stable string; it re-sends on change. */
-export function usePublishScreen(page: string, summary: string, illustrative = false) {
+export function usePublishScreen(page: string, summary: string) {
   const { setContext } = useScreenContext();
   useEffect(() => {
-    setContext({ page, summary, illustrative });
+    setContext({ page, summary });
     // Cleared on unmount so a stale view never travels with a later question.
     return () => setContext(null);
-  }, [page, summary, illustrative, setContext]);
+  }, [page, summary, setContext]);
 }
 
 /** The single line sent to the model. Bounded, because it is paid for. */
 export function describe(context: ScreenContext | null): string {
   if (!context) return "";
-  const note = context.illustrative
-    ? " These figures are illustrative dashboard data, not live market data."
-    : "";
-  return `${context.page}: ${context.summary}.${note}`.slice(0, 400);
+  return `${context.page}: ${context.summary}.`.slice(0, 400);
 }

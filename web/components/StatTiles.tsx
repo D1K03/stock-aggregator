@@ -2,6 +2,7 @@
 
 import { animate, motion } from "framer-motion";
 import { useEffect, useRef } from "react";
+import { type Tiles, count } from "@/lib/screen";
 
 function CountUp({ to, delay = 0 }: { to: number; delay?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -11,7 +12,7 @@ function CountUp({ to, delay = 0 }: { to: number; delay?: number }) {
       duration: 0.9,
       ease: [0, 0, 0.2, 1],
       onUpdate: (v) => {
-        if (ref.current) ref.current.textContent = String(Math.round(v));
+        if (ref.current) ref.current.textContent = count(Math.round(v));
       },
     });
     return () => controls.stop();
@@ -19,20 +20,32 @@ function CountUp({ to, delay = 0 }: { to: number; delay?: number }) {
   return <span ref={ref}>0</span>;
 }
 
-const TILES = [
-  { k: "Universe scored", v: 487, suffix: " / 500", s: "13 below the coverage floor, skipped not imputed" },
-  { k: "Threshold crossings", v: 3, alerted: true, s: "1 suppressed by cooldown · fires on the crossing, not the state" },
-  { k: "Agreement ≥ 4 pillars", v: 12, s: "top-quartile in four or more pillars at once" },
-  { k: "Thin sectors", v: 2, s: "fell back to industry group · min 20 peers enforced" },
-];
-
-export default function StatTiles() {
+/* The night, not the page: these do not change with the filters (D9). */
+export default function StatTiles({ tiles }: { tiles: Tiles }) {
+  const items = [
+    {
+      k: "Scored", v: tiles.scored, suffix: ` / ${count(tiles.active_now)} active now`,
+      s: "a snapshot on this night, against the universe as it stands today",
+    },
+    {
+      k: "Partial scores", v: tiles.partial,
+      s: "a weighted pillar below full coverage; marked ◐, not hidden",
+    },
+    {
+      k: "All three pillars top-quartile", v: tiles.agreement_3,
+      s: "valuation, quality and momentum in their top quarter at once",
+    },
+    {
+      k: "Metric values ranked against the market", v: tiles.market_ranked_values,
+      s: "a sector too thin to rank within, so the whole market stood in",
+    },
+  ];
   return (
     <div className="tiles">
-      {TILES.map((t, i) => (
+      {items.map((t, i) => (
         <motion.div
           key={t.k}
-          className={`tile${t.alerted ? " alerted" : ""}`}
+          className="tile"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 + i * 0.07, duration: 0.5, ease: [0, 0, 0.2, 1] }}

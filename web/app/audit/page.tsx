@@ -94,7 +94,6 @@ export default function Audit() {
 
   const operations = (data?.operations ?? []).filter((o) => !kind || o.kind === kind);
 
-  // Real figures, unlike the Overview table, so not flagged illustrative.
   usePublishScreen(
     "Audit",
     data
