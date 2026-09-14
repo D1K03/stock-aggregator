@@ -12,12 +12,22 @@ A value that cannot be honestly computed is absent -- dropped from its pillar,
 never imputed (D5). Nothing here raises on the shape of the data.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from screener.scoring.basis import Held, balance_at, flow_basis, market_cap, newest_balance
+from screener.scoring.basis import (
+    Absent,
+    Basis,
+    Held,
+    Item,
+    balance_at,
+    explain_market_cap,
+    first_missing_balance,
+    flow_basis,
+    newest_balance,
+)
 
 VALUATION = "valuation"
 QUALITY = "quality"
@@ -71,6 +81,79 @@ class Ratio:
     period_end: date
 
 
+Explained = Ratio | Absent
+
+
+@dataclass(frozen=True)
+class _Inputs:
+    """What every formula reads, and what it needs to explain an absence."""
+
+    held: Held
+    as_of: date
+    currency: str | None
+    dropped: Mapping[str, Sequence[Item]]
+
+
+def _combined(inputs: _Inputs, codes: Sequence[str]) -> dict[str, list[Item]]:
+    """Held plus dropped facts for these codes, for the counterfactual retry."""
+    return {code: [*inputs.held.get(code, ()), *inputs.dropped.get(code, ())] for code in codes}
+
+
+def _unavailable(
+    inputs: _Inputs, codes: Sequence[str], reason: str, retry: Callable[[Held], bool]
+) -> Absent:
+    # A dropped foreign-currency fact is the reason only if including it would
+    # actually have made the lookup succeed -- otherwise "no figure" is the true
+    # story and blaming an unrelated old fact in another currency is a lie.
+    if inputs.currency is not None and retry(_combined(inputs, codes)):
+        names = sorted(
+            {
+                item.currency or "an unknown currency"
+                for code in codes
+                for item in inputs.dropped.get(code, ())
+            }
+        )
+        return Absent(f"facts reported in {', '.join(names)}, not {inputs.currency}")
+    return Absent(reason)
+
+
+def _basis(inputs: _Inputs, codes: Sequence[str]) -> Basis | Absent:
+    basis = flow_basis(inputs.held, codes, inputs.as_of)
+    if basis is None:
+        return _unavailable(
+            inputs,
+            codes,
+            f"no clean TTM or annual figure for {', '.join(codes)}",
+            lambda combined: flow_basis(combined, codes, inputs.as_of) is not None,
+        )
+    return basis
+
+
+def _newest(inputs: _Inputs, codes: Sequence[str]) -> tuple[date, dict[str, Decimal]] | Absent:
+    found = newest_balance(inputs.held, codes, inputs.as_of)
+    if found is None:
+        return _unavailable(
+            inputs,
+            codes,
+            f"no date within 15 months holding all of {', '.join(codes)}",
+            lambda combined: newest_balance(combined, codes, inputs.as_of) is not None,
+        )
+    return found
+
+
+def _at(inputs: _Inputs, codes: Sequence[str], day: date) -> dict[str, Decimal] | Absent:
+    balances = balance_at(inputs.held, codes, day)
+    if balances is None:
+        missing = first_missing_balance(inputs.held, codes, day) or ", ".join(codes)
+        return _unavailable(
+            inputs,
+            codes,
+            f"no {missing} at {day.isoformat()}",
+            lambda combined: balance_at(combined, codes, day) is not None,
+        )
+    return balances
+
+
 def industry_class(industry: str | None) -> str:
     """The class a level-2 industry code belongs to (spec D4)."""
     if industry is None:
@@ -91,66 +174,74 @@ def applicable(industry: str | None) -> dict[str, tuple[str, ...]]:
     return APPLICABLE[industry_class(industry)]
 
 
-def _earnings_yield(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    if cap is None:
-        return None
-    basis = flow_basis(held, ("net_income",), as_of)
-    if basis is None:
-        return None
+def _earnings_yield(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    if isinstance(cap, Absent):
+        return cap
+    basis = _basis(inputs, ("net_income",))
+    if isinstance(basis, Absent):
+        return basis
     return Ratio(basis.values["net_income"] / cap, basis.kind, basis.period_end)
 
 
-def _ffo_yield(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
+def _ffo_yield(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
     # Net income plus D&A: an approximation of funds from operations from stored
     # items, because depreciation on property that generally appreciates is what
     # makes a REIT's net income mislead.
-    if cap is None:
-        return None
-    basis = flow_basis(held, ("net_income", "depreciation_amortisation"), as_of)
-    if basis is None or basis.values["depreciation_amortisation"] < 0:
-        return None
+    if isinstance(cap, Absent):
+        return cap
+    basis = _basis(inputs, ("net_income", "depreciation_amortisation"))
+    if isinstance(basis, Absent):
+        return basis
+    if basis.values["depreciation_amortisation"] < 0:
+        return Absent("D&A negative")
     ffo = basis.values["net_income"] + basis.values["depreciation_amortisation"]
     return Ratio(ffo / cap, basis.kind, basis.period_end)
 
 
-def _ebitda_ev(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    if cap is None:
-        return None
-    basis = flow_basis(held, ("ebit", "depreciation_amortisation"), as_of)
-    if basis is None or basis.values["depreciation_amortisation"] < 0:
-        return None
+def _ebitda_ev(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    if isinstance(cap, Absent):
+        return cap
+    basis = _basis(inputs, ("ebit", "depreciation_amortisation"))
+    if isinstance(basis, Absent):
+        return basis
+    if basis.values["depreciation_amortisation"] < 0:
+        return Absent("D&A negative")
     # Current, like the cap: enterprise value describes today (spec D7).
-    found = newest_balance(held, ("total_debt", "cash_and_equivalents"), as_of)
-    if found is None:
-        return None
+    found = _newest(inputs, ("total_debt", "cash_and_equivalents"))
+    if isinstance(found, Absent):
+        return found
     balances = found[1]
     enterprise = cap + balances["total_debt"] - balances["cash_and_equivalents"]
     if enterprise <= 0:
-        return None
+        return Absent("enterprise value ≤ 0")
     ebitda = basis.values["ebit"] + basis.values["depreciation_amortisation"]
     return Ratio(ebitda / enterprise, basis.kind, basis.period_end)
 
 
-def _fcf_yield(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    if cap is None:
-        return None
-    basis = flow_basis(held, ("operating_cash_flow", "capital_expenditure"), as_of)
+def _fcf_yield(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    if isinstance(cap, Absent):
+        return cap
+    basis = _basis(inputs, ("operating_cash_flow", "capital_expenditure"))
+    if isinstance(basis, Absent):
+        return basis
     # Yahoo reports capex negative for every security (F3), so free cash flow
     # *adds* it. A positive value means the convention moved, and should show as
     # lost coverage rather than silently halve FCF.
-    if basis is None or basis.values["capital_expenditure"] > 0:
-        return None
+    if basis.values["capital_expenditure"] > 0:
+        return Absent("capex positive")
     fcf = basis.values["operating_cash_flow"] + basis.values["capital_expenditure"]
     return Ratio(fcf / cap, basis.kind, basis.period_end)
 
 
-def _book_yield(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    if cap is None:
-        return None
-    found = newest_balance(held, ("stockholders_equity",), as_of)
-    if found is None or found[1]["stockholders_equity"] <= 0:
-        return None
+def _book_yield(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    if isinstance(cap, Absent):
+        return cap
+    found = _newest(inputs, ("stockholders_equity",))
+    if isinstance(found, Absent):
+        return found
     day, balances = found
+    if balances["stockholders_equity"] <= 0:
+        return Absent("equity ≤ 0")
     return Ratio(balances["stockholders_equity"] / cap, None, day)
 
 
@@ -161,75 +252,83 @@ def _tax_rate(tax: Decimal, pretax: Decimal) -> Decimal:
     return min(max(tax / pretax, Decimal(0)), TAX_RATE_CEILING)
 
 
-def _roic(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    basis = flow_basis(held, ("ebit", "tax_provision", "pretax_income"), as_of)
-    if basis is None:
-        return None
+def _roic(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    basis = _basis(inputs, ("ebit", "tax_provision", "pretax_income"))
+    if isinstance(basis, Absent):
+        return basis
     # At the basis's own date, so a return is measured on the capital of the
     # period that earned it (spec D7).
-    balances = balance_at(
-        held, ("stockholders_equity", "total_debt", "cash_and_equivalents"), basis.period_end
+    balances = _at(
+        inputs, ("stockholders_equity", "total_debt", "cash_and_equivalents"), basis.period_end
     )
-    if balances is None:
-        return None
+    if isinstance(balances, Absent):
+        return balances
     invested = (
         balances["stockholders_equity"]
         + balances["total_debt"]
         - balances["cash_and_equivalents"]
     )
     if invested <= 0:
-        return None
+        return Absent("invested capital ≤ 0")
     rate = _tax_rate(basis.values["tax_provision"], basis.values["pretax_income"])
     return Ratio(
         basis.values["ebit"] * (Decimal(1) - rate) / invested, basis.kind, basis.period_end
     )
 
 
-def _roe(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    basis = flow_basis(held, ("net_income",), as_of)
-    if basis is None:
-        return None
-    balances = balance_at(held, ("stockholders_equity",), basis.period_end)
-    if balances is None or balances["stockholders_equity"] <= 0:
-        return None
+def _roe(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    basis = _basis(inputs, ("net_income",))
+    if isinstance(basis, Absent):
+        return basis
+    balances = _at(inputs, ("stockholders_equity",), basis.period_end)
+    if isinstance(balances, Absent):
+        return balances
+    if balances["stockholders_equity"] <= 0:
+        return Absent("equity ≤ 0")
     return Ratio(
         basis.values["net_income"] / balances["stockholders_equity"], basis.kind, basis.period_end
     )
 
 
-def _gross_margin(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
-    basis = flow_basis(held, ("gross_profit", "revenue"), as_of)
-    if basis is None or basis.values["revenue"] <= 0:
-        return None
+def _gross_margin(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
+    basis = _basis(inputs, ("gross_profit", "revenue"))
+    if isinstance(basis, Absent):
+        return basis
+    if basis.values["revenue"] <= 0:
+        return Absent("revenue ≤ 0")
     return Ratio(
         basis.values["gross_profit"] / basis.values["revenue"], basis.kind, basis.period_end
     )
 
 
-def _debt_to_equity(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
+def _debt_to_equity(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
     # The newest date both are held, within 456 days (plan amendment A4). A
     # negative equity would rank a heavily indebted company as the least
     # leveraged, so it is absent instead.
-    found = newest_balance(held, ("total_debt", "stockholders_equity"), as_of)
-    if found is None or found[1]["stockholders_equity"] <= 0:
-        return None
+    found = _newest(inputs, ("total_debt", "stockholders_equity"))
+    if isinstance(found, Absent):
+        return found
     day, balances = found
+    if balances["stockholders_equity"] <= 0:
+        return Absent("equity ≤ 0")
     return Ratio(balances["total_debt"] / balances["stockholders_equity"], None, day)
 
 
-def _interest_cover(held: Held, cap: Decimal | None, as_of: date) -> Ratio | None:
+def _interest_cover(inputs: _Inputs, cap: Decimal | Absent) -> Explained:
     # A debt-free company loses this metric, and the signal survives in the
     # pillar only while Yahoo still reports total_debt as 0 -- once it stops
     # publishing the series, debt_to_equity is absent too rather than zero.
-    basis = flow_basis(held, ("ebit", "interest_expense"), as_of)
-    if basis is None or basis.values["interest_expense"] <= 0:
-        return None
+    basis = _basis(inputs, ("ebit", "interest_expense"))
+    if isinstance(basis, Absent):
+        return basis
+    if basis.values["interest_expense"] <= 0:
+        return Absent("interest expense ≤ 0")
     return Ratio(
         basis.values["ebit"] / basis.values["interest_expense"], basis.kind, basis.period_end
     )
 
 
-_FORMULAS: dict[str, Callable[[Held, Decimal | None, date], Ratio | None]] = {
+_FORMULAS: dict[str, Callable[[_Inputs, Decimal | Absent], Explained]] = {
     "earnings_yield": _earnings_yield,
     "ebitda_ev": _ebitda_ev,
     "fcf_yield": _fcf_yield,
@@ -243,6 +342,38 @@ _FORMULAS: dict[str, Callable[[Held, Decimal | None, date], Ratio | None]] = {
 }
 
 
+def explain_ratios(
+    held: Held,
+    *,
+    industry: str | None,
+    close: Decimal | None,
+    close_date: date | None,
+    split_dates: Sequence[date],
+    as_of: date,
+    currency: str | None,
+    dropped: Mapping[str, Sequence[Item]] | None,
+) -> dict[str, Explained]:
+    """Every applicable ratio, as its value or the reason it has none (ui-swap D12).
+
+    `currency` and `dropped` come from `index_facts_explained` and are keyword-only
+    with no default so a caller cannot forget them; without them an absence caused
+    by a dropped currency reads as a missing figure, which is all `compute_ratios`
+    needs and passes.
+    """
+    wanted = {code for codes in applicable(industry).values() for code in codes}
+    cap = explain_market_cap(
+        held,
+        close=close,
+        close_date=close_date,
+        split_dates=split_dates,
+        as_of=as_of,
+        currency=currency,
+        dropped=dropped,
+    )
+    inputs = _Inputs(held, as_of, currency, dropped or {})
+    return {code: _FORMULAS[code](inputs, cap) for code in RATIO_CODES if code in wanted}
+
+
 def compute_ratios(
     held: Held,
     *,
@@ -253,13 +384,14 @@ def compute_ratios(
     as_of: date,
 ) -> dict[str, Ratio]:
     """Every applicable ratio that can be honestly computed, keyed by code."""
-    wanted = {code for codes in applicable(industry).values() for code in codes}
-    cap = market_cap(held, close=close, close_date=close_date, split_dates=split_dates, as_of=as_of)
-    out: dict[str, Ratio] = {}
-    for code in RATIO_CODES:
-        if code not in wanted:
-            continue
-        ratio = _FORMULAS[code](held, cap, as_of)
-        if ratio is not None:
-            out[code] = ratio
-    return out
+    explained = explain_ratios(
+        held,
+        industry=industry,
+        close=close,
+        close_date=close_date,
+        split_dates=split_dates,
+        as_of=as_of,
+        currency=None,
+        dropped=None,
+    )
+    return {code: value for code, value in explained.items() if isinstance(value, Ratio)}

@@ -50,20 +50,47 @@ class Basis:
     values: dict[str, Decimal]
 
 
+@dataclass(frozen=True)
+class Absent:
+    """Why an applicable metric has no value (ui-swap spec D12).
+
+    Never written. Scoring discards it; the traceability panel reproduces it on
+    demand from these same functions, so the reason cannot drift from the rule
+    that produced the absence.
+    """
+
+    reason: str
+
+
 Held = Mapping[str, Sequence[Item]]
 
 
-def index_facts(items: Iterable[Item], *, currency: str) -> dict[str, list[Item]]:
-    """Facts by code, without any not in the security's currency (spec D9).
+def index_facts_explained(
+    items: Iterable[Item], *, currency: str
+) -> tuple[dict[str, list[Item]], dict[str, list[Item]]]:
+    """Facts by code without any not in the security's currency, and what was dropped.
 
     Dropped here rather than checked per ratio, so a figure in another currency
-    cannot reach a formula by any route: it simply is not held.
+    cannot reach a formula by any route (spec D9). The second mapping holds the
+    dropped facts themselves, not just their currencies, so a caller can retry a
+    lookup with them included and learn whether they would have supplied the
+    missing figure -- an absence can then say "reported in EUR" only when that is
+    actually why the figure is missing, rather than whenever any dropped fact
+    exists anywhere in the group.
     """
-    out: dict[str, list[Item]] = {}
+    held: dict[str, list[Item]] = {}
+    dropped: dict[str, list[Item]] = {}
     for item in items:
         if item.currency == currency:
-            out.setdefault(item.code, []).append(item)
-    return out
+            held.setdefault(item.code, []).append(item)
+        else:
+            dropped.setdefault(item.code, []).append(item)
+    return held, dropped
+
+
+def index_facts(items: Iterable[Item], *, currency: str) -> dict[str, list[Item]]:
+    """Facts by code, without any not in the security's currency (spec D9)."""
+    return index_facts_explained(items, currency=currency)[0]
 
 
 def _by_date(held: Held, code: str, period_type: str) -> dict[date, Decimal]:
@@ -147,6 +174,14 @@ def balance_at(held: Held, codes: Sequence[str], day: date) -> dict[str, Decimal
     return out
 
 
+def first_missing_balance(held: Held, codes: Sequence[str], day: date) -> str | None:
+    """The first code with no balance on `day`, for an absence to name."""
+    for code in codes:
+        if _balance_on(held, code, day) is None:
+            return code
+    return None
+
+
 def newest_balance(
     held: Held,
     codes: Sequence[str],
@@ -169,15 +204,17 @@ def newest_balance(
     return None
 
 
-def market_cap(
+def explain_market_cap(
     held: Held,
     *,
     close: Decimal | None,
     close_date: date | None,
     split_dates: Sequence[date],
     as_of: date,
-) -> Decimal | None:
-    """Close times Yahoo's share count as it stands, or None (spec D8).
+    currency: str | None = None,
+    dropped: Mapping[str, Sequence[Item]] | None = None,
+) -> Decimal | Absent:
+    """Close times Yahoo's share count as it stands, or why there is none (spec D8).
 
     **No split factor is ever applied.** Yahoo restates share counts for splits,
     so multiplying by the ratio again doubles the cap (F4). What is unsafe is the
@@ -190,14 +227,48 @@ def market_cap(
     triggers, and a halted or acquired security stays valued on a months-old
     price. A close more than `CLOSE_MAX_AGE_DAYS` before `as_of` gives no
     market cap rather than a wrong one.
+
+    Checked in this order, and the first failure is the reason reported.
+
+    `currency` and `dropped` (from `index_facts_explained`) let a missing share
+    count blame a dropped foreign-currency fact, but only when including it would
+    actually have produced a count -- the same counterfactual rule `ratios.py`
+    applies (spec D9, plan amendment P2).
     """
-    if close is None or close_date is None or (as_of - close_date).days > CLOSE_MAX_AGE_DAYS:
-        return None
+    if close is None or close_date is None:
+        return Absent("no market cap: no close visible")
+    age = (as_of - close_date).days
+    if age > CLOSE_MAX_AGE_DAYS:
+        return Absent(f"no market cap: latest close is {age} days old")
     window = timedelta(days=SPLIT_WINDOW_DAYS)
-    if any(split <= as_of < split + window for split in split_dates):
-        return None
+    for split in sorted(split_dates):
+        if split <= as_of < split + window:
+            return Absent(f"no market cap: split on {split.isoformat()}")
     found = newest_balance(held, ("shares_outstanding",), as_of)
     if found is None:
-        return None
+        foreign = (dropped or {}).get("shares_outstanding", ())
+        if currency is not None and foreign:
+            combined = {"shares_outstanding": [*held.get("shares_outstanding", ()), *foreign]}
+            if newest_balance(combined, ("shares_outstanding",), as_of) is not None:
+                names = sorted({item.currency or "an unknown currency" for item in foreign})
+                return Absent(f"no market cap: facts reported in {', '.join(names)}, not {currency}")
+        return Absent("no market cap: no share count within 15 months")
     cap = close * found[1]["shares_outstanding"]
-    return cap if cap > 0 else None
+    if cap <= 0:
+        return Absent("no market cap: market cap ≤ 0")
+    return cap
+
+
+def market_cap(
+    held: Held,
+    *,
+    close: Decimal | None,
+    close_date: date | None,
+    split_dates: Sequence[date],
+    as_of: date,
+) -> Decimal | None:
+    """The market cap, or None -- `explain_market_cap` without the reason."""
+    value = explain_market_cap(
+        held, close=close, close_date=close_date, split_dates=split_dates, as_of=as_of
+    )
+    return None if isinstance(value, Absent) else value

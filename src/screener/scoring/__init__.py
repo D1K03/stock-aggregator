@@ -17,19 +17,23 @@ from screener.scoring.basis import (
     SPLIT_WINDOW_DAYS,
     TTM,
     TTM_MAX_AGE_DAYS,
+    Absent,
     Basis,
     Held,
     Item,
     annual_basis,
     balance_at,
+    explain_market_cap,
+    first_missing_balance,
     flow_basis,
     index_facts,
+    index_facts_explained,
     market_cap,
     newest_balance,
     ttm_basis,
 )
 from screener.scoring.blend import AGREEMENT_THRESHOLD, Snapshot, blend
-from screener.scoring.metrics import CODES, compute, months_before
+from screener.scoring.metrics import CODES, compute, explain_momentum, months_before
 from screener.scoring.percentile import deciles, percentiles
 from screener.scoring.peers import MIN_PEERS, Peer, market_group, resolve
 from screener.scoring.pillars import PillarScore, score_pillar
@@ -42,9 +46,11 @@ from screener.scoring.ratios import (
     STANDARD,
     TAX_RATE_CEILING,
     VALUATION,
+    Explained,
     Ratio,
     applicable,
     compute_ratios,
+    explain_ratios,
     industry_class,
 )
 from screener.scoring.run import (
@@ -96,8 +102,10 @@ __all__ = [
     "TTM_MAX_AGE_DAYS",
     "VALUATION",
     "WEIGHT_CODE",
+    "Absent",
     "Action",
     "Basis",
+    "Explained",
     "GroupStat",
     "Held",
     "Item",
@@ -119,8 +127,13 @@ __all__ = [
     "compute",
     "compute_ratios",
     "deciles",
+    "explain_market_cap",
+    "explain_momentum",
+    "explain_ratios",
+    "first_missing_balance",
     "flow_basis",
     "index_facts",
+    "index_facts_explained",
     "industry_class",
     "market_cap",
     "market_group",
