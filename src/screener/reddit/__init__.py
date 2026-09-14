@@ -18,7 +18,9 @@ mentions zero, one or many tickers, and deciding which is its own piece of work.
 """
 
 from screener.reddit.config import RedditConfig
-from screener.reddit.ingest import Report, once
-from screener.reddit.source import Item, SourceError
+from screener.reddit.ingest import Report, once, queue
+from screener.reddit.source import Item, SourceError, Throttled
 
-__all__ = ["Item", "RedditConfig", "Report", "SourceError", "once"]
+__all__ = [
+    "Item", "RedditConfig", "Report", "SourceError", "Throttled", "once", "queue",
+]

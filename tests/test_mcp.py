@@ -51,6 +51,14 @@ DENIED = {
 # discovered. It is public text claude.ai could fetch for itself.
 MAGPIE = {"magpie.attempt", "magpie.document", "magpie.link"}
 
+# Granted by 026, invisible to the parser above for the same reason.
+#
+# Two timestamps and a reason, saying a stretch of a subreddit was never walked.
+# No text and nobody's name, so nothing leaves the box that `social_item` has not
+# already sent — and without it the connector can count social rows but cannot
+# tell a quiet hour from a lost one.
+SOCIAL_GAP = {"public.social_gap"}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -319,7 +327,9 @@ def test_every_table_is_granted_or_deliberately_denied(connector, fresh_db):
           and n.nspname not like 'pg\\_%'
         """
     ).fetchall()
-    assert {r[0] for r in rows} == granted_in_migration() | set(DENIED) | MAGPIE
+    assert {r[0] for r in rows} == (
+        granted_in_migration() | set(DENIED) | MAGPIE | SOCIAL_GAP
+    )
 
 
 def test_the_connector_can_read_a_scraped_document(connector):

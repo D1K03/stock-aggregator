@@ -272,16 +272,46 @@ fields that carry meaning are kept, which is roughly a third of the size.
 | Cadence | `REDDIT_REFRESH_HOURS`, backfilling `REDDIT_BACKFILL_DAYS` the first time it sees a subreddit |
 | Switch | an empty `REDDIT_SUBREDDITS`; the container logs it and exits cleanly |
 
-**Do not** point the Bright Data lanes at it to go faster. The mirror does
-refuse about one page in six on the busiest subreddit, and the retry recovers
-every time — so there is no block that needs routing around, and Arctic Shift is
-run by volunteers, which makes rotating four exit addresses at a service whose
-error message asks for less traffic a different act from spreading load across a
-commercial API. `REDDIT_DELAY_MS` is the knob if they ever ask for less.
+**422 and 429 are not the same refusal, and reading them as one cost us data.**
+429 is the mirror asking for less traffic; waiting is the remedy. 422 carries
+`{"error": "Timeout. Maybe slow down a bit"}` and the wording is misleading — it
+is *their query* giving up. Measured 2026-09-14: it reproduces instantly from an
+address with no request history, every 422 takes ~2.8s against ~1.2s for a page
+that works, and `limit=10` fails exactly as `limit=100` does. So it is a
+server-side time budget, and it bites hardest on a thin subreddit, where filling
+a hundred-item page means scanning far more of the index — `stocks/comment` hit
+it on 31 runs of 50 against `wallstreetbets/comment`'s 3 of 51.
+
+Waiting therefore does not help and **narrowing does**: five cold three-hour
+windows needed 8, 10 and 8 identical retries to come good and two never came
+good in 12, while the window that refused twelve times out of twelve was
+answered on 11 of 16 first tries once cut into 675-second slices. `source.py`
+halves its `reach` on a 422 and widens again after a run of clean pages.
+
+**A span that dies is written to `social_gap`, not lost.** `latest_seen` and
+`earliest_seen` are aggregates, so together they describe an interval and
+neither can say there is a hole inside one — and the walk runs backwards, so an
+interruption banks everything newer than the point it died at and `max` jumps to
+the present. Before this existed, 36 of 168 hours of r/stocks comments were
+missing while the mirror still held real ones for every hour checked. Gaps are
+drained after the catch-up span, never before it: a repair has no upper bound on
+how long it takes and fresh comments should not wait behind one.
+
+`python -m screener.reddit backfill [days]` queues a stretch for re-walking and
+exits, leaving the running container to drain it. Deliberately not a walk of its
+own — a second process would race the scheduled one for the same rows.
+
+**Do not** point the Bright Data lanes at it to go faster. There is no block
+that needs routing around, and Arctic Shift is run by volunteers, which makes
+rotating four exit addresses at a service whose error message asks for less
+traffic a different act from spreading load across a commercial API.
+`REDDIT_DELAY_MS` is the knob if they ever ask for less.
 
 **Do not** add per-item audit rows. One `ingest_run` per subreddit and kind, and
 one `audit.event` for the pass: `record()` opens a connection per call and the
-same table backs Steven's memory.
+same table backs Steven's memory. That row's `outcome` follows the spans rather
+than the call — it read 'ok' for a pass that had lost three hours, which is how
+the holes stayed invisible.
 
 ---
 

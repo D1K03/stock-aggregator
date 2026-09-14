@@ -146,6 +146,87 @@ def save(conn: psycopg.Connection, source: int, items: list[Item]) -> tuple[int,
     return inserted, edited
 
 
+def record_gap(
+    conn: psycopg.Connection,
+    source: int,
+    subreddit: str,
+    kind: str,
+    *,
+    after: datetime,
+    before: datetime,
+    reason: str = "interrupted",
+) -> None:
+    """Remember a span nobody finished walking.
+
+    The one thing `latest_seen` and `earliest_seen` structurally cannot express.
+    Both are aggregates over what was stored, so together they describe an
+    interval; an interrupted walk leaves a *hole inside* one, and no pair of
+    scalars says where.
+
+    An empty or backwards span is dropped rather than refused: the callers
+    compute it by subtracting one timestamp from another, and a walk that died
+    on its very first page has nothing outstanding worth a row.
+    """
+    if before <= after:
+        return
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into social_gap (
+                source_id, subreddit, kind, span_after, span_before, reason
+            ) values (%s, %s, %s, %s, %s, %s)
+            on conflict (source_id, subreddit, kind, span_after, span_before)
+            do update set attempts = social_gap.attempts + 1
+            """,
+            [source, subreddit, kind, after, before, reason],
+        )
+
+
+def pending_gaps(
+    conn: psycopg.Connection,
+    source: int,
+    subreddit: str,
+    kind: str,
+    *,
+    limit: int = 4,
+    max_attempts: int = 5,
+) -> list[tuple[int, datetime, datetime]]:
+    """Outstanding spans, newest first, as `(id, after, before)`.
+
+    Bounded twice over. `limit`, because a pass that has queued a fortnight of
+    repairs should still reach tonight's comments; the rest keep until the next
+    one. `max_attempts`, because a span the mirror will not answer at any width
+    would otherwise be retried at the front of every pass forever — it stays in
+    the table as the record of a hole, but stops costing a walk.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select id, span_after, span_before from social_gap
+            where source_id = %s and subreddit = %s and kind = %s
+              and attempts < %s
+            order by span_before desc
+            limit %s
+            """,
+            [source, subreddit, kind, max_attempts, limit],
+        )
+        return [(int(r[0]), r[1], r[2]) for r in cur.fetchall()]
+
+
+def close_gap(conn: psycopg.Connection, gap_id: int) -> None:
+    """Drop a gap that has now been walked end to end."""
+    with conn.cursor() as cur:
+        cur.execute("delete from social_gap where id = %s", [gap_id])
+
+
+def bump_gap(conn: psycopg.Connection, gap_id: int) -> None:
+    """Count a try that got nowhere, without forgetting the hole."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update social_gap set attempts = attempts + 1 where id = %s", [gap_id]
+        )
+
+
 def start_run(conn: psycopg.Connection, source: int, endpoint: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
