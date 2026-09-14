@@ -144,6 +144,28 @@ class MetricInfoRow:
     pillar_code: str
 
 
+@dataclass(frozen=True)
+class ChartSecurityRow:
+    """A symbol's match with the screen's night, for Steven's chart (D17).
+
+    `run_id` onward is None when no v2 night qualifies; `score` onward, when that
+    night did not score this security.
+    """
+
+    security_id: int
+    symbol: str
+    name: str
+    mic: str
+    is_active: bool
+    run_id: int | None
+    as_of: date | None
+    score: Decimal | None
+    min_coverage: Decimal | None
+    v_score: Decimal | None
+    q_score: Decimal | None
+    m_score: Decimal | None
+
+
 def _concrete(hint: Any) -> Any:
     """`Decimal | None` -> `Decimal`; any other annotation unchanged."""
     if isinstance(hint, UnionType):

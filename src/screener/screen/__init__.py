@@ -6,7 +6,8 @@ from either a psycopg cursor or a `playground.Result`, query strings refused by
 name, and JSON built from typed rows. `queries` holds every statement as a
 literal. `read` resolves which night is served and reads it, and `explain`
 re-runs scoring's explaining forms for one security under the run's own view,
-giving each metric one of six statuses.
+giving each metric one of six statuses. Steven reads `CHART_SECURITY`, `CLOSES`
+and `ACTIONS` through `playground.select` and parses them with the same records.
 """
 
 from screener.screen.explain import (
@@ -73,9 +74,11 @@ from screener.screen.shape import (
     security_payload,
     unscored_payload,
 )
+from screener.screen.queries import ACTIONS, CHART_SECURITY, CLOSES
 from screener.screen.rows import (
     ActionRow,
     BarRow,
+    ChartSecurityRow,
     ClassificationRow,
     MetricInfoRow,
     MetricRow,
@@ -93,8 +96,11 @@ from screener.screen.rows import (
 
 __all__ = [
     "ABSENT",
+    "ACTIONS",
     "ALL_CODES",
     "CHART_CLOSES",
+    "CHART_SECURITY",
+    "CLOSES",
     "CLOSE_LOOKBACK_DAYS",
     "DEFAULT_LIMIT",
     "DEPENDS",
@@ -120,6 +126,7 @@ __all__ = [
     "BadParameter",
     "BarRow",
     "Check",
+    "ChartSecurityRow",
     "ClassificationRow",
     "MetricInfoRow",
     "MetricRow",
