@@ -15,7 +15,7 @@ from typing import Any
 
 import psycopg
 
-from screener import audit, auth, mcp
+from screener import audit, auth, mcp, screen
 from screener.ai import converse
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
@@ -1520,6 +1520,12 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/audit":
             self._audit(config, query)
 
+        elif route == "/api/screen":
+            self._screen(config, query)
+
+        elif route == "/api/screen/security":
+            self._screen_security(config, query)
+
         elif route == "/api/playground":
             self._playground(config)
         elif route == "/api/magpie":
@@ -1868,6 +1874,66 @@ class Handler(BaseHTTPRequestHandler):
                 ],
             },
         )
+
+    def _screen(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """One page of the scored screen (ui-swap spec D9).
+
+        On the application's own connection rather than a read-only role: the SQL
+        is fixed in `screener.screen.queries` and only bound parameters vary, which
+        is not what the playground's role exists to guard against.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        try:
+            params = screen.screen_params(query)
+        except screen.BadParameter as exc:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": str(exc), "parameter": exc.name})
+            return
+        self._screen_read(lambda conn: screen.read_screen(conn, params))
+
+    def _screen_security(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """One security on the screen's night, every metric re-checked (ui-swap spec D10)."""
+        login = self._require_login(config)
+        if login is None:
+            return
+        try:
+            params = screen.security_params(query)
+        except screen.BadParameter as exc:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": str(exc), "parameter": exc.name})
+            return
+        self._screen_read(lambda conn: screen.read_security(conn, params))
+
+    def _screen_read(self, read: Callable[[psycopg.Connection], dict[str, Any]]) -> None:
+        """Run one screen read and answer with it, or with the refusal it raised (spec §7)."""
+        try:
+            with psycopg.connect(settings().database_url, connect_timeout=3) as conn:
+                payload = read(conn)
+        except screen.RunChanged as exc:
+            self._respond(HTTPStatus.CONFLICT, {"error": "run_changed", "run": exc.run_id})
+        except screen.AmbiguousSymbol as exc:
+            self._respond(
+                HTTPStatus.CONFLICT,
+                {"error": "ambiguous_symbol", "symbol": exc.symbol, "exchanges": list(exc.exchanges)},
+            )
+        except screen.UnknownSymbol as exc:
+            self._respond(HTTPStatus.NOT_FOUND, {"error": "unknown_symbol", "symbol": exc.symbol})
+        except psycopg.Error as exc:
+            # The response names only the type: psycopg puts the host and the
+            # user in a connection error's message. The private log may carry
+            # the message, for diagnosis.
+            logger.warning("could not read the screen: %s", exc)
+            self._respond(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cannot read the screen", "database": type(exc).__name__},
+            )
+        except Exception:
+            logger.exception("could not build the screen")
+            self._respond(
+                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "could not build the screen"}
+            )
+        else:
+            self._respond(HTTPStatus.OK, payload)
 
     def _secure(self, config: AuthConfig) -> bool:
         """Whether cookies may carry the Secure flag.

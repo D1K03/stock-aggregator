@@ -231,6 +231,7 @@ flowchart TD
 
     secrets["secrets<br/>stdlib urllib only"]
     prov["provenance"]
+    screen["screen<br/>queries + rows + params + shape + read + explain"]
     concept["concept<br/>delete when ingest lands"]
     migrate["migrate + partitions"]
     checks["health.checks"]
@@ -265,6 +266,10 @@ flowchart TD
     health --> auth
     health --> checks
     health --> prov
+    health --> screen
+    screen --> scoring
+    screen --> ingest
+    screen --> prov
     health -.->|"lazy, inside a request handler"| bot
 
     bot --> ai
