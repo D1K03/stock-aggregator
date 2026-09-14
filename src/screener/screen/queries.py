@@ -196,3 +196,16 @@ select security_id, effective_date, action_type, ratio, amount
    and effective_date <= %(as_of)s
  order by security_id, effective_date
 """
+
+# D13: whether a security's inputs changed after its run started. Bars are
+# checked only inside the momentum window, which is all a run reads of them.
+REFRESHED: LiteralString = """
+select exists (select 1 from price_daily
+                where security_id = %(id)s
+                  and trade_date > %(start)s
+                  and trade_date <= %(as_of)s
+                  and observed_at > %(started_at)s),
+       exists (select 1 from fundamental_fact
+                where security_id = %(id)s
+                  and observed_at > %(started_at)s)
+"""
