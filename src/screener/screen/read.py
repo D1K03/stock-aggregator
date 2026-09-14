@@ -7,7 +7,7 @@ is not what the playground's read-only roles exist to guard against (D6).
 
 from collections.abc import Mapping, Sequence
 from datetime import date, timedelta
-from typing import Any, LiteralString, TypeVar
+from typing import Any, LiteralString, Protocol, TypeVar
 
 import psycopg
 
@@ -66,12 +66,44 @@ class UnknownSymbol(LookupError):
 
 
 class AmbiguousSymbol(LookupError):
-    """More than one security trades under this symbol today (D10)."""
+    """Several securities hold this symbol and none can be preferred (D10, §13)."""
 
     def __init__(self, symbol: str, exchanges: tuple[str, ...]) -> None:
         super().__init__(f"{symbol} is listed on {', '.join(exchanges)}")
         self.symbol = symbol
         self.exchanges = exchanges
+
+
+class Listing(Protocol):
+    """What choosing between matches needs of a row. Properties, so a frozen
+    dataclass satisfies it."""
+
+    @property
+    def mic(self) -> str: ...
+
+    @property
+    def is_active(self) -> bool: ...
+
+
+L = TypeVar("L", bound=Listing)
+
+
+def choose_match(symbol: str, matches: Sequence[L]) -> L:
+    """The one security a symbol names, preferring the only active one (D10, §13).
+
+    `universe load` leaves a departed security's symbol row open, so a reused
+    ticker matches the security that left as well as the one trading under it
+    now. The page and Steven have nothing but the symbol to go on, so refusing
+    that as ambiguous would make the active security unreachable from both.
+    """
+    if not matches:
+        raise UnknownSymbol(symbol)
+    if len(matches) == 1:
+        return matches[0]
+    active = [match for match in matches if match.is_active]
+    if len(active) == 1:
+        return active[0]
+    raise AmbiguousSymbol(symbol, tuple(sorted(match.mic for match in (active or matches))))
 
 
 def _all(
@@ -189,12 +221,9 @@ def read_security(conn: psycopg.Connection, params: SecurityParams) -> dict[str,
         return shape.awaiting()
     run, latest = resolved
 
-    matches = _all(conn, queries.SYMBOL_MATCH, {"symbol": params.symbol}, SymbolRow)
-    if not matches:
-        raise UnknownSymbol(params.symbol)
-    if len(matches) > 1:
-        raise AmbiguousSymbol(params.symbol, tuple(sorted(match.mic for match in matches)))
-    match = matches[0]
+    match = choose_match(
+        params.symbol, _all(conn, queries.SYMBOL_MATCH, {"symbol": params.symbol}, SymbolRow)
+    )
     security_id = match.security_id
     bind = {"id": security_id, "run": run.id, "as_of": run.as_of}
 
