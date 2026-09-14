@@ -22,6 +22,7 @@ from screener.screen.params import (
     screen_params,
     security_params,
 )
+from screener.screen.read import RunChanged, previous_run, resolve_run
 from screener.screen.shape import (
     ALL_CODES,
     MULTIPLE,
@@ -80,6 +81,7 @@ __all__ = [
     "MetricRow",
     "PillarRow",
     "PreviousRunRow",
+    "RunChanged",
     "RunRow",
     "ScreenParams",
     "ScreenRow",
@@ -96,7 +98,9 @@ __all__ = [
     "parse",
     "parse_all",
     "partial",
+    "previous_run",
     "price",
+    "resolve_run",
     "run_payload",
     "screen_params",
     "screen_payload",
