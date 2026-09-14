@@ -204,3 +204,14 @@ def test_an_unreachable_database_is_503_naming_only_the_error_type(server, cooki
     assert get(url + "/api/screen", cookie) == (
         503, {"error": "cannot read the screen", "database": "OperationalError"},
     )
+
+
+def test_an_unexpected_error_is_500_with_no_exception_detail(server, cookie, monkeypatch):
+    url, _ = server
+
+    def broken(*args: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("screener.screen.read_screen", broken)
+
+    assert get(url + "/api/screen", cookie) == (500, {"error": "could not build the screen"})

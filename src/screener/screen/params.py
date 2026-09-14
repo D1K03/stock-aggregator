@@ -2,7 +2,10 @@
 
 Pure. A parameter that is present but wrong is a 400 naming it, never a quiet
 default: a page that asked for `sort=value` and silently got `score` would show a
-screen in the wrong order with nothing on it saying so.
+screen in the wrong order with nothing on it saying so. A blank value (`?sort=`)
+never reaches this module wrong: `urllib.parse.parse_qs`, shared by every route,
+drops blank values before parsing, so a blank counts as absent and takes the
+default rather than being refused by name.
 """
 
 import re
@@ -71,7 +74,10 @@ def _integer(raw: str | None, name: str, *, low: int, high: int) -> int | None:
         return None
     # ASCII digits only: `int` also accepts " 7", "+7", "7_000" and other
     # scripts' digits, none of which a page sends.
-    if not (raw.isascii() and raw.isdigit()) or not low <= int(raw) <= high:
+    # `int` has no upper bound on digit count and Python's int-string
+    # conversion raises past ~4300 digits (CVE-2020-10735): reject an absurdly
+    # long value by length before it ever reaches `int`.
+    if not (raw.isascii() and raw.isdigit() and len(raw) <= 19) or not low <= int(raw) <= high:
         raise BadParameter(name, f"{name} must be a whole number from {low} to {high}")
     return int(raw)
 

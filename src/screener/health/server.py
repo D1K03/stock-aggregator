@@ -1919,12 +1919,18 @@ class Handler(BaseHTTPRequestHandler):
         except screen.UnknownSymbol as exc:
             self._respond(HTTPStatus.NOT_FOUND, {"error": "unknown_symbol", "symbol": exc.symbol})
         except psycopg.Error as exc:
-            # Named by type only: psycopg puts the host and the user in a
-            # connection error's message.
-            logger.warning("could not read the screen: %s", type(exc).__name__)
+            # The response names only the type: psycopg puts the host and the
+            # user in a connection error's message. The private log may carry
+            # the message, for diagnosis.
+            logger.warning("could not read the screen: %s", exc)
             self._respond(
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "cannot read the screen", "database": type(exc).__name__},
+            )
+        except Exception:
+            logger.exception("could not build the screen")
+            self._respond(
+                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "could not build the screen"}
             )
         else:
             self._respond(HTTPStatus.OK, payload)
