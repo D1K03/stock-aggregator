@@ -284,6 +284,7 @@ def test_a_split_inside_the_window_leaves_the_line_continuous(market):
     security = market.security("SPLT")
     days = market.bars(security, ["100"] * 10 + ["50"] * 10)
     market.split(security, days[10], "2")
+    market.run()
 
     _, drawn = draw("SPLT")
 
@@ -304,6 +305,7 @@ def test_an_unknown_symbol_is_not_drawn(market):
 def test_a_reused_symbol_draws_the_security_trading_under_it_now(market):
     market.bars(market.security("ABC", active=False, mic="XNYS", name="ABC Old"), ["999", "999"])
     market.bars(market.security("ABC"), ["10", "11"])
+    market.run()
 
     _, drawn = draw("ABC")
 
@@ -344,6 +346,7 @@ def test_an_unreachable_database_says_the_same(monkeypatch):
 
 def test_a_surface_that_cannot_draw_is_not_told_a_chart_is_shown(market):
     market.bars(market.security("ABC"), ["10", "12"])
+    market.run()
 
     with collecting(False) as drawn:
         said = dispatch("chart", {"ticker": "ABC", "mark": "peak"})
@@ -356,6 +359,7 @@ def test_a_surface_that_cannot_draw_is_not_told_a_chart_is_shown(market):
 def test_charts_do_not_leak_between_questions(market):
     market.bars(market.security("ABC"), ["10", "11"])
     market.bars(market.security("XYZ"), ["20", "21"])
+    market.run()
 
     _, first = draw("ABC")
     _, second = draw("XYZ")
