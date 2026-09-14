@@ -74,6 +74,26 @@ jobs:
         # than a log, and a failure prints its own name either way.
         run: pytest
 
+  # The dashboard's lint and typecheck. `next build` in Next 16 does not lint, and
+  # the image build that compiles the web app runs on pull requests only, so
+  # without this a lint error fails nothing at all (ui-swap spec F8).
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The major version `web/Dockerfile` builds on, so CI checks what ships.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
   # Builds the deployment images without publishing them, so a broken Dockerfile
   # fails on the pull request rather than after merge, when the only signal is
   # a red deploy.
@@ -136,7 +156,7 @@ jobs:
   # nothing red to explain why. This name never changes.
   ci-ok:
     if: always()
-    needs: [typecheck, test, build]
+    needs: [typecheck, test, web, build]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed or was cancelled

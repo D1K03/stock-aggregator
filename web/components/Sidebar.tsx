@@ -79,6 +79,7 @@ export default function Sidebar({ active = "Overview" }: { active?: string }) {
      first paint so a restored width does not animate in from the default. */
   useEffect(() => {
     const saved = Number(localStorage.getItem(STORAGE_WIDTH));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     if (saved >= MIN_WIDTH && saved <= MAX_WIDTH) setWidth(saved);
     setCollapsed(localStorage.getItem(STORAGE_COLLAPSED) === "1");
     // The inline script's first-paint class has done its job; from here the

@@ -64,6 +64,7 @@ export default function Skybird() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     load();
     const timer = setInterval(load, LISTING_MS);
     return () => clearInterval(timer);
@@ -78,6 +79,7 @@ export default function Skybird() {
     let cancelled = false;
     // A different capture is a different transcript, so the lines go with it.
     seen.current = 0;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     setSegments([]);
 
     const poll = async () => {

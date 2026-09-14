@@ -32,6 +32,7 @@ export default function MicButton({
   const { state, note, seconds, start, stop } = useMicrophone(onTranscript);
   const [ready, setReady] = useState(false);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
   useEffect(() => setReady(supported()), []);
 
   if (!ready) return null;
