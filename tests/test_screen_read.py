@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from screener.scoring import LOGIC_DESCRIPTION
-from screener.screen import RunChanged, RunRow, previous_run, resolve_run
+from screener.screen import RunChanged, RunRow, previous_run, read_screen, resolve_run, screen_params
 
 AS_OF = date(2026, 3, 2)
 SEEN = datetime(2026, 3, 2, 22, tzinfo=timezone.utc)
@@ -259,3 +259,179 @@ def test_a_change_of_weights_starts_delta_afresh(world):
     run, _ = _serve(world, world.run(AS_OF))
 
     assert previous_run(world.conn, run) is None
+
+
+# -- the page (D9, D11) ------------------------------------------------------
+
+
+def ask(world: World, **query: object) -> dict[str, Any]:
+    return read_screen(world.conn, screen_params({name: [str(value)] for name, value in query.items()}))
+
+
+def symbols(payload: dict[str, Any]) -> list[str]:
+    return [row["symbol"] for row in payload["rows"]]
+
+
+def test_before_the_first_v2_night_the_screen_says_so(world):
+    assert ask(world) == {"state": "awaiting_first_night"}
+
+
+def test_delta_against_the_previous_night_and_new_for_a_newly_scored_security(world):
+    old, new = world.security("OLD"), world.security("NEW")
+    yesterday = AS_OF - timedelta(days=1)
+    world.snapshot(world.run(yesterday), old, "70.0", as_of=yesterday)
+    tonight = world.run()
+    world.snapshot(tonight, old, "74.25")
+    world.snapshot(tonight, new, "60")
+
+    shown = ask(world)
+    rows = {row["symbol"]: row for row in shown["rows"]}
+
+    assert shown["previous_as_of"] == yesterday.isoformat()
+    assert rows["OLD"]["delta"] == "4.3"
+    assert rows["NEW"]["delta"] is None
+
+
+def test_delta_is_null_across_a_weight_change(world):
+    held = world.security("HELD")
+    yesterday = AS_OF - timedelta(days=1)
+    world.snapshot(world.run(yesterday, weight="v1"), held, "70", as_of=yesterday)
+    world.snapshot(world.run(), held, "74")
+
+    shown = ask(world)
+
+    assert shown["previous_as_of"] is None
+    assert shown["rows"][0]["delta"] is None
+
+
+def test_a_pinned_night_serves_its_own_rows_after_a_newer_one_lands(world):
+    held = world.security("HELD")
+    first = world.run()
+    world.snapshot(first, held, "50")
+    tomorrow = AS_OF + timedelta(days=1)
+    world.snapshot(world.run(tomorrow), held, "60", as_of=tomorrow)
+
+    shown = ask(world, run=first)
+
+    assert (shown["run"]["id"], shown["latest"]) == (first, False)
+    assert shown["rows"][0]["score"] == "50.0"
+
+
+def test_each_filter_narrows_the_rows_and_the_total(world):
+    run = world.run()
+    world.snapshot(run, world.security("TFUL"), "80", agreement=3)
+    world.snapshot(run, world.security("TPRT"), "70", agreement=2, min_coverage="0.5")
+    world.snapshot(run, world.security("OIL", "oil-gas-integrated"), "60")
+    world.snapshot(run, world.security("LOOS", None), "50", agreement=0)
+
+    def seen(**query: object) -> tuple[list[str], int]:
+        shown = ask(world, **query)
+        return symbols(shown), shown["total"]
+
+    assert seen() == (["TFUL", "TPRT", "OIL", "LOOS"], 4)
+    assert seen(sector="technology") == (["TFUL", "TPRT"], 2)
+    assert seen(sector="unclassified") == (["LOOS"], 1)
+    assert seen(sector="no-such-sector") == ([], 0)
+    assert seen(agree=2) == (["TFUL", "TPRT"], 2)
+    assert seen(partial="only") == (["TPRT"], 1)
+    assert seen(partial="hide") == (["TFUL", "OIL", "LOOS"], 3)
+    assert seen(sector="technology", partial="hide") == (["TFUL"], 1)
+    assert ask(world, sector="energy")["sectors"] == [
+        {"code": "energy", "name": "Energy"},
+        {"code": "technology", "name": "Technology"},
+        {"code": "unclassified", "name": "Unclassified"},
+    ]
+
+
+def test_each_sort_is_descending_with_nulls_last(world):
+    yesterday = AS_OF - timedelta(days=1)
+    before, run = world.run(yesterday), world.run()
+    a, b, c = world.security("AAA"), world.security("BBB"), world.security("CCC")
+    world.snapshot(before, a, "50", as_of=yesterday)
+    world.snapshot(before, b, "10", as_of=yesterday)
+    world.snapshot(run, a, "60", pillars={
+        "valuation": ("20", "1"), "quality": ("90", "1"), "momentum": ("40", "1"),
+    })
+    world.snapshot(run, b, "55", pillars={"valuation": ("80", "1"), "momentum": ("70", "1")})
+    world.snapshot(run, c, "70", pillars={"quality": ("10", "1"), "momentum": ("30", "1")})
+
+    assert symbols(ask(world)) == ["CCC", "AAA", "BBB"]
+    assert symbols(ask(world, sort="delta")) == ["BBB", "AAA", "CCC"]
+    assert symbols(ask(world, sort="V")) == ["BBB", "AAA", "CCC"]
+    assert symbols(ask(world, sort="Q")) == ["AAA", "CCC", "BBB"]
+    assert symbols(ask(world, sort="M")) == ["BBB", "AAA", "CCC"]
+
+
+def test_ties_break_on_security_id_so_pages_neither_overlap_nor_skip(world):
+    run = world.run()
+    ids = [world.security(f"T{i}") for i in range(5)]
+    for security_id in reversed(ids):
+        world.snapshot(run, security_id, "50")
+
+    pages = [symbols(ask(world, offset=offset, limit=2)) for offset in (0, 2, 4)]
+
+    assert pages == [["T0", "T1"], ["T2", "T3"], ["T4"]]
+    assert ask(world, offset=10, limit=2)["total"] == 5
+
+
+def test_the_sector_is_the_one_held_on_the_night_not_today(world):
+    run = world.run()
+    moved = world.security("MOVD", "oil-gas-integrated")
+    reclassified = AS_OF + timedelta(days=1)
+    world.conn.execute(
+        "update security_sector set valid_to = %s where security_id = %s", (reclassified, moved)
+    )
+    world.conn.execute(
+        """insert into security_sector (security_id, sector_node_id, valid_from, source)
+           values (%s, %s, %s, 'yfinance')""",
+        (moved, world.nodes["software"], reclassified),
+    )
+    world.snapshot(run, moved, "50")
+    world.snapshot(run, world.security("UTIL", "utilities"), "40")
+
+    shown = ask(world)
+
+    assert [row["sector"] for row in shown["rows"]] == [
+        {"code": "energy", "name": "Energy"},
+        {"code": "utilities", "name": "Utilities"},
+    ]
+
+
+def test_the_tiles_count_the_whole_night_whatever_the_filters(world):
+    run = world.run()
+    full, part, loose = world.security("FULL"), world.security("PART"), world.security("LOOS", None)
+    world.security("GONE", active=False)
+    world.security("UNSC")
+    world.snapshot(run, full, "80", agreement=3)
+    world.snapshot(run, part, "60", agreement=2, min_coverage="0.5")
+    world.snapshot(run, loose, "40")
+    world.metric(run, full, "ret_3m", "0.1", level=1)
+    # A thin bucket ranked against the market: counted.
+    world.metric(run, part, "ret_3m", "0.1", level=0)
+    # Unclassified, so the market is where it belongs rather than a fallback: not counted.
+    world.metric(run, loose, "ret_3m", "0.1", level=0)
+
+    assert ask(world, sector="technology", partial="hide")["tiles"] == {
+        "scored": 3, "active_now": 4, "partial": 1, "agreement_3": 1, "market_ranked_values": 1,
+    }
+
+
+def test_closes_are_the_newest_thirty_including_a_bar_restamped_since_the_run(world):
+    run = world.run()
+    security_id = world.security("BARS")
+    world.snapshot(run, security_id, "50")
+    for back in range(35):
+        world.bar(security_id, AS_OF - timedelta(days=back), str(100 + back))
+    world.bar(security_id, AS_OF + timedelta(days=1), "1")
+    # Ingest's settling window re-stamps the last week nightly (F13); the chart must
+    # not lose its right edge for it.
+    world.conn.execute(
+        "update price_daily set observed_at = %s where security_id = %s and trade_date = %s",
+        (datetime(2026, 9, 1, tzinfo=timezone.utc), security_id, AS_OF),
+    )
+
+    closes = ask(world)["rows"][0]["closes"]
+
+    assert len(closes) == 30
+    assert closes[0] == [(AS_OF - timedelta(days=29)).isoformat(), "129.00"]
+    assert closes[-1] == [AS_OF.isoformat(), "100.00"]
