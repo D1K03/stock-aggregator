@@ -10,7 +10,7 @@ for rather than assumed.
 import logging
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time as time_of_day, timedelta
 from decimal import Decimal
@@ -269,7 +269,7 @@ def run(sql_text: str, limit: int = config.DEFAULT_ROWS) -> Result:
 
 def select(
     query: LiteralString,
-    params: Sequence[Any] | None = None,
+    params: Sequence[Any] | Mapping[str, Any] | None = None,
     limit: int = config.DEFAULT_ROWS,
 ) -> Result:
     """Run a query this repository wrote, with parameters, under the same bounds.
@@ -291,12 +291,14 @@ def select(
     statement when they are present — `select %s::int; drop table security`
     comes back 42601. So this keeps every guarantee `run` has: one statement,
     SELECT or VALUES only, read-only, and the same caps.
+
+    Parameters may be positional or named; `screener.screen`'s statements are named.
     """
     return _execute(_PREFIX + query, params, limit)
 
 
 def _execute(
-    query: LiteralString, params: Sequence[Any] | None, limit: int
+    query: LiteralString, params: Sequence[Any] | Mapping[str, Any] | None, limit: int
 ) -> Result:
     """Both callers' shared body: one cursor, bounded rows, JSON-safe cells."""
     want = max(1, min(int(limit), config.MAX_ROWS))

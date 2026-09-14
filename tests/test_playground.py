@@ -16,6 +16,7 @@ from screener.playground import (
     catalog,
     ensure_password,
     run,
+    select,
 )
 
 MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "013_playground.sql"
@@ -308,6 +309,12 @@ def test_a_second_statement_after_a_semicolon_is_refused(playground, fresh_db):
     # of this. The server-side cursor is what stops it.
     refuse("select 1; drop table security")
     assert fresh_db.execute("select to_regclass('security')").fetchone()[0] is not None
+
+
+def test_a_repository_query_takes_named_parameters(steven):
+    # `screener.screen`'s statements are named, and Steven's chart reads them
+    # through here (ui-swap plan (b) P6).
+    assert select("select %(n)s::int + 1 as n", {"n": 41}).rows == ((42,),)
 
 
 def test_a_data_modifying_cte_is_refused(playground):
