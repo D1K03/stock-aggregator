@@ -26,7 +26,7 @@ function note(metric: Metric): { text: string; warn: boolean } | null {
         warn: true,
         text:
           stored && reproduced !== null
-            ? `does not reproduce: stored ${stored.raw}, now ${reproduced} (${difference(stored.raw, reproduced)})`
+            ? `does not reproduce: stored ${metricValue(stored.raw, metric.unit)} (${stored.raw}), now ${metricValue(reproduced, metric.unit)} (${reproduced}), exact difference ${difference(stored.raw, reproduced)}`
             : `does not reproduce: now absent, ${metric.reason ?? "no reason recorded"}`,
       };
     case "absent":
@@ -61,11 +61,11 @@ function MetricRow({ metric }: { metric: Metric }) {
       <span className="why-bar" title={stored ? `${percentile(stored.percentile)}th percentile` : undefined}>
         {stored ? <i style={{ width: `${percentile(stored.percentile)}%` }} /> : null}
       </span>
-      <span className="why-meta">
-        {stored
-          ? `${percentile(stored.percentile)} · ${stored.market_ranked ? "vs market" : stored.peer_group} (${stored.peer_count}) · ${period(stored)}`
-          : null}
-      </span>
+      {stored ? (
+        <span className="why-meta">
+          {`${percentile(stored.percentile)} · ${stored.market_ranked ? "vs market" : stored.peer_group} (${stored.peer_count}) · ${period(stored)}`}
+        </span>
+      ) : null}
       {said ? <span className={`why-note${said.warn ? " warn" : ""}`}>{said.text}</span> : null}
     </>
   );
