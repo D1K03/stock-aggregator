@@ -203,16 +203,15 @@ select security_id, effective_date, action_type, ratio, amount
  order by security_id, effective_date
 """
 
-# D13: whether a security's inputs changed after its run started. Bars are
-# checked only inside the momentum window, which is all a run reads of them.
+# D13, amended (§13): whether a bar the run read was rewritten after it started.
+# Bars only, and only inside the momentum window, which is all a run reads of
+# them. A fact is appended, never rewritten, so one observed later is outside
+# the run's view rather than a change to what it saw.
 REFRESHED: LiteralString = """
 select exists (select 1 from price_daily
                 where security_id = %(id)s
                   and trade_date > %(start)s
                   and trade_date <= %(as_of)s
-                  and observed_at > %(started_at)s),
-       exists (select 1 from fundamental_fact
-                where security_id = %(id)s
                   and observed_at > %(started_at)s)
 """
 
@@ -265,4 +264,36 @@ select m.code, m.name, m.higher_is_better, p.code
   from metric m
   join pillar p on p.id = m.pillar_id
  where m.code = any(%(codes)s)
+"""
+
+# D17 (plan C1): Steven's first read. Every security holding the symbol, each with
+# the screen's night and its snapshot and pillar scores on that night, so the
+# §13 preference for the one active match is made in Python over all of them.
+# The run columns are named because `LATEST_RUN` leaves several unnamed.
+CHART_SECURITY: LiteralString = """
+with served (id, as_of, started_at, finished_at, git_sha, config_hash, weight_version,
+             weight_version_id, cutoff_offset_seconds, logic, emits_alerts) as (
+""" + LATEST_RUN + """
+)
+select distinct on (s.id) s.id, sy.symbol, s.name, sy.mic, s.is_active,
+       served.id, served.as_of, snap.blended_score, snap.min_coverage,
+       v.score, q.score, m.score
+  from security_symbol sy
+  join security s on s.id = sy.security_id
+  left join served on true
+  left join snapshot_daily snap
+    on snap.scoring_run_id = served.id and snap.as_of = served.as_of
+   and snap.security_id = s.id
+  left join pillar_score_daily v
+    on v.scoring_run_id = served.id and v.as_of = served.as_of and v.security_id = s.id
+   and v.pillar_id = (select id from pillar where code = 'valuation')
+  left join pillar_score_daily q
+    on q.scoring_run_id = served.id and q.as_of = served.as_of and q.security_id = s.id
+   and q.pillar_id = (select id from pillar where code = 'quality')
+  left join pillar_score_daily m
+    on m.scoring_run_id = served.id and m.as_of = served.as_of and m.security_id = s.id
+   and m.pillar_id = (select id from pillar where code = 'momentum')
+ where upper(sy.symbol) = upper(%(symbol)s::text)
+   and sy.valid_to is null
+ order by s.id, sy.mic
 """

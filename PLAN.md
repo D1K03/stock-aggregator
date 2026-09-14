@@ -18,12 +18,11 @@ Build this and nothing else first:
 Additive once the spine works, in no fixed order: web UI, backtesting harness, LLM
 summarisation, 13F ingestion, expanded universe, forecaster-consensus aggregation.
 
-### Steven draws charts — built on concept data
+### Steven draws charts — real adjusted prices
 
-Built, on the explicit understanding that the numbers are invented. Ask when
-something happened, how a ticker has moved, or when it crossed the threshold,
-and the `chart` tool draws the 60-day line under the reply with that point
-marked and dated.
+Built, and on real data since the UI swap. Ask how a ticker has moved, its high or low, or its
+biggest surge or drop, and the `chart` tool draws its 60 trading days of adjusted closes under
+the reply, captioned with the latest scored night, with that point marked and dated.
 
 Two decisions are worth keeping when this meets real data:
 
@@ -34,18 +33,15 @@ Two decisions are worth keeping when this meets real data:
   beside the reply through `tools.collecting()`. Cost is flat in the size of
   the series.
 - **The model picks the question, the data answers it.** `mark` names *what* to
-  find — `peak`, `low`, `surge`, `drop`, `crossing`, `latest` — and the index is
+  find — `peak`, `low`, `surge`, `drop`, `latest` — and the index is
   computed from the series in `bot/tools/charts.py`. A model supplying
   coordinates would be inventing where the marker goes, which is the same
   failure as inventing a number and worse for being drawn precisely.
 
-`screener.concept` holds the invented data, mirroring `web/lib/data.ts` because
-the two live in separate Docker build contexts and neither can import the
-other's copy. `tests/test_charts.py` parses the TypeScript and fails if they
-disagree, and pins `series()` against values from the original walk — so the
-duplication is checked rather than trusted. Ingest and scoring have both landed
-now, so the package is waiting to be deleted rather than waiting for a reason:
-the tool reads `snapshot_daily` and nothing else about it changes.
+`screener.concept` and `web/lib/data.ts` are deleted. The tool reads through `playground.select`
+as `playground_bot`, in three statements shared with the dashboard's endpoints, so the chart in
+Discord and the chart on the Overview draw the same closes. `crossing` returns with score
+history and alerting.
 
 ### Skybird — live stream capture
 
@@ -110,11 +106,6 @@ Still not built — but no longer blocked. Ingest and scoring both landed, so
 `snapshot_daily` has real rows in it and every item below is now someone
 choosing to do it rather than waiting:
 
-- **Real data.** Everything above draws fiction. Every surface says so — the
-  chart footer, the tool result, and the system prompt — and that wording is
-  load-bearing until there are real snapshots behind it.
-- **A tool over the snapshot tables**, replacing `screener.concept`, so the same
-  analysis works from Discord where there is no screen to look at.
 - **Structured multi-series context.** `web/lib/screen-context.tsx` publishes a
   prose summary, which is enough for "what am I looking at" and not enough to
   compare two tickers or reason across pillars.
@@ -123,6 +114,14 @@ choosing to do it rather than waiting:
   exactly the change that would tempt the second.
 
 ## Done
+
+**UI swap** — merged in #50, #51 and this piece's pull request. The Overview reads the real v2
+screen: filters, a paged table, a price chart and a "Why this score" panel that re-checks every
+metric under its run's own view. Steven's chart reads the same data. Spec:
+`docs/specs/2026-09-13-ui-swap.md`. Plans:
+`docs/plans/2026-09-13-ui-swap-a-scoring-explains.md`,
+`docs/plans/2026-09-14-ui-swap-b-read-path.md`,
+`docs/plans/2026-09-14-ui-swap-c-page-and-steven.md`.
 
 **Database schema** — merged in #1. Nine migrations, ~20 tables across identity, a bitemporal
 fact layer, a partitioned derived-daily layer, versioned scoring runs and alerting. 44 tests run

@@ -60,6 +60,7 @@ export default function Document({ params }: { params: Promise<{ id: string }> }
   }, [documentId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     void load();
   }, [load]);
 

@@ -1,6 +1,6 @@
 /* The shape the status service returns from /api/skybird.
  *
- * Everything here is real, unlike the concept data behind the Overview: these
+ * Everything here is real, as the Overview's scores now are: these
  * rows are captures that happened and words somebody said. */
 
 export type SkybirdSession = {

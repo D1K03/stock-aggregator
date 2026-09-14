@@ -69,6 +69,7 @@ export default function Palette() {
   useEffect(() => {
     // Absent means never moved, which is docked.
     const storedDock = localStorage.getItem(STORAGE_DOCKED);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     setDocked(storedDock === null ? true : storedDock === "1");
 
     /* Open only if it was open when you last left. Docking is a position, not

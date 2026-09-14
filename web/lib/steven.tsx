@@ -81,6 +81,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = loadThreads();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     setThreads(saved);
     /* Reopen whatever was being discussed. This provider outlives client-side
        navigation, so it is only for a genuine reload — but losing a
@@ -109,6 +110,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
      exactly when you would most want the history to have kept up. */
   useEffect(() => {
     if (turns.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     setThreads(
       saveThread({ id: threadId, title: titleFor(turns), turns, updatedAt: Date.now() })
     );

@@ -80,6 +80,7 @@ export default function Audit() {
   }, [kind, operation, page]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser state or starts a load on mount; predates lint in CI, and new code must pass the rule
     load();
   }, [load]);
 
@@ -93,7 +94,6 @@ export default function Audit() {
 
   const operations = (data?.operations ?? []).filter((o) => !kind || o.kind === kind);
 
-  // Real figures, unlike the Overview table, so not flagged illustrative.
   usePublishScreen(
     "Audit",
     data

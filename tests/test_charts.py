@@ -1,202 +1,381 @@
-"""The chart tool, and the concept data it draws from.
+"""The chart tool: Steven draws a security's adjusted price from real data.
 
-Two things are defended here. That the annotation Steven puts on a chart is
-computed from the series rather than chosen by a model — a marker in the wrong
-place is a lie told precisely. And that the Python copy of the concept data
-still agrees with the TypeScript one the dashboard renders, because they are
-separate files in separate build contexts and nothing but this test stops them
-drifting apart.
+Three things are defended here:
+- The mark Steven puts on a chart is computed from the series, never chosen by a
+  model. A marker in the wrong place is a lie told precisely.
+- The figures are the stored bars, adjusted by scoring's own rule and read as
+  Steven's read-only role, captioned with the scores the screen serves
+  (ui-swap spec D17).
+- A chart still reaches Discord as the same payload the browser draws.
+
+The database fixtures are written here rather than borrowed from
+`test_screen_read.py`: this repository keeps no test-helper modules, and Steven
+needs a sliver of that world -- a few securities, sixty-odd bars, one night.
 """
 
 import json
-import re
-from pathlib import Path
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
+from typing import Any
 
 import httpx
 import pytest
+from psycopg.conninfo import make_conninfo
 
-from screener import concept
+from screener import playground
 from screener.bot import render
-from screener.bot.tools import TOOLS, dispatch
-from screener.bot.tools.charts import MARKS, collecting
+from screener.bot.tools import TOOLS, Chart, dispatch
+from screener.bot.tools.charts import MARKS, UNAVAILABLE, annotate, collecting
+from screener.scoring import LOGIC_DESCRIPTION
 
-DATA_TS = Path(__file__).resolve().parent.parent / "web" / "lib" / "data.ts"
-
-
-def _series(symbol: str) -> list[float]:
-    """The series for a symbol that is expected to exist."""
-    row = concept.find(symbol)
-    assert row is not None, symbol
-    return concept.series(row)
+AS_OF = date(2026, 3, 2)
+PASSWORD = "throwaway-for-this-test"
 
 
-# -- the concept data mirrors the dashboard's ------------------------------
+def weekdays(last: date, count: int) -> list[date]:
+    """`count` weekdays ending on `last`, oldest first."""
+    days: list[date] = []
+    day = last
+    while len(days) < count:
+        if day.weekday() < 5:
+            days.append(day)
+        day -= timedelta(days=1)
+    return days[::-1]
 
 
-def _parse_rows() -> list[tuple[str, int, int]]:
-    """(symbol, score, prev) out of the TypeScript ROWS table."""
-    source = DATA_TS.read_text()
-    body = source.split("export const ROWS: Row[] = [", 1)[1].split("];", 1)[0]
-    return [
-        (m["sym"], int(m["score"]), int(m["prev"]))
-        for m in re.finditer(
-            r'sym:\s*"(?P<sym>[A-Z.]+)".*?score:\s*(?P<score>\d+),\s*prev:\s*(?P<prev>\d+)',
-            body,
-        )
-    ]
+def draw(ticker: str, mark: str = "") -> tuple[str, list[Chart]]:
+    with collecting() as drawn:
+        said = dispatch("chart", {"ticker": ticker, "mark": mark})
+    return said, list(drawn)
 
 
-@pytest.mark.skipif(not DATA_TS.exists(), reason="the web app is not in this checkout")
-def test_the_python_concept_rows_match_the_dashboards():
-    # Two copies of the same invented data, one per language. A chart in chat
-    # that disagreed with the chart on the page would read as a broken screener
-    # rather than as two files that drifted.
-    assert [(r.sym, r.score, r.prev) for r in concept.ROWS] == _parse_rows()
+# -- marks, on a fixed series ------------------------------------------------
+
+# A rise of 20 from 200 (+10%) and a rise of 10 from 50 (+20%): the surge is
+# the second, because a move is measured in percent, not in price points.
+SERIES = [Decimal(v) for v in ("200", "220", "215", "50", "55", "60", "58", "57", "56", "55")]
+DAYS = weekdays(AS_OF, len(SERIES))
 
 
-@pytest.mark.skipif(not DATA_TS.exists(), reason="the web app is not in this checkout")
-def test_the_alert_threshold_matches_the_dashboards():
-    found = re.search(r"export const THRESHOLD = (\d+)", DATA_TS.read_text())
-    assert found and int(found[1]) == concept.THRESHOLD
+def _day(day: date) -> str:
+    return f"{day.day} {day:%b}"
 
 
-def test_the_series_reproduces_the_dashboards_walk_exactly():
-    # Values captured from the TypeScript `history()`. The generator is 32-bit
-    # integer arithmetic kept inside float64 in both languages, so this is an
-    # exact match rather than a close one; anything else means the port drifted.
-    nvda = concept.series(concept.ROWS[1])
-    assert concept.ROWS[1].sym == "NVDA"
-    assert len(nvda) == concept.SPAN
-    assert nvda[0] == 53.23316271053627
-    assert nvda[30] == 66.15803773103495
-    # The walk arrives at yesterday and today is appended, so the last step is
-    # the move an alert would have fired on.
-    assert nvda[-2] == 68.0
-    assert nvda[-1] == 82.0
-
-
-def test_a_ticker_is_found_by_symbol_or_name():
-    # Asked to "chart Nvidia", a symbol-only lookup would fail and the model
-    # would spend another paid round guessing.
-    assert concept.find("nvda") is concept.find("$NVDA") is concept.find("NVIDIA")
-    assert concept.find("Eli Lilly") is not None
-    assert concept.find("TSLA") is None
-    assert concept.find("") is None
-
-
-# -- the tool --------------------------------------------------------------
-
-
-def test_the_chart_tool_is_registered_with_its_marks_in_the_description():
-    # The model picks a mark from this string. If a mark is added and the
-    # description is not, it can only be reached by guessing.
-    assert "chart" in TOOLS
+def test_the_tool_offers_price_marks_and_never_a_crossing():
+    description = TOOLS["chart"].description
+    assert "adjusted price" in description
     for mark in MARKS:
-        assert mark in TOOLS["chart"].description
+        assert mark in description
+    assert "crossing" not in description and "crossing" not in MARKS
 
 
-def test_a_chart_is_collected_rather_than_returned_to_the_model():
-    # Sixty points would exceed the whole tool-result budget and be re-sent on
-    # every following round. The model gets a sentence; the chart goes around.
-    with collecting() as drawn:
-        result = dispatch("chart", {"ticker": "NVDA", "mark": "peak"})
-    assert len(drawn) == 1
-    assert drawn[0].ticker == "NVDA"
-    assert len(drawn[0].series) == concept.SPAN
-    assert "53.23" not in result and "66.15" not in result
+def test_a_peak_and_a_low_are_found_in_the_series_and_labelled_as_prices():
+    peak, said = annotate("peak", SERIES, DAYS)
+    low, _ = annotate("low", SERIES, DAYS)
+
+    assert peak is not None and (peak.kind, peak.index, peak.label) == ("point", 1, "peak 220.00")
+    assert said == f"Peak 220.00 on {_day(DAYS[1])}."
+    assert low is not None and (low.index, low.label) == (3, "low 50.00")
 
 
-def test_the_marked_point_is_computed_from_the_series_not_supplied():
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "MSFT", "mark": "peak"})
-    values = _series("MSFT")
-    mark = drawn[0].marks[0]
-    assert mark.kind == "point"
-    assert values[mark.index] == max(values)
+def test_a_surge_is_the_steepest_percent_rise_and_says_how_long_it_took():
+    surge, said = annotate("surge", SERIES, DAYS)
+
+    assert surge is not None and (surge.kind, surge.index, surge.end) == ("span", 3, 5)
+    assert surge.label == "+20.0% over 2d"
+    assert said == f"Biggest surge +20.0% over 2d, {_day(DAYS[3])} to {_day(DAYS[5])}."
 
 
-def test_a_surge_spans_the_steepest_run_and_says_how_long_it_took():
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "CAT", "mark": "surge"})
-    mark = drawn[0].marks[0]
-    values = _series("CAT")
-    assert mark.kind == "span" and mark.end is not None
-    assert mark.end > mark.index
-    assert values[mark.end] > values[mark.index]
-    # The label carries the size and the length, so the chart answers "when was
-    # its biggest surge" without the reply having to restate it.
-    assert f"over {mark.end - mark.index}d" in mark.label
+def test_a_drop_is_the_steepest_percent_fall():
+    drop, _ = annotate("drop", SERIES, DAYS)
+
+    assert drop is not None and (drop.index, drop.end, drop.label) == (1, 3, "-77.3% over 2d")
 
 
-def test_a_crossing_is_marked_where_the_line_changes_sides():
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "NVDA", "mark": "crossing"})
-    mark = drawn[0].marks[0]
-    values = _series("NVDA")
-    below_before = values[mark.index - 1] < concept.THRESHOLD
-    below_after = values[mark.index] < concept.THRESHOLD
-    assert below_before != below_after
+def test_latest_marks_the_last_close():
+    latest, _ = annotate("latest", SERIES, DAYS)
+
+    assert latest is not None and (latest.index, latest.label) == (9, "now 55.00")
 
 
-def test_a_ticker_that_does_not_exist_names_the_ones_that_do():
-    # Otherwise the model spends a whole paid round guessing another symbol.
-    with collecting() as drawn:
-        result = dispatch("chart", {"ticker": "TSLA"})
-    assert drawn == []
-    assert "NVDA" in result and "error" in result
+def test_a_close_of_a_thousand_or_more_is_labelled_without_decimals():
+    peak, _ = annotate("peak", [Decimal("1500"), Decimal("1601")], DAYS[:2])
+
+    assert peak is not None and peak.label == "peak 1601"
 
 
-def test_an_unknown_mark_is_refused_rather_than_silently_ignored():
-    # Quietly drawing an unmarked chart would have Steven describe a marker
-    # that is not on it.
-    with collecting() as drawn:
-        result = dispatch("chart", {"ticker": "NVDA", "mark": "wibble"})
-    assert drawn == []
-    assert "error" in result
+def test_a_flat_series_has_no_surge_to_mark():
+    assert annotate("surge", [Decimal("100")] * 5, DAYS[:5]) == (
+        None, "No meaningful surge in this window.",
+    )
 
 
-def test_every_result_says_the_data_is_illustrative():
-    # The one claim that must survive every path: these are invented numbers,
-    # and the model is told so every single time it reads them.
-    with collecting():
-        for mark in ("", *MARKS):
-            assert "llustrative" in dispatch("chart", {"ticker": "AMD", "mark": mark})
+def test_an_unknown_mark_is_refused_before_anything_is_read():
+    for mark in ("wibble", "crossing"):
+        said, drawn = draw("ABC", mark)
+        assert drawn == [] and said.startswith("error: mark must be one of")
 
 
-def test_a_surface_that_cannot_draw_is_not_told_a_chart_is_shown():
-    # Every surface can show one today — Discord gets a rasterised PNG — but
-    # the mechanism has to keep working, because claiming a chart where none is
-    # rendered points the reader at something that does not exist.
+def test_the_payload_is_a_price_chart_with_no_score_lines():
+    chart = Chart(
+        ticker="ABC", title="t", subtitle="s",
+        series=(Decimal("272.10"), Decimal("1500")), dates=("2026-02-27", "2026-03-02"),
+    )
+
+    body = json.loads(json.dumps(chart.payload()))
+
+    assert body["kind"] == "price"
+    assert body["series"] == [272.1, 1500.0]
+    assert "median" not in body and "threshold" not in body
+
+
+# -- the tool, against the database as Steven's role -------------------------
+
+
+@pytest.fixture
+def steven(fresh_db, db_url, monkeypatch):
+    """Steven's read-only role, provisioned as `test_playground.py` provisions it:
+    through `ensure_password`, so what is tested is the role that ships."""
+    monkeypatch.setenv("PLAYGROUND_DB_PASSWORD", PASSWORD)
+    monkeypatch.setenv("PLAYGROUND_BOT_DB_PASSWORD", PASSWORD)
+    playground.ensure_password(fresh_db)
+    monkeypatch.setenv(
+        "PLAYGROUND_DATABASE_URL",
+        make_conninfo(db_url, user="playground_bot", password=PASSWORD),
+    )
+    return fresh_db
+
+
+@dataclass
+class Market:
+    # `Any`, because the fixture's connection is untyped and a typed one would make
+    # every `fetchone()[0]` below an optional-subscript error.
+    conn: Any
+    observe: Callable[[int], int]
+
+    def security(
+        self, symbol: str, *, active: bool = True, mic: str = "XNAS", name: str | None = None
+    ) -> int:
+        security_id = self.conn.execute(
+            """insert into security
+               (name, mic, currency, country, primary_symbol, first_seen, is_active)
+               values (%s, %s, 'USD', 'US', %s, '2020-01-01', %s) returning id""",
+            (name or f"{symbol} Inc", mic, symbol, active),
+        ).fetchone()[0]
+        self.conn.execute(
+            """insert into security_symbol (security_id, symbol, mic, valid_from, source)
+               values (%s, %s, %s, '2020-01-01', 'test')""",
+            (security_id, symbol, mic),
+        )
+        return security_id
+
+    def bars(self, security_id: int, closes: Sequence[str], *, last: date = AS_OF) -> list[date]:
+        """One bar per weekday ending on `last`, each fetched the evening it closed."""
+        observation = self.observe(security_id)
+        days = weekdays(last, len(closes))
+        for day, close in zip(days, closes):
+            value = Decimal(close)
+            self.conn.execute(
+                """insert into price_daily
+                   (security_id, trade_date, open, high, low, close, volume, observed_at,
+                    ingest_observation_id)
+                   values (%s, %s, %s, %s, %s, %s, 1, %s, %s)""",
+                (security_id, day, value, value, value, value,
+                 datetime.combine(day, time(22), tzinfo=timezone.utc), observation),
+            )
+        return days
+
+    def split(self, security_id: int, effective: date, ratio: str) -> None:
+        self.conn.execute(
+            """insert into corporate_action
+               (security_id, effective_date, action_type, ratio, amount, currency,
+                observed_at, ingest_observation_id)
+               values (%s, %s, 'split', %s, null, 'USD', %s, %s)""",
+            (security_id, effective, Decimal(ratio),
+             datetime.combine(effective, time(22), tzinfo=timezone.utc),
+             self.observe(security_id)),
+        )
+
+    def run(self, as_of: date = AS_OF) -> int:
+        started = datetime.combine(as_of, time(23), tzinfo=timezone.utc)
+        return self.conn.execute(
+            """insert into scoring_run
+               (as_of_range, cutoff_offset, logic_version_id, weight_version_id, status,
+                emits_alerts, git_sha, config_hash, started_at, finished_at, outcome)
+               select daterange(%(as_of)s, %(next)s, '[)'), interval '30 hours', l.id, w.id,
+                      'live', false, 'abc1234', '\\x9f3a'::bytea, %(started)s, %(started)s, 'ok'
+                 from scoring_logic_version l, weight_version w
+                where l.description = %(logic)s and w.code = 'v2'
+               returning id""",
+            {"as_of": as_of, "next": as_of + timedelta(days=1), "started": started,
+             "logic": LOGIC_DESCRIPTION},
+        ).fetchone()[0]
+
+    def snapshot(
+        self, run_id: int, security_id: int, score: str, *,
+        min_coverage: str = "1", pillars: dict[str, str], as_of: date = AS_OF,
+    ) -> None:
+        self.conn.execute(
+            """insert into snapshot_daily
+               (as_of, scoring_run_id, security_id, blended_score, pillar_agreement,
+                min_coverage, worst_fallback_level)
+               values (%s, %s, %s, %s, 1, %s, 1)""",
+            (as_of, run_id, security_id, Decimal(score), Decimal(min_coverage)),
+        )
+        for code, pillar_score in pillars.items():
+            self.conn.execute(
+                """insert into pillar_score_daily
+                   (as_of, scoring_run_id, security_id, pillar_id, score, metric_count, coverage)
+                   select %s, %s, %s, p.id, %s, 1, 1 from pillar p where p.code = %s""",
+                (as_of, run_id, security_id, Decimal(pillar_score), code),
+            )
+
+
+@pytest.fixture
+def market(steven, an_observation) -> Market:
+    return Market(steven, an_observation)
+
+
+def test_a_scored_security_is_drawn_from_its_adjusted_closes_with_its_scores(market):
+    security = market.security("ABC")
+    market.bars(security, [str(100 + i) for i in range(70)])
+    run = market.run()
+    market.snapshot(
+        run, security, "71.2", min_coverage="0.5", pillars={"valuation": "44.5", "momentum": "80"}
+    )
+
+    said, drawn = draw("$abc", "latest")
+
+    (chart,) = drawn
+    assert chart.ticker == "ABC"
+    assert chart.title == "ABC — adjusted close, 60 trading days"
+    assert len(chart.series) == 60 and chart.series[-1] == Decimal("169.00")
+    assert chart.dates[-1] == AS_OF.isoformat()
+    assert chart.subtitle == "ABC Inc · score 71.2 on 2 Mar · V 44.5 Q — M 80.0 · partial"
+    assert chart.marks[0].label == "now 169.00"
+    assert "169.00" in said and "score 71.2" in said
+    assert "llustrative" not in said
+
+
+def test_before_any_scored_night_the_prices_are_still_drawn(market):
+    today = datetime.now(timezone.utc).date()
+    market.bars(market.security("ABC"), ["10", "11", "12"], last=today)
+
+    said, drawn = draw("ABC")
+
+    (chart,) = drawn
+    assert chart.series == (Decimal("10.00"), Decimal("11.00"), Decimal("12.00"))
+    assert "not yet scored" in chart.subtitle and "not yet scored" in said
+
+
+def test_a_security_the_night_did_not_score_says_so(market):
+    market.bars(market.security("ABC"), ["10", "11"])
+    market.run()
+
+    _, drawn = draw("ABC")
+
+    (chart,) = drawn
+    assert chart.subtitle == "ABC Inc · not scored on 2 Mar"
+
+
+def test_a_split_inside_the_window_leaves_the_line_continuous(market):
+    security = market.security("SPLT")
+    days = market.bars(security, ["100"] * 10 + ["50"] * 10)
+    market.split(security, days[10], "2")
+    market.run()
+
+    _, drawn = draw("SPLT")
+
+    (chart,) = drawn
+    assert set(chart.series) == {Decimal("50.00")}
+
+
+def test_a_security_that_left_the_universe_is_not_drawn(market):
+    market.bars(market.security("GONE", active=False), ["10", "11"])
+
+    assert draw("GONE") == ("GONE is no longer in the universe.", [])
+
+
+def test_an_unknown_symbol_is_not_drawn(market):
+    assert draw("ZZZZ") == ("ZZZZ is not a current symbol in the universe.", [])
+
+
+def test_a_reused_symbol_draws_the_security_trading_under_it_now(market):
+    market.bars(market.security("ABC", active=False, mic="XNYS", name="ABC Old"), ["999", "999"])
+    market.bars(market.security("ABC"), ["10", "11"])
+    market.run()
+
+    _, drawn = draw("ABC")
+
+    (chart,) = drawn
+    assert chart.series[-1] == Decimal("11.00")
+    assert chart.subtitle.startswith("ABC Inc")
+
+
+def test_a_chart_costs_at_most_three_reads(market, monkeypatch):
+    security = market.security("ABC")
+    market.bars(security, ["10", "11"])
+    market.snapshot(market.run(), security, "50", pillars={"momentum": "50"})
+    seen: list[str] = []
+    real = playground.select
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        seen.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(playground, "select", counted)
+
+    draw("ABC", "peak")
+
+    assert len(seen) == 3
+
+
+def test_without_a_role_the_chart_says_the_database_cannot_be_reached(monkeypatch):
+    monkeypatch.delenv("PLAYGROUND_DATABASE_URL", raising=False)
+
+    assert draw("ABC") == (UNAVAILABLE, [])
+
+
+def test_an_unreachable_database_says_the_same(monkeypatch):
+    monkeypatch.setenv("PLAYGROUND_DATABASE_URL", "postgresql://nobody:hunter2@127.0.0.1:1/none")
+
+    assert draw("ABC") == (UNAVAILABLE, [])
+
+
+def test_a_surface_that_cannot_draw_is_not_told_a_chart_is_shown(market):
+    market.bars(market.security("ABC"), ["10", "12"])
+    market.run()
+
     with collecting(False) as drawn:
-        result = dispatch("chart", {"ticker": "NVDA", "mark": "peak"})
+        said = dispatch("chart", {"ticker": "ABC", "mark": "peak"})
+
     assert drawn == []
-    assert "chart is shown" not in result
-    assert "Peak" in result
+    assert "chart is shown" not in said
+    assert "Peak 12.00" in said
 
 
-def test_charts_do_not_leak_between_questions():
-    # `collecting` is a ContextVar because each request runs on its own worker
-    # thread; two people asking at once must not be handed each other's charts.
-    with collecting() as first:
-        dispatch("chart", {"ticker": "NVDA"})
-    with collecting() as second:
-        dispatch("chart", {"ticker": "DOW"})
-    assert [c.ticker for c in first] == ["NVDA"]
-    assert [c.ticker for c in second] == ["DOW"]
+def test_charts_do_not_leak_between_questions(market):
+    market.bars(market.security("ABC"), ["10", "11"])
+    market.bars(market.security("XYZ"), ["20", "21"])
+    market.run()
+
+    _, first = draw("ABC")
+    _, second = draw("XYZ")
+
+    assert [c.ticker for c in first] == ["ABC"]
+    assert [c.ticker for c in second] == ["XYZ"]
 
 
-def test_the_payload_is_json_and_keeps_the_marks():
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "JPM", "mark": "low"})
-    body = json.loads(json.dumps(drawn[0].payload()))
-    assert len(body["series"]) == concept.SPAN
-    assert len(body["dates"]) == concept.SPAN
-    assert body["marks"][0]["kind"] == "point"
-    # Rounded for transport: a hundredth of a point is far under one pixel.
-    assert all(round(v, 2) == v for v in body["series"])
+# -- rasterising for Discord -------------------------------------------------
 
 
-# -- rasterising for Discord -----------------------------------------------
+def _chart(ticker: str = "ABC") -> Chart:
+    return Chart(
+        ticker=ticker, title=f"{ticker} — adjusted close, 2 trading days", subtitle="s",
+        series=(Decimal("10.00"), Decimal("11.00")), dates=("2026-02-27", "2026-03-02"),
+    )
 
 
 def test_a_chart_is_posted_to_the_renderer_as_its_own_payload():
@@ -208,56 +387,38 @@ def test_a_chart_is_posted_to_the_renderer_as_its_own_payload():
         sent.update(json.loads(request.content))
         return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n" + b"0" * 40)
 
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "NVDA", "mark": "surge"})
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        png = render.chart_png(drawn[0], client=client)
+        png = render.chart_png(_chart(), client=client)
 
     assert png is not None and png.startswith(b"\x89PNG")
-    assert sent["ticker"] == "NVDA"
-    assert len(sent["series"]) == concept.SPAN  # pyright: ignore[reportArgumentType]
-    assert sent["marks"]
+    assert sent == _chart().payload()
 
 
 def test_a_renderer_that_fails_costs_the_picture_not_the_answer():
-    # The reply is already composed by this point. Losing an image is a smaller
-    # loss than losing the words, so nothing here raises.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="nope")
 
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "AMD"})
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        assert render.chart_png(drawn[0], client=client) is None
+        assert render.chart_png(_chart(), client=client) is None
 
 
 def test_something_that_is_not_a_png_is_refused():
-    # A 200 carrying the login page would otherwise be attached to a Discord
-    # message as an image and fail there instead, further from the cause.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, html="<!doctype html><title>Sign in</title>")
 
-    with collecting() as drawn:
-        dispatch("chart", {"ticker": "AMD"})
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        assert render.chart_png(drawn[0], client=client) is None
+        assert render.chart_png(_chart(), client=client) is None
 
 
 def test_no_more_than_three_charts_are_attached_to_one_reply():
-    # A model that asked for a chart every round would otherwise turn one
-    # mention into a round trip and an upload per round.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n")
 
-    with collecting() as drawn:
-        for symbol in ("NVDA", "AMD", "MU", "JPM", "CAT"):
-            dispatch("chart", {"ticker": symbol})
-    assert len(drawn) == 5
-
+    charts = tuple(_chart(symbol) for symbol in ("NVDA", "AMD", "MU", "JPM", "CAT"))
     original = httpx.Client
     try:
         httpx.Client = lambda **kw: original(transport=httpx.MockTransport(handler))  # type: ignore[assignment]
-        drawn_files = render.chart_pngs(tuple(drawn))
+        drawn_files = render.chart_pngs(charts)
     finally:
         httpx.Client = original  # type: ignore[assignment]
 

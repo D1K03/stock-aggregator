@@ -106,9 +106,8 @@ export default function StevenPage() {
                   <Orb state="idle" size={54} />
                   <h1>Steven</h1>
                   <p>
-                    Ask about the screener, the deployment, or a ticker&rsquo;s history.
-                    He draws the chart and marks what you asked about. The figures
-                    are illustrative until ingest lands, and he says so.
+                    Ask about the screener, the deployment, or a ticker&rsquo;s price history. He
+                    draws the chart from stored, adjusted closes and marks what you asked about.
                   </p>
                   <div className="stv-skills">
                     {SKILLS.map((skill) => (

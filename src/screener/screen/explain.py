@@ -48,14 +48,17 @@ REFRESHED = "refreshed"
 UNCHECKED = "unchecked"
 
 PRICE = "price"
-FUNDAMENTALS = "fundamentals"
 
-# D13: momentum reads bars; every Valuation ratio divides by a market cap built
-# from a close as well as reading facts; Quality reads facts alone.
+# D13, amended (§13): only a price input can change under a run. Ingest rewrites
+# a bar inside the settling window in place, so the close the run read is gone;
+# `fundamental_fact` is append-only, so a fact observed after the run is outside
+# the view and reproduction still sees exactly what the run saw. Momentum reads
+# bars and every Valuation ratio divides by a market cap built from a close;
+# Quality reads facts alone and is always compared.
 DEPENDS: dict[str, frozenset[str]] = {
     "momentum": frozenset({PRICE}),
-    "valuation": frozenset({PRICE, FUNDAMENTALS}),
-    "quality": frozenset({FUNDAMENTALS}),
+    "valuation": frozenset({PRICE}),
+    "quality": frozenset(),
 }
 
 
@@ -162,10 +165,7 @@ def reproduce(
             "could not reproduce security %d on scoring run %d", security_id, run.id
         )
         return Reproduction(visible_through, None, frozenset())
-    prices, fundamentals = changed if changed is not None else (False, False)
-    refreshed = frozenset(
-        name for name, flag in ((PRICE, prices), (FUNDAMENTALS, fundamentals)) if flag
-    )
+    refreshed = frozenset({PRICE}) if changed is not None and changed[0] else frozenset()
     return Reproduction(visible_through, values, refreshed)
 
 

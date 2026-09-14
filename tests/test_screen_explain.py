@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from screener.scoring import Absent
-from screener.screen import Check, Reproduction, RunRow, check, view_offset
+from screener.screen import DEPENDS, PRICE, Check, Reproduction, RunRow, check, view_offset
 
 AS_OF = date(2026, 3, 2)
 RUN = RunRow(
@@ -59,20 +59,19 @@ def test_a_stored_metric_that_no_longer_applies_is_a_mismatch_that_says_so():
 
 
 @pytest.mark.parametrize(
-    "refreshed,pillar,status",
-    [
-        ("price", "momentum", "refreshed"),
-        ("price", "valuation", "refreshed"),
-        ("price", "quality", "ok"),
-        ("fundamentals", "momentum", "ok"),
-        ("fundamentals", "valuation", "refreshed"),
-        ("fundamentals", "quality", "refreshed"),
-    ],
+    "pillar,status",
+    [("momentum", "refreshed"), ("valuation", "refreshed"), ("quality", "ok")],
 )
-def test_refreshed_inputs_skip_only_the_metrics_that_read_them(refreshed, pillar, status):
-    reproduction = Reproduction(RUN.started_at, {"m": Decimal(1)}, frozenset({refreshed}))
+def test_refreshed_prices_skip_only_the_metrics_that_read_a_close(pillar, status):
+    reproduction = Reproduction(RUN.started_at, {"m": Decimal(1)}, frozenset({"price"}))
 
     assert check(pillar=pillar, code="m", stored=Decimal(1), reproduction=reproduction).status == status
+
+
+def test_only_a_price_input_can_be_refreshed():
+    # Facts are appended, never rewritten, so a fact observed after the run is
+    # outside its view rather than a change to what it saw (§13).
+    assert frozenset().union(*DEPENDS.values()) == {PRICE}
 
 
 def test_a_reproduction_that_could_not_run_leaves_every_metric_unchecked():

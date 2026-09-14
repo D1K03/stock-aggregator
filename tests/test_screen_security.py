@@ -199,14 +199,19 @@ def test_a_bar_restamped_since_the_run_marks_prices_refreshed(fresh_db, scored):
     assert _reproduce(fresh_db, scored["S03"], scored["run"]).refreshed == {"price"}
 
 
-def test_a_fact_restamped_since_the_run_marks_fundamentals_refreshed(fresh_db, scored):
-    fresh_db.execute(
-        """update fundamental_fact set observed_at = now() + interval '1 hour'
-            where id = (select min(id) from fundamental_fact where security_id = %s)""",
-        (scored["S03"],),
-    )
+def test_a_fact_appended_since_the_run_is_outside_the_view_rather_than_a_refresh(
+    fresh_db, scored, an_observation
+):
+    later = datetime.now(timezone.utc) + timedelta(hours=1)
+    with fresh_db.cursor() as cur:
+        written = insert_facts(
+            cur, scored["S03"], an_observation(scored["S03"]), later,
+            [Fact("net_income", QUARTERS[0], "Q", Decimal("999"), "USD")],
+            latest_values(cur, scored["S03"]), metric_ids(cur),
+        )
 
-    assert _reproduce(fresh_db, scored["S03"], scored["run"]).refreshed == {"fundamentals"}
+    assert written == 1
+    assert _reproduce(fresh_db, scored["S03"], scored["run"]).refreshed == frozenset()
 
 
 def test_a_failure_inside_reproduction_is_reported_rather_than_raised(fresh_db, scored, monkeypatch, caplog):
@@ -314,17 +319,19 @@ def test_a_bar_restamped_since_the_run_leaves_quality_compared(fresh_db, scored)
     assert shown["reproduction"]["refreshed_inputs"] == ["price"]
 
 
-def test_a_fact_restamped_since_the_run_leaves_momentum_compared(fresh_db, scored):
-    fresh_db.execute(
-        """update fundamental_fact set observed_at = now() + interval '1 hour'
-            where id = (select min(id) from fundamental_fact where security_id = %s)""",
-        (scored["S03"],),
-    )
+def test_a_fact_appended_since_the_run_leaves_every_metric_compared(fresh_db, scored, an_observation):
+    later = datetime.now(timezone.utc) + timedelta(hours=1)
+    with fresh_db.cursor() as cur:
+        insert_facts(
+            cur, scored["S03"], an_observation(scored["S03"]), later,
+            [Fact("net_income", QUARTERS[0], "Q", Decimal("999"), "USD")],
+            latest_values(cur, scored["S03"]), metric_ids(cur),
+        )
 
-    got = statuses(detail(fresh_db, "S03"))
+    shown = detail(fresh_db, "S03")
 
-    assert {got[code] for code in CODES} == {"ok"}
-    assert {status for code, status in got.items() if code not in CODES} == {"refreshed"}
+    assert set(statuses(shown).values()) == {"ok"}
+    assert shown["reproduction"]["refreshed_inputs"] == []
 
 
 def test_a_reproduction_that_raises_still_returns_the_stored_metrics(fresh_db, scored, monkeypatch):
@@ -386,6 +393,24 @@ def test_a_symbol_listed_on_two_exchanges_is_ambiguous(fresh_db, scored):
         detail(fresh_db, "S05")
 
     assert caught.value.exchanges == ("XNAS", "XNYS")
+
+
+def test_a_symbol_also_held_by_a_departed_security_resolves_to_the_active_one(fresh_db, scored):
+    departed = fresh_db.execute(
+        """insert into security
+           (name, mic, currency, country, primary_symbol, first_seen, is_active)
+           values ('S05 Departed', 'XNYS', 'USD', 'US', 'S05', '2020-01-01', false)
+           returning id"""
+    ).fetchone()[0]
+    fresh_db.execute(
+        """insert into security_symbol (security_id, symbol, mic, valid_from, source)
+           values (%s, 'S05', 'XNYS', '2020-01-01', 'test')""",
+        (departed,),
+    )
+
+    shown = detail(fresh_db, "S05")
+
+    assert (shown["scored"], shown["name"]) == (True, "S05 Inc")
 
 
 def test_a_pinned_run_that_does_not_exist_is_refused(fresh_db, scored):

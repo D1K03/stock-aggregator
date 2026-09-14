@@ -174,10 +174,13 @@ nothing outside imports a submodule directly.
   blocking the event loop stalls the gateway heartbeat rather than just one command.
   Tools live in `bot/tools`; a tool that draws rather than speaks registers its artifact with
   `collecting()` so a 60-point series never enters the model's context, and the point it marks
-  is computed from the data rather than chosen by the model. A chart is one SVG string built by
-  `web/lib/chart-svg.ts`: the browser shows it and `bot/render.py` posts it to `/api/render` in
-  the web container, which rasterises the same string to PNG for Discord. One renderer, so the
-  two surfaces cannot drift — do not add a second way to draw a chart.
+  is computed from the data rather than chosen by the model. The `chart` tool draws a security's
+  real adjusted closes, read as `playground_bot` through the `screener.screen` statements the
+  dashboard's endpoints use, captioned with the latest scored night's scores. A chart is one SVG
+  string built by `web/lib/chart-svg.ts`, in score or price mode: the browser shows it and
+  `bot/render.py` posts it to `/api/render` in the web container, which rasterises the same
+  string to PNG for Discord. One renderer, so the two surfaces cannot drift — do not add a second
+  way to draw a chart.
 - `screener.magpie` — the scraper, in a container of its own. Paste a link and the article is
   fetched over the cheapest route that works, read out of the page and kept. **The escalating
   ladder is not here**: `screener.fetch` already had `direct -> isp_proxy -> unlocker`, and nothing
@@ -286,11 +289,6 @@ nothing outside imports a submodule directly.
   (default $0.10). Checked before the model is called, folds Discord onto GitHub through
   `DISCORD_USER_MAP` so it cannot be doubled by switching surface, and **fails open** when the
   trail cannot be read — refusing everyone because Postgres blinked is the worse failure.
-- `screener.concept` — invented, schema-shaped sample data mirroring
-  `web/lib/data.ts`, so the dashboard and the chart tool draw the same line. A
-  test parses the TypeScript and fails when the two drift. Ingest and scoring
-  have landed, so this is now waiting to be deleted: the swap reads
-  `snapshot_daily` and is the only work left in it.
 - `screener.provenance` — `git_sha()` and `config_hash()`, the two `not null` columns on
   `scoring_run` that had no producer. `config_hash` takes the caller's *scoring* parameters; it
   is not derived from process configuration.
@@ -365,8 +363,8 @@ nothing outside imports a submodule directly.
   The three read-only roles already hold `select` on all four derived tables from 013, 017 and 018, so the console,
   Steven's `sql` tool and the claude.ai connector see real scores the night this first runs,
   with no migration and no code change.
-- `screener.screen` — the scored screen, read for the dashboard's two endpoints and, from piece
-  (c) of the UI swap, for Steven's chart. `queries` holds every statement as a literal; `rows`
+- `screener.screen` — the scored screen, read for the dashboard's two endpoints and, through
+  `playground.select`, for Steven's chart. `queries` holds every statement as a literal; `rows`
   parses a psycopg row or a `playground.Result` row into one typed record, because the
   playground's cells come back as JSON-safe strings; `params` refuses a wrong query-string value
   by name; `shape` builds JSON whose every figure is a decimal string, never a float. `read`
@@ -375,4 +373,7 @@ nothing outside imports a submodule directly.
   forms for one security under `least(cutoff, started_at)` — the run's actual view — and gives
   each metric one status: ok, mismatch, absent, unexpected, refreshed or unchecked. **Display
   closes ignore the cutoff**, because ingest re-stamps the last week of bars every night; a
-  reproduction never does. Spec `docs/specs/2026-09-13-ui-swap.md`.
+  reproduction never does. Spec `docs/specs/2026-09-13-ui-swap.md`. A symbol that several
+  securities hold resolves to the only active one, because `universe load` leaves a departed
+  security's symbol open; two active is ambiguous. Only prices can be `refreshed`: a fact is
+  appended, never rewritten.
