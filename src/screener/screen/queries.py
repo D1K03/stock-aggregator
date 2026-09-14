@@ -209,3 +209,54 @@ select exists (select 1 from price_daily
                 where security_id = %(id)s
                   and observed_at > %(started_at)s)
 """
+
+# D10: matched against current symbols, so a renamed ticker's old symbol is not a match.
+SYMBOL_MATCH: LiteralString = """
+select distinct on (s.id) s.id, sy.symbol, s.name, sy.mic, s.is_active
+  from security_symbol sy
+  join security s on s.id = sy.security_id
+ where upper(sy.symbol) = upper(%(symbol)s::text)
+   and sy.valid_to is null
+ order by s.id, sy.mic
+"""
+
+CLASSIFICATION: LiteralString = """
+select coalesce(sector.code, 'unclassified'),
+       coalesce(sector.name, 'Unclassified'),
+       case when industry.level = 2 then industry.code end,
+       case when industry.level = 2 then industry.name end
+  from security sec
+""" + SECTOR_AT_AS_OF + """
+ where sec.id = %(id)s
+"""
+
+SNAPSHOT: LiteralString = """
+select blended_score, pillar_agreement, min_coverage
+  from snapshot_daily
+ where scoring_run_id = %(run)s and as_of = %(as_of)s and security_id = %(id)s
+"""
+
+PILLARS: LiteralString = """
+select p.code, ps.score, ps.metric_count, ps.coverage
+  from pillar_score_daily ps
+  join pillar p on p.id = ps.pillar_id
+ where ps.scoring_run_id = %(run)s and ps.as_of = %(as_of)s and ps.security_id = %(id)s
+"""
+
+# A level-0 group has no sector node; it is the market.
+STORED_METRICS: LiteralString = """
+select m.code, md.raw_value, md.percentile, coalesce(node.name, 'Market'), md.peer_count,
+       md.fallback_level, md.period_basis, md.period_end
+  from metric_daily md
+  join metric m on m.id = md.metric_id
+  join peer_group pg on pg.id = md.peer_group_id
+  left join sector_node node on node.id = pg.sector_node_id
+ where md.scoring_run_id = %(run)s and md.as_of = %(as_of)s and md.security_id = %(id)s
+"""
+
+METRIC_INFO: LiteralString = """
+select m.code, m.name, m.higher_is_better, p.code
+  from metric m
+  join pillar p on p.id = m.pillar_id
+ where m.code = any(%(codes)s)
+"""

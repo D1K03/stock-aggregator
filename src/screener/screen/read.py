@@ -11,16 +11,31 @@ from typing import Any, LiteralString, TypeVar
 
 import psycopg
 
-from screener.scoring import LOGIC_DESCRIPTION
-from screener.screen import queries, shape
-from screener.screen.params import ScreenParams
+from screener.provenance import git_sha
+from screener.scoring import (
+    CODES,
+    LOGIC_DESCRIPTION,
+    MOMENTUM,
+    QUALITY,
+    VALUATION,
+    applicable,
+    resolve,
+)
+from screener.screen import explain, queries, shape
+from screener.screen.params import ScreenParams, SecurityParams
 from screener.screen.rows import (
     ActionRow,
     BarRow,
+    ClassificationRow,
+    MetricInfoRow,
+    MetricRow,
+    PillarRow,
     PreviousRunRow,
     RunRow,
     ScreenRow,
     SectorRow,
+    SnapshotRow,
+    SymbolRow,
     TilesRow,
     parse_all,
 )
@@ -40,6 +55,23 @@ class RunChanged(LookupError):
     def __init__(self, run_id: int) -> None:
         super().__init__(f"run {run_id} is not a scored v2 night")
         self.run_id = run_id
+
+
+class UnknownSymbol(LookupError):
+    """No current symbol matches (D10)."""
+
+    def __init__(self, symbol: str) -> None:
+        super().__init__(f"{symbol} is not a current symbol in the universe")
+        self.symbol = symbol
+
+
+class AmbiguousSymbol(LookupError):
+    """More than one security trades under this symbol today (D10)."""
+
+    def __init__(self, symbol: str, exchanges: tuple[str, ...]) -> None:
+        super().__init__(f"{symbol} is listed on {', '.join(exchanges)}")
+        self.symbol = symbol
+        self.exchanges = exchanges
 
 
 def _all(
@@ -147,4 +179,71 @@ def read_screen(conn: psycopg.Connection, params: ScreenParams) -> dict[str, Any
         closes_by_security=_closes(
             conn, [row.security_id for row in rows], run.as_of, SPARKLINE_CLOSES
         ),
+    )
+
+
+def read_security(conn: psycopg.Connection, params: SecurityParams) -> dict[str, Any]:
+    """`/api/screen/security`: one security on the served night, every metric re-checked (D10)."""
+    resolved = resolve_run(conn, params.run)
+    if resolved is None:
+        return shape.awaiting()
+    run, latest = resolved
+
+    matches = _all(conn, queries.SYMBOL_MATCH, {"symbol": params.symbol}, SymbolRow)
+    if not matches:
+        raise UnknownSymbol(params.symbol)
+    if len(matches) > 1:
+        raise AmbiguousSymbol(params.symbol, tuple(match.mic for match in matches))
+    match = matches[0]
+    security_id = match.security_id
+    bind = {"id": security_id, "run": run.id, "as_of": run.as_of}
+
+    where = _one(conn, queries.CLASSIFICATION, bind, ClassificationRow)
+    # Read from `security` itself, which the symbol match has just found.
+    assert where is not None
+    closes = _closes(conn, [security_id], run.as_of, CHART_CLOSES)[security_id]
+    snapshot = _one(conn, queries.SNAPSHOT, bind, SnapshotRow)
+    if snapshot is None:
+        return shape.unscored_payload(
+            run=run, latest=latest, match=match, where=where, closes=closes
+        )
+
+    metrics = _all(conn, queries.STORED_METRICS, bind, MetricRow)
+    pillars = _all(conn, queries.PILLARS, bind, PillarRow)
+    info = {
+        row.code: row
+        for row in _all(conn, queries.METRIC_INFO, {"codes": list(shape.ALL_CODES)}, MetricInfoRow)
+    }
+    # The industry as scoring resolves it, so `expected` is the denominator the
+    # run's coverage used -- unless the security was reclassified since (F15).
+    industry = resolve(conn, [security_id], as_of=run.as_of)[security_id].industry
+    applies = applicable(industry)
+    expected = {VALUATION: applies[VALUATION], QUALITY: applies[QUALITY], MOMENTUM: CODES}
+    stored = {row.code: row.raw_value for row in metrics}
+
+    # Last: a failure inside it is reported rather than raised, and leaves this
+    # connection's transaction unusable for any read after it.
+    reproduction = explain.reproduce(conn, security_id=security_id, run=run, industry=industry)
+    shown = shape.listed(expected, stored, {code: row.pillar_code for code, row in info.items()})
+    checks = {
+        code: explain.check(
+            pillar=pillar, code=code, stored=stored.get(code), reproduction=reproduction
+        )
+        for pillar, codes in shown.items()
+        for code in codes
+    }
+    return shape.security_payload(
+        run=run,
+        latest=latest,
+        match=match,
+        where=where,
+        snapshot=snapshot,
+        pillars=pillars,
+        metrics=metrics,
+        info=info,
+        expected=expected,
+        checks=checks,
+        reproduction=reproduction,
+        running_build=git_sha(),
+        closes=closes,
     )

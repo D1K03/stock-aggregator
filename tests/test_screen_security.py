@@ -12,8 +12,17 @@ from typing import Any
 import pytest
 
 from screener.ingest import Fact, insert_facts, latest_values, metric_ids
-from screener.scoring import Absent, resolve, run_scoring
-from screener.screen import Reproduction, reproduce, resolve_run
+from screener.scoring import CODES, Absent, resolve, run_scoring
+from screener.screen import (
+    AmbiguousSymbol,
+    Reproduction,
+    RunChanged,
+    UnknownSymbol,
+    read_security,
+    reproduce,
+    resolve_run,
+    security_params,
+)
 
 AS_OF = date(2026, 3, 2)
 SEEN = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -210,3 +219,179 @@ def test_a_failure_inside_reproduction_is_reported_rather_than_raised(fresh_db, 
 
     assert reproduction.values is None
     assert "could not reproduce security" in caplog.text
+
+
+# -- the detail endpoint (D10, D14) ------------------------------------------
+
+
+def detail(conn: Any, symbol: str, run: int | None = None) -> dict[str, Any]:
+    query = {"symbol": [symbol]} | ({} if run is None else {"run": [str(run)]})
+    return read_security(conn, security_params(query))
+
+
+def metrics(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {metric["code"]: metric for pillar in payload["pillars"] for metric in pillar["metrics"]}
+
+
+def statuses(payload: dict[str, Any]) -> dict[str, str]:
+    return {code: metric["status"] for code, metric in metrics(payload).items()}
+
+
+def test_a_standard_company_and_a_bank_expect_different_metrics(fresh_db, scored):
+    standard, bank = detail(fresh_db, "S05"), detail(fresh_db, "BANK")
+
+    assert [(p["key"], p["present"], p["expected"]) for p in standard["pillars"]] == [
+        ("V", 3, 3), ("Q", 4, 4), ("M", 4, 4),
+    ]
+    assert [(p["key"], p["present"], p["expected"]) for p in bank["pillars"]] == [
+        ("V", 2, 2), ("Q", 1, 1), ("M", 4, 4),
+    ]
+    assert set(metrics(bank)) == {"earnings_yield", "book_yield", "roe", *CODES}
+    assert standard["sector"] == {"code": "technology", "name": "Technology"}
+    assert standard["industry"] == {"code": "software", "name": "Software"}
+    assert metrics(standard)["debt_to_equity"]["higher_is_better"] is False
+    assert metrics(standard)["debt_to_equity"]["unit"] == "multiple"
+
+
+def test_every_metric_of_an_untouched_night_is_ok_or_absent(fresh_db, scored):
+    for symbol in ("S00", "S19", "BANK", "EURO"):
+        assert set(statuses(detail(fresh_db, symbol)).values()) <= {"ok", "absent"}, symbol
+    assert set(statuses(detail(fresh_db, "S00")).values()) == {"ok"}
+
+
+def test_an_ok_metric_carries_both_values_as_exact_strings(fresh_db, scored):
+    got = metrics(detail(fresh_db, "S07"))["ret_12m"]
+
+    assert got["status"] == "ok"
+    assert got["stored"]["raw"] == got["reproduced"] == "0.07"
+    assert got["stored"]["peer_group"] == "Technology"
+    assert got["stored"]["market_ranked"] is False
+
+
+def test_an_absent_metric_says_why(fresh_db, scored):
+    got = metrics(detail(fresh_db, "EURO"))["earnings_yield"]
+
+    assert (got["status"], got["stored"], got["reproduced"]) == ("absent", None, None)
+    assert "EUR" in got["reason"]
+
+
+def test_a_stored_value_altered_since_the_run_is_a_mismatch(fresh_db, scored):
+    fresh_db.execute(
+        """update metric_daily set raw_value = raw_value + 1
+            where security_id = %s
+              and metric_id = (select id from metric where code = 'ret_12m')""",
+        (scored["S07"],),
+    )
+
+    got = metrics(detail(fresh_db, "S07"))["ret_12m"]
+
+    assert (got["status"], got["stored"]["raw"], got["reproduced"]) == ("mismatch", "1.07", "0.07")
+
+
+def test_a_currency_corrected_since_the_run_makes_its_ratios_reproduce_unexpectedly(fresh_db, scored):
+    # F15: scoring reads today's currency, so facts the run dropped as foreign now count.
+    fresh_db.execute("update security set currency = 'EUR' where id = %s", (scored["EURO"],))
+
+    got = statuses(detail(fresh_db, "EURO"))
+
+    assert got["earnings_yield"] == got["roic"] == "unexpected"
+    assert got["ret_12m"] == "ok"
+
+
+def test_a_bar_restamped_since_the_run_leaves_quality_compared(fresh_db, scored):
+    fresh_db.execute(
+        """update price_daily set observed_at = now() + interval '1 hour'
+            where security_id = %s and trade_date = %s""",
+        (scored["S03"], AS_OF),
+    )
+
+    shown = detail(fresh_db, "S03")
+    got = statuses(shown)
+
+    assert {got[code] for code in CODES} == {"refreshed"}
+    assert {got[code] for code in ("earnings_yield", "ebitda_ev", "fcf_yield")} == {"refreshed"}
+    assert {got[code] for code in ("roic", "gross_margin", "debt_to_equity", "interest_cover")} == {"ok"}
+    assert shown["reproduction"]["refreshed_inputs"] == ["price"]
+
+
+def test_a_fact_restamped_since_the_run_leaves_momentum_compared(fresh_db, scored):
+    fresh_db.execute(
+        """update fundamental_fact set observed_at = now() + interval '1 hour'
+            where id = (select min(id) from fundamental_fact where security_id = %s)""",
+        (scored["S03"],),
+    )
+
+    got = statuses(detail(fresh_db, "S03"))
+
+    assert {got[code] for code in CODES} == {"ok"}
+    assert {status for code, status in got.items() if code not in CODES} == {"refreshed"}
+
+
+def test_a_reproduction_that_raises_still_returns_the_stored_metrics(fresh_db, scored, monkeypatch):
+    def unreadable(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("facts unreadable")
+
+    monkeypatch.setattr("screener.screen.explain.read_facts", unreadable)
+
+    shown = detail(fresh_db, "S05")
+
+    assert set(statuses(shown).values()) == {"unchecked"}
+    assert metrics(shown)["roic"]["stored"] is not None
+    assert shown["score"] is not None
+
+
+def test_the_run_and_its_builds_are_named(fresh_db, scored):
+    shown = detail(fresh_db, "S05")
+
+    assert (shown["scored"], shown["run_id"], shown["latest"]) == (True, scored["run"], True)
+    assert shown["reproduction"]["visible_through"] == "2026-03-03T06:00:00+00:00"
+    assert shown["reproduction"]["run_build"] == shown["reproduction"]["running_build"]
+    assert shown["closes"][-1] == [AS_OF.isoformat(), "105.00"]
+
+
+def test_a_security_with_nothing_scored_is_not_scored(fresh_db, scored):
+    assert detail(fresh_db, "NOBR") == {
+        "scored": False,
+        "run_id": scored["run"],
+        "latest": True,
+        "symbol": "NOBR",
+        "name": "NOBR Inc",
+        "sector": {"code": "technology", "name": "Technology"},
+        "active": True,
+        "closes": [],
+    }
+
+
+def test_a_symbol_is_matched_regardless_of_case_or_a_dollar_sign(fresh_db, scored):
+    assert detail(fresh_db, "$s05")["symbol"] == "S05"
+
+
+def test_an_unknown_symbol_is_refused(fresh_db, scored):
+    with pytest.raises(UnknownSymbol):
+        detail(fresh_db, "ZZZZ")
+
+
+def test_a_symbol_listed_on_two_exchanges_is_ambiguous(fresh_db, scored):
+    other = fresh_db.execute(
+        """insert into security (name, mic, currency, country, primary_symbol, first_seen)
+           values ('S05 Other', 'XNYS', 'USD', 'US', 'S05', '2020-01-01') returning id"""
+    ).fetchone()[0]
+    fresh_db.execute(
+        """insert into security_symbol (security_id, symbol, mic, valid_from, source)
+           values (%s, 'S05', 'XNYS', '2020-01-01', 'test')""",
+        (other,),
+    )
+
+    with pytest.raises(AmbiguousSymbol) as caught:
+        detail(fresh_db, "S05")
+
+    assert caught.value.exchanges == ("XNAS", "XNYS")
+
+
+def test_a_pinned_run_that_does_not_exist_is_refused(fresh_db, scored):
+    with pytest.raises(RunChanged):
+        detail(fresh_db, "S05", run=999_999)
+
+
+def test_the_detail_awaits_the_first_night_before_looking_for_the_symbol(fresh_db):
+    assert detail(fresh_db, "ANY") == {"state": "awaiting_first_night"}

@@ -6,18 +6,25 @@ that print identically (D5). Rounding happens here, once, half up, so the page
 formats units and never rounds again.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from screener.scoring import CODES, RATIO_CODES, Action, adjusted_closes
+from screener.screen.explain import Check, Reproduction
 from screener.screen.rows import (
     ActionRow,
     BarRow,
+    ClassificationRow,
+    MetricInfoRow,
+    MetricRow,
+    PillarRow,
     PreviousRunRow,
     RunRow,
     ScreenRow,
     SectorRow,
+    SnapshotRow,
+    SymbolRow,
     TilesRow,
 )
 
@@ -161,4 +168,123 @@ def screen_payload(
         "rows": [
             screen_row(row, closes_by_security.get(row.security_id, [])) for row in rows
         ],
+    }
+
+
+def listed(
+    expected: Mapping[str, Sequence[str]],
+    stored: Collection[str],
+    pillar_of: Mapping[str, str],
+) -> dict[str, list[str]]:
+    """Each pillar's metrics to show: every one that applies, plus any the run
+    stored that no longer does, so a reclassification cannot hide a stored value
+    (plan amendment P4)."""
+    return {
+        pillar: [
+            code
+            for code in ALL_CODES
+            if pillar_of[code] == pillar and (code in expected[pillar] or code in stored)
+        ]
+        for pillar in PILLAR_ORDER
+    }
+
+
+def unscored_payload(
+    *,
+    run: RunRow,
+    latest: bool,
+    match: SymbolRow,
+    where: ClassificationRow,
+    closes: list[list[str]],
+) -> dict[str, Any]:
+    return {
+        "scored": False,
+        "run_id": run.id,
+        "latest": latest,
+        "symbol": match.symbol,
+        "name": match.name,
+        "sector": sector(where.sector_code, where.sector_name),
+        "active": match.is_active,
+        "closes": closes,
+    }
+
+
+def _stored(row: MetricRow) -> dict[str, Any]:
+    return {
+        "raw": exact(row.raw_value),
+        "percentile": one_decimal(row.percentile),
+        "peer_group": row.peer_group,
+        "peer_count": row.peer_count,
+        "market_ranked": row.fallback_level == 0,
+        "period_basis": row.period_basis,
+        "period_end": None if row.period_end is None else row.period_end.isoformat(),
+    }
+
+
+def security_payload(
+    *,
+    run: RunRow,
+    latest: bool,
+    match: SymbolRow,
+    where: ClassificationRow,
+    snapshot: SnapshotRow,
+    pillars: Sequence[PillarRow],
+    metrics: Sequence[MetricRow],
+    info: Mapping[str, MetricInfoRow],
+    expected: Mapping[str, Sequence[str]],
+    checks: Mapping[str, Check],
+    reproduction: Reproduction,
+    running_build: str,
+    closes: list[list[str]],
+) -> dict[str, Any]:
+    stored = {row.code: row for row in metrics}
+    scores = {row.pillar_code: row for row in pillars}
+    shown = listed(expected, stored, {code: row.pillar_code for code, row in info.items()})
+    industry = (
+        None
+        if where.industry_code is None or where.industry_name is None
+        else {"code": where.industry_code, "name": where.industry_name}
+    )
+    return {
+        "scored": True,
+        "run_id": run.id,
+        "latest": latest,
+        "symbol": match.symbol,
+        "name": match.name,
+        "sector": sector(where.sector_code, where.sector_name),
+        "industry": industry,
+        "active": match.is_active,
+        "score": one_decimal(snapshot.score),
+        "agreement": snapshot.pillar_agreement,
+        "partial": partial(snapshot.min_coverage),
+        "pillars": [
+            {
+                "code": pillar,
+                "key": PILLAR_KEYS[pillar],
+                "score": one_decimal(scores[pillar].score) if pillar in scores else None,
+                "present": sum(1 for code in shown[pillar] if code in stored),
+                "expected": len(expected[pillar]),
+                "metrics": [
+                    {
+                        "code": code,
+                        "name": info[code].name,
+                        "unit": UNITS[code],
+                        "higher_is_better": info[code].higher_is_better,
+                        "status": checks[code].status,
+                        "stored": _stored(stored[code]) if code in stored else None,
+                        "reproduced": exact(checks[code].reproduced),
+                        "reason": checks[code].reason,
+                    }
+                    for code in shown[pillar]
+                ],
+            }
+            for pillar in PILLAR_ORDER
+        ],
+        "reproduction": {
+            "visible_through": reproduction.visible_through.isoformat(),
+            "run_build": run.git_sha,
+            "running_build": running_build,
+            "refreshed_inputs": sorted(reproduction.refreshed),
+        },
+        "closes": closes,
     }
