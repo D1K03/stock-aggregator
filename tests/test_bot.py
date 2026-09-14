@@ -449,6 +449,14 @@ def test_the_system_prompt_forbids_advice_and_invented_numbers():
     assert "never invent a number" in prompt
 
 
+def test_the_prompt_neither_calls_chart_figures_illustrative_nor_offers_a_crossing():
+    # The chart draws real adjusted closes now, and a crossing needs score
+    # history and alerting, which do not exist (ui-swap spec D17).
+    prompt = agent.SYSTEM_PROMPT.lower()
+    assert "illustrative" not in prompt
+    assert "crossing" not in prompt
+
+
 def test_the_prompt_stays_small_enough_to_send_on_every_message():
     # Steven is mentioned casually, so the fixed overhead is paid constantly.
     # This is a budget, not a style rule: if the prompt grows past it, that is
@@ -461,7 +469,7 @@ def test_the_prompt_stays_small_enough_to_send_on_every_message():
     #
     # Raised again from 1800 when the `sql` tool landed. Roughly 400 characters,
     # and what it buys is the only tool here that returns a real figure from real
-    # data: `chart` draws invented concept numbers and `status` reports process
+    # data: `chart` drew invented concept numbers until the UI swap and `status` reports process
     # facts. Left as tight as the last two.
     #
     # Raised again, from 2200, when skybird control landed: three tools —
