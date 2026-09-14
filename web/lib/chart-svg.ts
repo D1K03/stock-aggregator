@@ -42,7 +42,11 @@ const TITLE_BASELINE = 21;
 const PLOT_X = PAD;
 const PLOT_Y = 28;
 export const W = 340, H = 168;
-const m = { t: 22, r: 38, b: 30, l: 26 };
+type Margin = { t: number; r: number; b: number; l: number };
+const SCORE_MARGIN: Margin = { t: 22, r: 38, b: 30, l: 26 };
+/* Wider on both sides in price mode: a tick such as "272.50" or a last close
+   such as "1269" is twice the width of a score's "75". */
+const PRICE_MARGIN: Margin = { t: 22, r: 44, b: 30, l: 38 };
 
 const TITLE_SIZE = 12.5;
 const FOOT_SIZE = 10;
@@ -64,6 +68,33 @@ export function shortDate(iso: string): string {
   // beside the chart says "Sep", and one date spelled two ways reads as two.
   const month = d.toLocaleDateString("en-GB", { month: "short" }).slice(0, 3);
   return `${d.getDate()} ${month}`;
+}
+
+/** D5: a close has two decimals below 1,000 and none at or above. */
+export function priceLabel(v: number): string {
+  return Math.abs(v) >= 1000 ? v.toFixed(0) : v.toFixed(2);
+}
+
+/* Price mode's y-domain: the data's own range with 5% padding on each side, so a
+   stock moving between 270 and 280 fills the plot instead of lying flat inside a
+   score's 20–85. A flat series gets a band of 2% of its level so it still has
+   a height. */
+export function priceDomain(series: number[]): [number, number] {
+  const lo = Math.min(...series);
+  const hi = Math.max(...series);
+  const span = hi - lo || Math.abs(hi) * 0.02 || 1;
+  return [lo - span * 0.05, hi + span * 0.05];
+}
+
+/* Three rounded ticks. The step is the largest of 1, 2 or 5 times a power of
+   ten that fits three times into the domain, which is what guarantees all three
+   land inside it. */
+export function priceTicks([lo, hi]: [number, number]): number[] {
+  const rough = (hi - lo) / 3;
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const step = [5, 2, 1].map((k) => k * power).find((s) => s <= rough) ?? power;
+  const first = Math.ceil(lo / step) * step;
+  return [first, first + step, first + 2 * step];
 }
 
 /* Wrapped on an estimate rather than measured, because measurement needs a
@@ -102,22 +133,28 @@ export type Scales = {
   y: (v: number) => number;
   plotX: number;
   plotY: number;
+  m: Margin;
 };
 
 /** Plot-local coordinates. Shared with the hover overlay so it lands on the line. */
 export function scales(spec: ChartSpec): Scales {
   const s = spec.series;
-  const lo = Math.min(20, ...s) - 4;
-  const hi = Math.max(85, ...s) + 4;
+  const price = spec.kind === "price";
+  const m = price ? PRICE_MARGIN : SCORE_MARGIN;
+  const [lo, hi] = price
+    ? priceDomain(s)
+    : [Math.min(20, ...s) - 4, Math.max(85, ...s) + 4];
   return {
     x: (i) => m.l + (i / (s.length - 1)) * (W - m.l - m.r),
     y: (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b),
     plotX: PLOT_X,
     plotY: PLOT_Y,
+    m,
   };
 }
 
 function annotation(mark: Mark, spec: ChartSpec, sc: Scales): string {
+  const m = sc.m;
   const colour = TONE[mark.tone];
   const isSpan = mark.kind === "span" && mark.end !== null;
   const from = mark.index;
@@ -152,19 +189,36 @@ function annotation(mark: Mark, spec: ChartSpec, sc: Scales): string {
 export function chartSvg(spec: ChartSpec): string {
   const s = spec.series;
   const sc = scales(spec);
+  const m = sc.m;
+  const price = spec.kind === "price";
   const height = cardHeight(spec);
   const path = s
     .map((v, i) => `${i ? "L" : "M"}${sc.x(i).toFixed(1)},${sc.y(v).toFixed(1)}`)
     .join("");
   const last = s[s.length - 1];
 
-  const grid = [25, 50, 75]
+  const ticks = price ? priceTicks(priceDomain(s)) : [25, 50, 75];
+  const grid = ticks
     .map(
       (v) =>
         `<line x1="${m.l}" x2="${W - m.r}" y1="${sc.y(v)}" y2="${sc.y(v)}" stroke="${PAPER}" stroke-width="1"/>` +
-        `<text x="${m.l - 5}" y="${sc.y(v) + 3}" text-anchor="end" font-size="8" fill="${INK_MUTED}">${v}</text>`
+        `<text x="${m.l - 5}" y="${sc.y(v) + 3}" text-anchor="end" font-size="8" fill="${INK_MUTED}">${price ? priceLabel(v) : v}</text>`
     )
     .join("");
+
+  // A threshold and a median mean something for a score and nothing for a price (D16).
+  const threshold =
+    !price && spec.threshold !== undefined
+      ? `<line x1="${m.l}" x2="${W - m.r}" y1="${sc.y(spec.threshold)}" y2="${sc.y(spec.threshold)}" stroke="${AMBER_4}" stroke-width="1.2"/>`
+      : "";
+  const median =
+    !price && spec.median !== undefined
+      ? `<line x1="${m.l}" x2="${W - m.r}" y1="${sc.y(spec.median)}" y2="${sc.y(spec.median)}" stroke="${BLUE}" stroke-width="1.6" stroke-linecap="round" opacity="0.8"/>`
+      : "";
+  const medianLabel =
+    !price && spec.median !== undefined
+      ? `<text x="${W - m.r + 5}" y="${sc.y(spec.median) + 3}" font-size="9" fill="${BLUE}">${spec.median.toFixed(0)}</text>`
+      : "";
 
   // Bands sit under the line so the shading never dims the data.
   const bands = spec.marks
@@ -188,14 +242,14 @@ export function chartSvg(spec: ChartSpec): string {
     `<text x="${PAD}" y="${TITLE_BASELINE}" font-size="${TITLE_SIZE}" font-weight="600" fill="${INK}">${esc(spec.title)}</text>` +
     `<g transform="translate(${PLOT_X} ${PLOT_Y})">` +
     grid +
-    `<line x1="${m.l}" x2="${W - m.r}" y1="${sc.y(spec.threshold)}" y2="${sc.y(spec.threshold)}" stroke="${AMBER_4}" stroke-width="1.2"/>` +
-    `<line x1="${m.l}" x2="${W - m.r}" y1="${sc.y(spec.median)}" y2="${sc.y(spec.median)}" stroke="${BLUE}" stroke-width="1.6" stroke-linecap="round" opacity="0.8"/>` +
+    threshold +
+    median +
     bands +
     // pathLength normalises the dash animation the stylesheet applies, so it
     // does not have to know how long the line happens to be.
     `<path class="cc-line" d="${path}" pathLength="1" fill="none" stroke="${COPPER}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>` +
-    `<text x="${W - m.r + 5}" y="${sc.y(last) + 3}" font-size="9" font-weight="600" fill="${COPPER}">${last.toFixed(0)}</text>` +
-    `<text x="${W - m.r + 5}" y="${sc.y(spec.median) + 3}" font-size="9" fill="${BLUE}">${spec.median.toFixed(0)}</text>` +
+    `<text x="${W - m.r + 5}" y="${sc.y(last) + 3}" font-size="9" font-weight="600" fill="${COPPER}">${price ? priceLabel(last) : last.toFixed(0)}</text>` +
+    medianLabel +
     spec.marks.map((k) => annotation(k, spec, sc)).join("") +
     `<text x="${m.l}" y="${H - 6}" font-size="8" fill="${INK_MUTED}">${esc(shortDate(spec.dates[0]))}</text>` +
     `<text x="${W - m.r}" y="${H - 6}" text-anchor="end" font-size="8" fill="${INK_MUTED}">${esc(shortDate(spec.dates[spec.dates.length - 1]))}</text>` +

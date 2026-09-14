@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import {
-  CARD, CARD_W, INK, INK_MUTED, cardHeight, chartSvg, footLines, scales, shortDate,
+  CARD, CARD_W, H, INK, INK_MUTED, cardHeight, chartSvg, footLines, priceLabel, scales, shortDate,
 } from "@/lib/chart-svg";
 import type { ChartSpec } from "@/lib/threads";
 
@@ -46,8 +46,13 @@ export default function ChatChart({ spec }: { spec: ChartSpec }) {
   const readout =
     hover === null
       ? null
-      : `${shortDate(spec.dates[hover])} · score ${s[hover].toFixed(1)} · median ${spec.median.toFixed(0)}` +
-        (s[hover] >= spec.threshold ? " · above the alert threshold" : "");
+      : spec.kind === "price"
+        ? `close ${priceLabel(s[hover])} on ${shortDate(spec.dates[hover])}`
+        : `${shortDate(spec.dates[hover])} · score ${s[hover].toFixed(1)}` +
+          (spec.median !== undefined ? ` · median ${spec.median.toFixed(0)}` : "") +
+          (spec.threshold !== undefined && s[hover] >= spec.threshold
+            ? " · above the alert threshold"
+            : "");
 
   return (
     <figure
@@ -69,7 +74,7 @@ export default function ChatChart({ spec }: { spec: ChartSpec }) {
           aria-hidden="true"
         >
           <g transform={`translate(${sc.plotX} ${sc.plotY})`}>
-            <line x1={sc.x(hover)} x2={sc.x(hover)} y1={22} y2={138}
+            <line x1={sc.x(hover)} x2={sc.x(hover)} y1={sc.m.t} y2={H - sc.m.b}
                   stroke={INK_MUTED} strokeWidth={1} opacity={0.3} />
             <circle cx={sc.x(hover)} cy={sc.y(s[hover])} r={3} fill={INK}
                     stroke={CARD} strokeWidth={1.5} />

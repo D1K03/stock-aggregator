@@ -22,13 +22,18 @@ export type Mark = {
   tone: "copper" | "blue" | "amber";
 };
 export type ChartSpec = {
+  /* Absent on every chart saved before price mode existed, and those were all
+     scores, so absence means "score" (ui-swap spec D16). */
+  kind?: "score" | "price";
   ticker: string;
   title: string;
   subtitle: string;
   series: number[];
   dates: string[];
-  median: number;
-  threshold: number;
+  /** Score mode only. */
+  median?: number;
+  /** Score mode only. */
+  threshold?: number;
   marks: Mark[];
 };
 
@@ -104,9 +109,8 @@ export function whenever(ts: number): string {
 }
 
 /* Suggestions, not commands. Each is a question Steven can genuinely answer
-   today: one uses a tool, the rest are things he knows about himself or the
-   design. Nothing here asks for a number, because there is no ingest and the
-   answer would have to be invented. */
+   today: one draws a real chart, the rest are things he knows about himself or
+   the design. */
 export const SKILLS: { label: string; prompt: string }[] = [
   { label: "Deployment status", prompt: "Is the deployment healthy?" },
   { label: "What can you do?", prompt: "What can you do and what do you have access to?" },
