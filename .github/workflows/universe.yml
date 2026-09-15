@@ -47,13 +47,13 @@ jobs:
           fi
 
       - name: Join the tailnet
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@v4
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
           tags: tag:ci
 
       - name: Load the universe
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           FORCE: ${{ inputs.force }}
