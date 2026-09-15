@@ -219,6 +219,46 @@ def _reddit() -> Check:
 
 
 
+# Two sentences that point in one direction each, with nothing subtle about
+# them. What they check is not that FinBERT is clever — it is that the column
+# order survived the export, the image and the client.
+UNAMBIGUOUSLY_GOOD = "Revenue beat expectations and margins expanded."
+UNAMBIGUOUSLY_BAD = "The company slashed its full-year guidance after a weak quarter."
+
+
+def _sentiment() -> Check:
+    """Whether FinBERT answers, and whether it answers the right way round.
+
+    Polarity rather than reachability, for the reason the reddit check reads
+    freshness rather than reachability: the failure worth catching here is not a
+    container that is down, which is loud, but one whose three output columns
+    are read in the wrong order — which is silent, produces confident numbers of
+    exactly the right shape, and would score every bullish headline as bearish.
+    `labels.json` is what makes that mapping explicit; this is what proves the
+    deployed image agrees with it end to end.
+    """
+    from screener.sentiment import score, scorer_url
+
+    readings = score([UNAMBIGUOUSLY_GOOD, UNAMBIGUOUSLY_BAD])
+    if readings is None:
+        return Check("sentiment", FAIL, f"no reading from {scorer_url()}")
+    good, bad = readings
+    if good is None or bad is None:
+        return Check("sentiment", FAIL, "the service dropped a text from the batch")
+    if good.score <= bad.score:
+        return Check(
+            "sentiment",
+            FAIL,
+            f"a beat scored {good.score:+.2f} and a guidance cut {bad.score:+.2f} — "
+            "the output columns are being read in the wrong order",
+        )
+    return Check(
+        "sentiment",
+        OK,
+        f"a beat {good.score:+.2f} ({good.label}), a guidance cut {bad.score:+.2f} ({bad.label})",
+    )
+
+
 def _playground() -> Check:
     """Whether the read-only role is reachable, and that it is not privileged.
 
@@ -348,6 +388,7 @@ def run() -> bool:
         _safe("discord", _discord),
         _safe("discord bot", _bot),
         _safe("reddit", _reddit),
+        _safe("sentiment", _sentiment),
         _safe("playground", _playground),
         _safe("mcp", _connector),
     ]

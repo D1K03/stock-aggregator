@@ -68,6 +68,13 @@ jobs:
             image: stock-aggregator-transcribe
             context: .
             file: deploy/Dockerfile.transcribe
+          # Finance-tuned sentiment. Root context for the package, own
+          # Dockerfile because it is the only two-stage build here: a builder
+          # installs torch to convert FinBERT to ONNX and is then thrown away.
+          - name: sentiment
+            image: stock-aggregator-sentiment
+            context: .
+            file: deploy/Dockerfile.sentiment
           # Live stream capture. Root context again for the package, own
           # Dockerfile because it apt-installs ffmpeg, which nothing else wants.
           # The scraper. Its own image for trafilatura and lxml, and because it
@@ -217,14 +224,14 @@ jobs:
                 # notice it crash-looping on a token that never reached
                 # Infisical. Give it a moment to fail, then insist it is up.
                 sleep 15
-                for svc in bot transcribe reddit skybird nightly; do
+                for svc in bot transcribe sentiment reddit skybird nightly; do
                   if ! $COMPOSE ps --status running --services | grep -qx "$svc"; then
                     echo "::error::the $svc container is not running"
                     $COMPOSE logs --tail=60 "$svc"
                     exit 1
                   fi
                 done
-                echo "bot, transcribe, reddit and skybird containers are running"
+                echo "bot, transcribe, sentiment, reddit and skybird containers are running"
                 # Running is not quite enough for the transcriber: its weights
                 # load before the socket opens, so an answer here is the proof
                 # that they are in the image and were read.
@@ -234,6 +241,17 @@ jobs:
                   exit 1
                 fi
                 echo "transcriber has its weights"
+                # And the same for FinBERT, with one addition: `/health` reports
+                # the output column order the image was built with, and reading
+                # them in the wrong order is the one failure here that produces
+                # confident numbers instead of an error. So the deploy insists
+                # on the order rather than on a 200.
+                if ! $COMPOSE exec -T sentiment python -c "import json,urllib.request,sys; body=json.load(urllib.request.urlopen('http://localhost:8083/health')); sys.exit(0 if body.get('labels')==['positive','negative','neutral'] else 1)"; then
+                  echo "::error::the sentiment service is up but not reporting FinBERT's column order"
+                  $COMPOSE logs --tail=60 sentiment
+                  exit 1
+                fi
+                echo "sentiment has its weights and knows its columns"
                 # Skybird has no port, so `running` is nearly all there is to
                 # check — except that its loop retries a database it cannot
                 # reach rather than exiting, which would leave it up and useless.
@@ -249,5 +267,5 @@ jobs:
               sleep 3
             done
             echo "never became ready; recent logs follow"
-            $COMPOSE logs --tail=60 api app web transcribe reddit
+            $COMPOSE logs --tail=60 api app web transcribe sentiment reddit
             exit 1

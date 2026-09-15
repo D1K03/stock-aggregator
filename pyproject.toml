@@ -85,6 +85,33 @@ stream = [
 scrape = [
     "trafilatura>=2.2,<3",
 ]
+# Finance-tuned sentiment, for the sentiment container only. FinBERT under
+# onnxruntime, which brings numpy, protobuf and flatbuffers, plus the tokenizer
+# it was trained with.
+#
+# **Lighter than `voice`, and not by accident.** `faster-whisper` already
+# installs `tokenizers` and `onnxruntime` in the transcriber image -- the VAD it
+# runs is an ONNX model -- so this is that image's dependency set minus
+# ctranslate2 and PyAV. The argument for a separate image is therefore not the
+# libraries; it is the 440 MB of weights, which belong to one service and would
+# otherwise be pulled by every container on every deploy.
+#
+# Not `transformers`, which is the obvious way to run a BERT and would bring
+# torch with it for a forward pass we have already exported. The checkpoint is
+# converted to ONNX once at build time by `deploy/finbert_export.py`, in a
+# builder stage that is thrown away.
+#
+# `tokenizers` rather than a WordPiece of our own. It is short enough to write
+# and subtle enough to get quietly wrong -- accents, control characters, the CJK
+# spacing rule -- and a tokenizer that disagrees with the one FinBERT was
+# trained with does not fail, it returns a slightly wrong number.
+#
+# Upper bounds for discord.py's reason: both sit on a Python API surface rather
+# than on a stable request and response shape.
+sentiment = [
+    "onnxruntime>=1.20,<2",
+    "tokenizers>=0.21,<1",
+]
 
 dev = [
     # The one extra that tests install, unlike `voice` and `stream`, whose

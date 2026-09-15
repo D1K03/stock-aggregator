@@ -35,6 +35,7 @@ NO_DATABASE = {
     "app": "caddy, and it proxies bytes",
     "web": "holds no credentials and never opens a database connection",
     "transcribe": "audio in, text out; it calls nothing outside its own process",
+    "sentiment": "text in, three probabilities out; it holds weights and nothing else",
     "postgres": "is the database",
 }
 

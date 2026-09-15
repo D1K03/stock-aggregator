@@ -250,6 +250,145 @@ is what tells a transcription error from a typo when reading it back.
 
 ---
 
+## Sentiment
+
+`screener.sentiment` — **FinBERT** (`ProsusAI/finbert`, 110M parameters)
+exported to ONNX and run under `onnxruntime` on CPU, in a container of its own,
+reached over the compose network the way the transcriber is.
+
+```python
+from screener.sentiment import score
+
+readings = score(["Revenue beat expectations and margins expanded."])
+# (Sentiment(positive=0.94, negative=0.02, neutral=0.04),)  -- or None
+```
+
+**What it is for.** The Sentiment pillar is one of the five the scoring model
+is built around, and it is the only one with no input: Valuation and Quality
+read stored line items, Momentum reads bars, and Sentiment reads text that
+nothing in this system could turn into a number. This is the thing that turns
+it into a number. `DESIGN.md`'s standing rule — *an LLM never emits a score* —
+only holds if there is a classifier to hold it up, and this is that classifier.
+`screener.ai` does narrative extraction and answers questions; it does not do
+this, and this does not do that.
+
+**What it does not do, and this is the part to read before building on it.** It
+scores text. It does not know where the text came from, does not open a database
+connection, does not connect anything to a security, and does not feed a pillar.
+Two corpora are already ingested and waiting — `social_item` from
+`screener.reddit` and `magpie.document` from `screener.magpie`, both readable
+through the playground — and **joining them to this is unbuilt on purpose**.
+`PLAN.md` holds that work and the four decisions it needs; the short version is
+that deciding which security a comment is about is a harder problem than reading
+its tone, and a new input moves a pillar for every ticker on the night it lands.
+
+| | |
+|---|---|
+| Cost | CPU only. No key, no per-call price, and no text leaves the box. |
+| Model | `ProsusAI/finbert`, pinned to revision `4556d130`, fp32 ONNX baked into the image |
+| Cap | 64 texts a call, 4,000 characters each, enforced by the client before a request is made |
+| Switch | none. There is nothing to configure, so `boot selftest` reports OK or FAIL and never SKIP |
+
+**Three probabilities come back, not one number.** `Sentiment.score` is
+`positive - negative` and is derived in the client, so a stored reading always
+carries the inputs behind it. "Confidently neutral" and "torn between positive
+and negative" both score near zero and are not the same reading — only the
+distribution tells them apart, which is the same argument that keeps raw metrics
+beside their percentiles in the scoring layer.
+
+**The output columns are the thing that can go silently wrong.** FinBERT's
+`id2label` is `['positive', 'negative', 'neutral']` — not alphabetical, and not
+the order anyone guesses. Read in the wrong order every bullish headline scores
+bearish, confidently, with nothing to notice. So the order is written beside the
+weights as `labels.json` at export time, the service refuses to start if it
+cannot read it, `/health` reports it, the deploy smoke test asserts it, and the
+self-test scores a beat and a guidance cut and insists they land on opposite
+sides. Five checks for one fact, because it is the only failure here that
+produces a plausible number instead of an error.
+
+**The conversion happens once, at image build time, in a stage that is thrown
+away.** `deploy/finbert_export.py` installs torch to convert the checkpoint and
+then runs the exported graph beside the original over a corpus with the shapes
+this system really sees — a one-line headline, a padded batch, a comment past
+the 512-token window, cashtags and accents — and fails the build if they
+disagree by more than 2e-4. Measured on the box: **2.68e-06**. That check is
+only possible where torch is installed, and the service it produces can never
+run it.
+
+**Measured on the VPS, which is the number that matters.** The box is a 4-vCPU
+QEMU guest with **AVX but no AVX2 and no AVX512**, which is well below the
+"modern desktop CPU" DESIGN.md estimated 20–50 texts/sec on:
+
+| | 2 threads | 4 threads |
+|---|---|---|
+| Short headlines | ~11/s (17–23/s for a full 64-text call through client→HTTP→model) | ~15/s |
+| Long comments (~500 tokens) | ~0.9/s | ~1.3/s |
+| Model load | 2.1s | 7.8s |
+| Peak resident | 1,097 MB | |
+| Graph on disk | 438 MB | |
+
+Doubling the threads buys 1.4x, not 2x, which is why the container is capped at
+two cores on a box shared with four other stacks rather than given all four.
+
+**int8 was measured and rejected, and the numbers are not close.** Dynamic
+quantization is the obvious way to shrink a 438 MB graph to 110 MB, and on this
+CPU it is worse on both axes at once:
+
+| | fp32 | int8 |
+|---|---|---|
+| Deviation from the checkpoint | 2.7e-06 | **0.373** |
+| Headlines, 2 threads | 10.7/s | 9.8/s |
+| Headlines, 4 threads | 15.2/s | 6.5/s |
+
+A 0.37 shift in a probability is enough to move a text from positive to neutral,
+so it is not a rounding cost — it is a different classifier. And it buys nothing
+back: int8 matmul kernels want AVX2-VNNI, this box has neither, so the fast path
+that pays for the accuracy simply is not there and the extra dequantization work
+makes it *slower* the more threads it gets. **Do not** re-try quantization here
+without first checking `/proc/cpuinfo` for `avx2`.
+
+**The caps come out of that table.** 64 texts a call, not 256: at 0.9/s a batch
+of 256 long comments is nearly five minutes, so every caller would time out
+while the service kept scoring a batch nobody was waiting for. Sixty-four is
+~70s of the slowest legal input and under 4s of the fastest. And the container
+gets 2 GB, not the 1 GB first written: a batch containing a 512-token text peaks
+at 1,097 MB, because onnxruntime's arena allocator grows past the 438 MB graph
+and does not give it back.
+
+**That is the constraint to design the Sentiment pillar around**, and it is
+tighter than the plan assumed. `screener.reddit` stores ~132,000
+r/wallstreetbets comments a week; scoring every one of them at these rates is
+hours of CPU a night on a box shared with four other compose projects. Whatever
+consumes this will have to sample, or score posts and top comments only, rather
+than read the whole corpus.
+
+**Requests are scored in length order.** A batch pads to its longest member, so
+one 512-token comment among thirty one-line headlines makes every row in that
+chunk cost 512 tokens of arithmetic. Sorting first is free and measured 1.8x on
+a mixed corpus (0.5/s to 0.9/s).
+
+**FinBERT reads financial news, not retail slang, and that shows.** Measured on
+the box: "Revenue beat expectations and margins expanded" scores +0.94,
+"The company slashed its full-year guidance after a weak quarter" scores -0.96,
+and Moody's cutting an outlook scores -0.93 — all correct and confident. But
+`$NVDA ripping again nobody can stop this` comes back **neutral at -0.22**. It
+was fine-tuned on the Financial PhraseBank, which is analyst and newswire
+language, and r/wallstreetbets is not that. Whatever consumes this should expect
+the subreddit it was built for to be the corpus it reads worst.
+
+**Do not** reach for an LLM when this is inconvenient. DESIGN.md's rule is that
+a model never emits a number — they are inconsistent at numeric scoring and cost
+money for something a free classifier does better — and this is the classifier
+that rule assumes exists.
+
+**Do not** wire it into a pillar without a weight-version bump. A new input into
+an existing pillar moves that pillar for every ticker on the night it lands, and
+the diff step reads a universe-wide shift as a universe-wide set of crossings.
+DESIGN.md's procedure is bump the version, backfill with alerting disabled, then
+resume.
+
+---
+
 ## Social ingest
 
 `screener.reddit` — posts and comments from **Arctic Shift**, a public Reddit

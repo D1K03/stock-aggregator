@@ -16,9 +16,10 @@ The database schema, the infrastructure layer and daily ingest — **price and f
 built and tested; scoring is built for Momentum, Valuation and Quality and writes snapshots with
 alerting switched off. The pipeline now runs on its own, once a night, rather than by hand. No
 alerting code exists yet. Runtime dependencies are `psycopg`, `httpx` and `discord.py`, and
-nothing else — check `pyproject.toml` before assuming a library is available. `faster-whisper`
-and `yt-dlp` are extras (`voice`, `stream`) that one image each installs, and both are imported
-inside a function so the rest of the tree stays importable without them.
+nothing else — check `pyproject.toml` before assuming a library is available. `faster-whisper`,
+`yt-dlp`, `trafilatura` and FinBERT's `onnxruntime` are extras (`voice`, `stream`, `scrape`,
+`sentiment`) that one image each installs, and each is imported inside a function so the rest of
+the tree stays importable without them.
 
 ## What it does
 
@@ -64,8 +65,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
 - Python. Data: Yahoo Finance **called directly, never yfinance** — a payload stored from the
   library is its DataFrame reshaping rather than the response, which breaks the content-hash
   restatement detector. Then Finnhub, Alpha Vantage, FINRA, SEC EDGAR, Reddit API.
-- Sentiment: VADER for a cheap baseline, FinBERT (ONNX via `onnxruntime`) for the real score.
-  CPU only — no GPU, no CUDA. Never use an LLM to emit a sentiment number.
+- Sentiment: FinBERT (ONNX via `onnxruntime`) is built — `screener.sentiment`, its own
+  container. CPU only, no GPU, no CUDA. Never use an LLM to emit a sentiment number. VADER was
+  the planned cheap baseline and has not been needed: the classifier itself is free to run.
+  **Nothing scores anything with it yet** — the Sentiment pillar is a separate piece of work.
 - LLMs do narrative extraction (transcript summaries, guidance changes, risk-section flags) and
   answer questions in the Discord server, via OpenRouter. Never a sentiment number and never a
   score. The bot's system prompt forbids investment advice and forbids inventing a figure the
@@ -129,6 +132,8 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   (migration 020) is what stops it holding the date; one it cannot — a kill, an OOM — leaves
   `outcome = 'running'`, and the next run's `reconcile` settles it, the way skybird settles a
   capture left by a dead supervisor.
+- Serve sentiment: `python -m screener.sentiment` (the container's command) — FinBERT on
+  `/score`, weights loaded before the socket opens. No arguments, no credentials, no database.
 - Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
   UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
   given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
@@ -196,6 +201,8 @@ nothing outside imports a submodule directly.
   `DAILY_SPEND_CAP_USD` — a scrape is forty times a reply, and one counter for both would let
   scraping silence Steven. `content_hash` is over the extracted headline and body, never the HTML,
   for the reason `screener.reddit` hashes per item.
+  Like `screener.reddit`, it stops at keeping the text: nothing here connects a document to a
+  security or scores it, and `screener.sentiment` is the scorer `magpie.document` is waiting for.
   Opening a document reads its stored page **back out of the blob store** for the sites it points
   at, which is the first thing here to read a payload rather than only write one, and it opens no
   socket. The links come from trafilatura's extracted body, not the raw HTML: every anchor on a
@@ -243,7 +250,8 @@ nothing outside imports a submodule directly.
   robots.txt disallows every agent, and an OAuth client needs manual approval; the mirror also
   has the date-range search that Reddit's thousand-item listing cap does not, without which a
   week of r/wallstreetbets is unreachable. Ingest only: nothing here connects an item to a
-  security or scores it. `content_hash` is taken per item rather than per response, which is the
+  security or scores it — `screener.sentiment` is the scorer it is waiting for, and the join
+  between them is unbuilt. `content_hash` is taken per item rather than per response, which is the
   remedy `DESIGN.md` proposes for Yahoo applied where it works — a comment body almost never
   changes, so a re-fetch writes nothing.
   The mirror's **422 is its query timing out, not a rate limit** — it reproduces from an address
@@ -256,6 +264,28 @@ nothing outside imports a submodule directly.
   held every one. Gaps drain *after* the catch-up span, never before, because a repair has no
   upper bound and fresh comments should not wait behind one. `python -m screener.reddit backfill
   [days]` queues a stretch and exits; the running container drains it.
+- `screener.sentiment` — FinBERT, in a container of its own, split the way `transcribe` is: the
+  client half is `httpx` and nothing else, the server half holds `onnxruntime` and is the only
+  thing that installs the `sentiment` extra. A separate image is earned here by the **weights**
+  rather than the libraries — those are a subset of the transcriber's — because 438 MB of BERT
+  would otherwise be pulled by every container on every deploy. The checkpoint is converted to
+  ONNX once in a builder stage that is thrown away, and that stage **runs the exported graph
+  beside the original and fails the build if they disagree**, which is the only place torch and
+  the checkpoint are both present to ask. Three probabilities come back, never one number:
+  `score` is `positive - negative`, derived in the client, so a reading always carries its
+  inputs. **The column order is the one thing not assumed anywhere** — FinBERT's `id2label` is
+  `positive, negative, neutral`, which is neither alphabetical nor guessable, and reading it
+  wrong scores every beat as a miss with nothing to notice; it is written beside the weights as
+  `labels.json`, the service refuses to start without it, and the deploy and the self-test both
+  assert it. Measured on the box, which has AVX but no AVX2: ~11 short headlines/s and ~0.9 long
+  comments/s on two threads. **That is the number the Sentiment pillar has to be designed
+  around** — it does not reach a week of r/wallstreetbets, so whatever consumes this samples.
+  **Nothing consumes it yet**, deliberately: a new input moves a pillar for every ticker on the
+  night it lands, so it goes in behind a weight-version bump, not beside one. The two corpora it
+  is *for* are already stored and already readable through the playground — `social_item` from
+  `screener.reddit` and `magpie.document` from `screener.magpie` — and joining either to this is
+  the next piece of work. The hard part is not the tone, it is deciding which security a text is
+  about; `PLAN.md` holds that and the three other decisions it needs.
 - `screener.transcribe` — speech to text, in a container of its own. The client half is
   `httpx` and nothing else and is what the bot and the status service import; the server half
   holds faster-whisper and is the only thing that installs the `voice` extra, so the three

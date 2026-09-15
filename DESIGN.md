@@ -261,17 +261,52 @@ for good.
 
 ## Sentiment scoring
 
-- **VADER** — dictionary lookup, not a model. Thousands of texts/sec on any CPU. Cheap baseline
-  tone.
-- **FinBERT** (`ProsusAI/finbert`, ~110M params) — finance-tuned BERT-base, ~500 MB RAM loaded,
-  roughly 20–50 short texts/sec batched on a modern desktop CPU. ~10,000 headlines a day is a
-  few minutes of CPU.
-- **Export FinBERT to ONNX** and run under `onnxruntime` — typically 2–3x faster on CPU than
-  PyTorch, no accuracy loss, easier to package.
+- **FinBERT** (`ProsusAI/finbert`, 110M params) — finance-tuned BERT-base. Built, as
+  `screener.sentiment`, in a container of its own.
+- **Exported to ONNX** and run under `onnxruntime`, which is also what makes it packageable: the
+  conversion needs torch, the service does not, and a two-stage build is what keeps them apart.
+  No accuracy cost — the exported graph agrees with the checkpoint to 2.7e-06.
+- **fp32, not int8.** Quantizing is the obvious way to shrink a 438 MB graph to 110 MB and it
+  was measured on the box rather than assumed: it moved a probability by up to **0.373**, which
+  is enough to reclassify a text, *and* ran slower — 6.5 headlines/sec against fp32's 15.2 on
+  four threads. int8 matmul wants AVX2-VNNI and this CPU has neither, so the fast path that
+  would pay for the accuracy is absent and the dequantization is pure cost.
 - **No GPU.** The dev machine has an AMD RX 9060 XT; CUDA is unavailable and ROCm is more faff
   than the speedup justifies at this volume.
 - **Never use an LLM to output a sentiment number.** LLMs are inconsistent at numeric scoring and
   cost money for something a free classifier does better.
+
+**The throughput estimate above was wrong, and the correction changes the design of the
+pillar rather than the choice of model.** "20–50 short texts/sec on a modern desktop CPU" was
+never measured on the machine this runs on. The VPS is a 4-vCPU QEMU guest with **AVX but no
+AVX2 and no AVX512**, and BERT inference is exactly the arithmetic those instructions exist
+for. Measured there on two threads: **~11 short headlines/sec and ~0.9 long comments/sec.**
+Five to fifty times slower than assumed, and it holds for any BERT on this box — a smaller
+model would trade accuracy for it rather than fix it.
+
+So "10,000 headlines a day is a few minutes of CPU" becomes fifteen minutes, which is still
+fine, while `screener.reddit`'s measured 132,000 r/wallstreetbets comments a week is hours a
+night and is not. **The Sentiment pillar therefore cannot read the whole corpus.** Sampling,
+or scoring posts and top comments only, is a design decision that has to be made before the
+pillar is wired rather than discovered when a night overruns. Weighting Sentiment low was
+already the plan for accuracy reasons; it is now also what the hardware affords.
+
+**The corpora are already ingested; what is missing is the join.** Two bodies of text are
+stored and readable today and neither is connected to a security: `social_item`, which
+`screener.reddit` fills from the Reddit mirror, and `magpie.document`, which `screener.magpie`
+fills from any page someone pastes. Those two plus this classifier are the whole Sentiment
+pillar, and the piece between them — deciding which security a text is about — is harder than
+either end. A comment mentions zero, one or many tickers; an article about the index mentions
+forty; and a naive symbol match reads `$ALL`, `$IT` and `$ON` out of ordinary English. It is
+tracked in `PLAN.md` as its own change rather than folded into the scorer, because a source
+entering a pillar has to follow the onboarding procedure above, and the night it lands is the
+one most likely to mute the channel for good.
+
+**VADER is not built and has not been needed.** It was in here as a cheap baseline for when
+FinBERT was too expensive to run on everything — but the expense is per text either way, and
+a dictionary lookup that disagrees with the classifier gives two numbers and no way to choose
+between them. If volume forces a cheaper first pass, the honest form is sampling what FinBERT
+reads, not blending in a second scale.
 
 ## LLM usage
 
