@@ -324,6 +324,11 @@ a headline and a long comment differ by more than ten times per text and barely
 at all per word. Every point below is a timed run against the deployed service,
 32 texts of a fixed length, measured end to end through client, HTTP and model.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/sentiment-measured-dark.svg">
+  <img alt="Measured wall time for six runs of 32 texts: 320 words in 2.5s, 800 in 4.6s, 1,600 in 8.9s, 3,200 in 18.7s, 6,400 in 39.5s, 12,160 in 83.3s" src="img/sentiment-measured-light.svg">
+</picture>
+
 | words in | texts | wall time | texts/sec | words/sec |
 |---|---|---|---|---|
 | 320 | 32 x 10 words | 2.55s | 12.5 | 125 |
@@ -338,6 +343,11 @@ by one number. The short end is lower only because per-text overhead stops being
 negligible once a text is ten words long. 380 words is the practical ceiling per
 text: that is what fits in FinBERT's 512 word pieces, and anything longer is
 truncated rather than split.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/sentiment-corpus-dark.svg">
+  <img alt="Time to score a corpus at 170 words per second: 1,000 words in 6 seconds, 10,000 in 59 seconds, 100,000 in 10 minutes, 1 million in 1.6 hours, 8 million in 13.1 hours" src="img/sentiment-corpus-light.svg">
+</picture>
 
 | corpus | roughly | time |
 |---|---|---|
