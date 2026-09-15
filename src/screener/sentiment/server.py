@@ -59,15 +59,29 @@ DEFAULT_THREADS = 2
 # else. Splitting and averaging would invent a number for the rest of it.
 MAX_TOKENS = 512
 
-# How many texts go through the graph at once, inside one request.
+# The most rows that go through the graph at once, inside one request.
 #
-# Separate from MAX_TEXTS, which is how many a caller may send. Requests are
-# run in length order in chunks of this, because a batch pads to its longest
-# member: one 512-token comment in a chunk of one-line headlines makes every
-# other row in that chunk cost 512 tokens of arithmetic to produce the same
-# answer. Sorting first is free and keeps the padding local to texts that
-# actually are that long.
+# Separate from MAX_TEXTS, which is how many a caller may send. Requests are run
+# in length order, because a batch pads to its longest member: one 512-token
+# comment in a chunk of one-line headlines makes every other row in that chunk
+# cost 512 tokens of arithmetic to produce the same answer. Sorting first is
+# free and keeps the padding local to texts that actually are that long.
 INFERENCE_BATCH = 32
+
+# And the bound that actually matters, because rows are the wrong unit.
+#
+# **This is a fix for an OOM kill in production, not a tuning knob.** Attention
+# is quadratic in sequence length, so a chunk costs roughly rows times tokens
+# squared: 32 one-line headlines is nothing and 32 texts at the 512-token cap
+# reached 2,091 MB and was killed by the cgroup. Both are the same 32 rows,
+# which is why counting rows cannot bound the memory.
+#
+# The length sort above is what makes a token budget work cleanly: rows in a
+# chunk are already near-uniform, so dividing the budget by the longest of them
+# gives a chunk that is full of short texts or a few long ones, and never 32
+# rows of 512 tokens. 4,096 is eight rows at the cap, measured to sit inside the
+# container's 2 GB with room for the 438 MB graph.
+MAX_BATCH_TOKENS = 4096
 
 # One batch at a time, deliberately. This saturates its whole CPU quota for as
 # long as the batch is, and a second concurrent request would not finish sooner
@@ -115,6 +129,38 @@ def read_labels(directory: Path) -> tuple[str, ...]:
     return tuple(labels)
 
 
+def plan_chunks(lengths: Sequence[int]) -> list[list[int]]:
+    """Row indices grouped into chunks that fit both bounds, shortest first.
+
+    Pure, and at module scope rather than inside `load_model`, because this is
+    the arithmetic that decides whether the container survives a request: a
+    chunk of 32 rows at the 512-token cap reached 2,091 MB and was killed by the
+    cgroup. Keeping it out here is what lets a CI with no model check it.
+
+    Sorted by length first, so the longest row in a chunk is the one being
+    added: the width the chunk will pad to is known before it is added, and the
+    budget is checked against that width rather than an average a single long
+    row would blow past.
+    """
+    order = sorted(range(len(lengths)), key=lambda index: lengths[index])
+    chunks: list[list[int]] = []
+    current: list[int] = []
+    width = 0
+    for index in order:
+        widest = max(width, lengths[index])
+        if current and (
+            len(current) >= INFERENCE_BATCH
+            or (len(current) + 1) * widest > MAX_BATCH_TOKENS
+        ):
+            chunks.append(current)
+            current, widest = [], lengths[index]
+        current.append(index)
+        width = widest
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def load_model() -> tuple[Scorer, tuple[str, ...]]:
     """FinBERT as a function from texts to readings, and its column order.
 
@@ -143,9 +189,11 @@ def load_model() -> tuple[Scorer, tuple[str, ...]]:
     # container, so it costs this image nothing the other does not pay.
     tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
     tokenizer.enable_truncation(max_length=MAX_TOKENS)
-    tokenizer.enable_padding(
-        pad_id=tokenizer.token_to_id("[PAD]"), pad_token="[PAD]"
-    )
+    # Padding is done below rather than by the tokenizer, so the whole request
+    # is tokenized once and each chunk is padded to its own longest row. Asking
+    # the tokenizer to pad would pad every row to the longest in the *request*,
+    # which is the waste the length sort exists to avoid.
+    pad_id = tokenizer.token_to_id("[PAD]")
 
     options = ort.SessionOptions()
     options.intra_op_num_threads = threads
@@ -162,14 +210,23 @@ def load_model() -> tuple[Scorer, tuple[str, ...]]:
         "model ready in %.1fs, columns %s", time.perf_counter() - started, labels
     )
 
-    def infer(batch: list[str]) -> Any:
-        encodings = tokenizer.encode_batch(batch)
+    def infer(encodings: list[Any]) -> Any:
+        """One chunk of already-tokenized rows, padded to its own longest."""
+        width = max(len(encoding.ids) for encoding in encodings)
+        shape = (len(encodings), width)
+        input_ids = np.full(shape, pad_id, dtype=np.int64)
+        attention_mask = np.zeros(shape, dtype=np.int64)
+        token_type_ids = np.zeros(shape, dtype=np.int64)
+        for row, encoding in enumerate(encodings):
+            length = len(encoding.ids)
+            input_ids[row, :length] = encoding.ids
+            attention_mask[row, :length] = encoding.attention_mask
+            token_type_ids[row, :length] = encoding.type_ids
+
         feed = {
-            "input_ids": np.array([e.ids for e in encodings], dtype=np.int64),
-            "attention_mask": np.array(
-                [e.attention_mask for e in encodings], dtype=np.int64
-            ),
-            "token_type_ids": np.array([e.type_ids for e in encodings], dtype=np.int64),
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
         }
         logits = session.run(
             ["logits"], {name: value for name, value in feed.items() if name in wanted}
@@ -182,21 +239,19 @@ def load_model() -> tuple[Scorer, tuple[str, ...]]:
     column = {label: index for index, label in enumerate(labels)}
 
     def run(texts: Sequence[str]) -> list[Sentiment]:
-        # Length order, so padding is spent on the rows that are actually long.
-        # Character length is a free proxy for token length and only has to be
-        # roughly right: getting the order wrong costs a little arithmetic and
-        # never an answer, because positions are restored by index below.
-        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        # Tokenized once for the whole request: the counts decide both the order
+        # and the chunking, and re-encoding per chunk would tokenize every text
+        # twice to learn something already known.
+        encoded = tokenizer.encode_batch(list(texts))
         out: list[Sentiment | None] = [None] * len(texts)
-        for start in range(0, len(order), INFERENCE_BATCH):
-            chunk = order[start : start + INFERENCE_BATCH]
-            for position, row in zip(chunk, infer([texts[i] for i in chunk])):
+        for chunk in plan_chunks([len(encoding.ids) for encoding in encoded]):
+            for position, row in zip(chunk, infer([encoded[i] for i in chunk])):
                 out[position] = Sentiment(
                     positive=float(row[column["positive"]]),
                     negative=float(row[column["negative"]]),
                     neutral=float(row[column["neutral"]]),
                 )
-        # Every position was filled: `order` is a permutation of the indices.
+        # Every position was filled: the chunks partition the indices.
         return [reading for reading in out if reading is not None]
 
     return run, labels

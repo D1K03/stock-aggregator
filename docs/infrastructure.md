@@ -286,7 +286,7 @@ its tone, and a new input moves a pillar for every ticker on the night it lands.
 |---|---|
 | Cost | CPU only. No key, no per-call price, and no text leaves the box. |
 | Model | `ProsusAI/finbert`, pinned to revision `4556d130`, fp32 ONNX baked into the image |
-| Cap | 64 texts a call, 4,000 characters each, enforced by the client before a request is made |
+| Cap | 32 texts a call, 4,000 characters each, enforced by the client before a request is made |
 | Switch | none. There is nothing to configure, so `boot selftest` reports OK or FAIL and never SKIP |
 
 **Three probabilities come back, not one number.** `Sentiment.score` is
@@ -319,16 +319,43 @@ run it.
 QEMU guest with **AVX but no AVX2 and no AVX512**, which is well below the
 "modern desktop CPU" DESIGN.md estimated 20–50 texts/sec on:
 
-| | 2 threads | 4 threads |
-|---|---|---|
-| Short headlines | ~11/s (17–23/s for a full 64-text call through client→HTTP→model) | ~15/s |
-| Long comments (~500 tokens) | ~0.9/s | ~1.3/s |
-| Model load | 2.1s | 7.8s |
-| Peak resident | 1,097 MB | |
-| Graph on disk | 438 MB | |
+**Throughput tracks words, not texts**, which is the only figure worth quoting:
+a headline and a long comment differ by more than ten times per text and barely
+at all per word. Every point below is a timed run against the deployed service,
+32 texts of a fixed length, measured end to end through client, HTTP and model.
 
-Doubling the threads buys 1.4x, not 2x, which is why the container is capped at
-two cores on a box shared with four other stacks rather than given all four.
+| words in | texts | wall time | texts/sec | words/sec |
+|---|---|---|---|---|
+| 320 | 32 x 10 words | 2.55s | 12.5 | 125 |
+| 800 | 32 x 25 words | 4.58s | 7.0 | 175 |
+| 1,600 | 32 x 50 words | 8.90s | 3.6 | 180 |
+| 3,200 | 32 x 100 words | 18.74s | 1.7 | 171 |
+| 6,400 | 32 x 200 words | 39.49s | 0.8 | 162 |
+| 12,160 | 32 x 380 words | 83.30s | 0.4 | 146 |
+
+So **roughly 150 to 180 words a second**, and flat enough that any corpus divides
+by one number. The short end is lower only because per-text overhead stops being
+negligible once a text is ten words long. 380 words is the practical ceiling per
+text: that is what fits in FinBERT's 512 word pieces, and anything longer is
+truncated rather than split.
+
+| corpus | roughly | time |
+|---|---|---|
+| 1,000 words | one news article | 6 sec |
+| 10,000 words | a morning of headlines | 59 sec |
+| 100,000 words | ~1,700 Reddit comments | 10 min |
+| 1 million words | a day of r/wallstreetbets | 1.6 hours |
+| 8 million words | a week of r/wallstreetbets | 13.1 hours |
+
+**The last row is the one that constrains the design.** `screener.reddit` stores
+roughly 132,000 r/wallstreetbets comments a week, and scoring all of them is over
+half a day of CPU on a box shared with five other stacks. Whatever consumes this
+samples, or reads posts and top comments only.
+
+Model load is 2.1s, the graph is 438 MB on disk, and a worst-case request peaks
+at 1,236 MB resident against the container's 2 GB. Four threads instead of two
+buys 1.4x, not 2x, which is why the container is capped at two cores rather than
+given all four.
 
 **int8 was measured and rejected, and the numbers are not close.** Dynamic
 quantization is the obvious way to shrink a 438 MB graph to 110 MB, and on this
@@ -362,10 +389,24 @@ hours of CPU a night on a box shared with four other compose projects. Whatever
 consumes this will have to sample, or score posts and top comments only, rather
 than read the whole corpus.
 
-**Requests are scored in length order.** A batch pads to its longest member, so
-one 512-token comment among thirty one-line headlines makes every row in that
-chunk cost 512 tokens of arithmetic. Sorting first is free and measured 1.8x on
-a mixed corpus (0.5/s to 0.9/s).
+**Requests are scored in length order, in chunks bounded by tokens rather than
+rows.** A batch pads to its longest member, so one 512-token comment among
+thirty one-line headlines makes every row in that chunk cost 512 tokens of
+arithmetic. Sorting first is free and measured 1.8x on a mixed corpus.
+
+**The token budget is a fix for an OOM kill, not a tuning knob.** The first
+version chunked by row count, 32 at a time whatever their length, and attention
+is quadratic in sequence length: 32 headlines is nothing, 32 texts at the
+512-token cap reached 2,091 MB and the cgroup killed the container. Both are the
+same 32 rows, which is why counting rows cannot bound the memory. `plan_chunks`
+now divides a budget of 4,096 tokens by the longest row in each chunk, giving
+eight rows at the cap or thirty-two short ones, and the same request peaks at
+1,236 MB. It is a pure function at module scope so a CI with no model can check
+it, and the tests assert no chunk can exceed either bound for any mix.
+
+The caps in `client.py` come from the same measurement: 32 texts a call, not the
+64 a mixed-length benchmark suggested, because uniformly at the cap that is ~83s
+against a 180s timeout and 64 would have been ~150s.
 
 **FinBERT reads financial news, not retail slang, and that shows.** Measured on
 the box: "Revenue beat expectations and margins expanded" scores +0.94,
