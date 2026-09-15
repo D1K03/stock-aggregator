@@ -232,6 +232,61 @@ services:
           cpus: "2.0"
           memory: 1g
 
+  # Finance-tuned sentiment: text in, three probabilities out.
+  #
+  # The `transcribe` arrangement rather than the `bot` one, and for the same
+  # reason: a separate dependency set earns a separate image. What earns it here
+  # is less the libraries than the weights — 440 MB of BERT that belong to one
+  # service, and that every other container would pull on every deploy if this
+  # shared the api image.
+  #
+  # No env_file and no Infisical trio. It holds no credentials, opens no
+  # database connection and calls nothing outside this network. The only thing
+  # it could be told is where its weights are, and those are in the image.
+  #
+  # No route in the Caddyfile either. `/score` matches the catch-all, which goes
+  # to the dashboard, so nothing on the internet resolves here — the same
+  # arrangement that keeps /transcribe and /api/render private.
+  sentiment:
+    image: ghcr.io/d1k03/stock-aggregator-sentiment:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "8083"
+
+    healthcheck:
+      # The weights load and the column order is read before the socket opens,
+      # so a container answering here is one that has both. start_period covers
+      # that load.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen("http://localhost:8083/health")
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+    # The third service to earn a limit, on the same argument the transcriber
+    # made: everything else in this stack is idle until asked a question, and
+    # this saturates its quota for as long as the batch is, on a box shared with
+    # four other compose projects. Two cores is also what SENTIMENT_THREADS is
+    # set to in the image, and the two have to agree — onnxruntime otherwise
+    # spawns one thread per core it can see and spends its time being
+    # descheduled inside the quota.
+    #
+    # Two gigabytes, and the first draft of this said one. Measured on the box:
+    # a batch containing a 512-token text peaks at 1,097 MB resident — the graph
+    # is 438 MB on disk and onnxruntime's arena allocator grows well past it and
+    # does not give it back. A gigabyte would have been an OOM kill on the first
+    # long Reddit comment, which `restart: unless-stopped` would have turned
+    # into a loop rather than a message.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+
   # Social ingest: posts and comments for the Sentiment pillar, backfilled once
   # and then kept up every few hours.
   #

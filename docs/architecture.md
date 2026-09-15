@@ -14,7 +14,7 @@ draws it so the tables and packages below have somewhere to land.
 
 ## What runs, and what talks to what
 
-Nine containers in one compose project, sharing a VPS with four other stacks.
+Twelve containers in one compose project, sharing a VPS with four other stacks.
 Four facts do most of the work in this picture:
 
 - **Nothing publishes a host port in production.** Caddy reaches the services
@@ -25,10 +25,13 @@ Four facts do most of the work in this picture:
 - **`api`, `bot` and `reddit` are the same image** with different commands. One
   dependency set, one build; the cost is that the api image carries `discord.py`
   without importing it.
-- **`transcribe` and `skybird` are not**, and that is the rule the pair above is
-  the exception to. A separate image is what a separate dependency set earns:
-  ctranslate2, onnxruntime and PyAV for one, ffmpeg and yt-dlp for the other,
-  and neither the status service nor the bot has any use for either.
+- **`transcribe`, `sentiment` and `skybird` are not**, and that is the rule the
+  pair above is the exception to. A separate image is what a separate dependency
+  set earns: ctranslate2, onnxruntime and PyAV for the first, ffmpeg and yt-dlp
+  for the last, and neither the status service nor the bot has any use for
+  either. `sentiment` is the odd one — its libraries are a subset of the
+  transcriber's, and what earns it an image of its own is 438 MB of weights that
+  every container would otherwise pull on every deploy.
 
 ```mermaid
 flowchart LR
@@ -43,8 +46,10 @@ flowchart LR
         web["web<br/>ghcr.io/d1k03/stock-aggregator-web<br/>node server.js"]
         bot["bot<br/>same image as api<br/>python -m screener.bot"]
         tr["transcribe<br/>ghcr.io/d1k03/stock-aggregator-transcribe<br/>faster-whisper, expose 8081"]
+        snt["sentiment<br/>ghcr.io/d1k03/stock-aggregator-sentiment<br/>FinBERT as ONNX, expose 8083"]
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
         rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
+        mag["magpie<br/>ghcr.io/d1k03/stock-aggregator-magpie<br/>trafilatura, expose 8082"]
         night["nightly<br/>same image as api<br/>python -m screener.nightly"]
         pg[("postgres:16<br/>named volume pg_data")]
     end
@@ -56,6 +61,7 @@ flowchart LR
     drest["Discord REST v10"]
     streams["YouTube / Twitch"]
     arctic["Arctic Shift"]
+    sites["Any page someone pastes"]
 
     internet --> edge
     claude -->|"MCP over HTTPS, bearer token"| edge
@@ -68,8 +74,13 @@ flowchart LR
     api -->|"POST /transcribe"| tr
     bot -->|"POST /transcribe"| tr
     sky -->|"POST /transcribe"| tr
+    api -->|"POST /score, selftest only so far"| snt
     sky -->|"audio only, via yt-dlp"| streams
     rdt -->|"posts + comments"| arctic
+    api -->|"POST /document"| mag
+    bot -->|"POST /document"| mag
+    mag -->|"direct → isp_proxy → unlocker"| sites
+    mag --> pg
     api --> pg
     bot --> pg
     sky --> pg
@@ -106,6 +117,13 @@ it holds no credentials, and it never opens a database connection. `bot` has no
 port, no Caddy route and no healthcheck — discord.py reconnects with its own
 backoff, and a check that cannot tell "reconnecting" from "wedged" would restart
 a bot that was about to recover.
+
+**`sentiment` has exactly one inbound edge, and it is a self-test.** The service
+is built and deployed; nothing in the pipeline scores anything with it yet.
+`screener.reddit` stores posts and comments and deliberately does not score
+them, and wiring the Sentiment pillar is the separate piece of work `PLAN.md`
+describes — a new input into a pillar moves every ticker on the night it lands,
+so it goes in behind a weight-version bump rather than beside one.
 
 **`skybird` has no port either, and no edge pointing at it.** It is the only
 service nothing calls: it reads what to do from Postgres, pulls audio, posts it
@@ -245,6 +263,7 @@ flowchart TD
     ingest["ingest<br/>prices + sweep"]
     scoring["scoring<br/>eight pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
+    sentiment["sentiment<br/>client only; server is one lazy import away from a BERT"]
     nightly["nightly<br/>config + schedule + night + __main__"]
 
     boot --> settings
@@ -259,6 +278,7 @@ flowchart TD
     selftest --> botcfg
     selftest --> checks
     selftest --> prov
+    selftest -.->|"lazy, inside the check"| sentiment
 
     health --> settings
     health --> audit

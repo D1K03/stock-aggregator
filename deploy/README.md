@@ -1,10 +1,11 @@
 # Deployment
 
 The screener runs as a second, isolated compose stack on the VPS that already
-hosts Job Terminal. Eight containers now — Caddy, the status service, the
-dashboard, the gateway bot, the transcriber, live stream capture, Postgres, and
-a `cloudflared` tunnel that reaches Caddy over the compose network. None of them
-publishes a host port.
+hosts Job Terminal. Twelve containers — Caddy, the status service, the
+dashboard, the gateway bot, the transcriber, the sentiment classifier, the
+scraper, social ingest, the nightly scheduler, live stream capture, Postgres,
+and a `cloudflared` tunnel that reaches Caddy over the compose network. None of
+them publishes a host port.
 
 Postgres runs in the stack with a named volume. The `compose.yaml` at the
 repository root is a different thing — the throwaway database the test suite
@@ -17,6 +18,7 @@ drops and recreates — and has nothing to do with this.
 | Application image | `ghcr.io/d1k03/stock-aggregator`, tagged with the commit SHA and `latest`. The bot runs from it too, with a different command. |
 | Dashboard image | `…-web`, its own context and its own dependency set |
 | Transcriber image | `…-transcribe`, faster-whisper and the weights baked in |
+| Sentiment image | `…-sentiment`, FinBERT as ONNX baked in. The only two-stage build here: torch converts the checkpoint in a builder that is thrown away. |
 | Capture image | `…-skybird`, yt-dlp and ffmpeg. No port, no Caddy route: it reads what to do from Postgres. |
 | Database | `postgres:16` in the stack, on the `pg_data` named volume |
 | Secrets | Infisical, fetched at startup into the process environment |

@@ -1,0 +1,91 @@
+# Finance-tuned sentiment: FinBERT under onnxruntime, CPU only.
+#
+# Its own image, and the reason is the weights rather than the libraries.
+# `faster-whisper` already installs `onnxruntime` and `tokenizers` in the
+# transcriber image, so the dependency set here is that one minus ctranslate2
+# and PyAV — what cannot be shared is 438 MB of BERT, which belongs to one
+# service and would otherwise be pulled by every container in the stack on every
+# deploy.
+#
+# Two stages, unlike every other image here, because the conversion needs torch
+# and transformers and the service must not. The builder is thrown away and
+# nothing it installed reaches production: what crosses the line is three files.
+#
+# **fp32, and the 110 MB int8 graph was measured and rejected.** On this CPU
+# quantizing moved a probability by up to 0.373 — enough to reclassify a text —
+# and ran *slower*, 6.5 headlines/sec against 15.2 on four threads, because int8
+# matmul wants AVX2-VNNI and the box has neither. The 328 MB is bought back by
+# the deploy's image collection instead; see `.github/workflows/deploy.yml`.
+
+FROM python:3.11-slim AS export
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# The CPU index, not the default one. PyPI's torch wheel carries the whole CUDA
+# runtime — roughly 800 MB of it — for a conversion that runs once on a machine
+# with no GPU and is then discarded.
+#
+# Pinned for the reason postgres is pinned to 16: this is the step that decides
+# what the graph looks like, and a silently different exporter is a silently
+# different model. `torch.onnx.export` changed its default exporter in 2.9, and
+# `dynamo=False` in the script below is what holds the older one — the path
+# whose arguments are `input_names` and `dynamic_axes`, which is how the service
+# addresses the graph's tensors. The verification at the end of the script is
+# what makes bumping this safe.
+RUN pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.14.*" \
+ && pip install "transformers>=4.44,<6" "onnx>=1.16" "onnxruntime>=1.20,<2" "tokenizers>=0.21,<1"
+
+# Pinned to a revision, exactly as the transcriber's weights are. `main` moving
+# under us would change every score in the system without changing a line here.
+ARG MODEL_REPO=ProsusAI/finbert
+ARG MODEL_REVISION=4556d13015211d73dccd3fdd39d39232506f3e43
+
+COPY deploy/finbert_export.py /finbert_export.py
+
+# Writes finbert.onnx, tokenizer.json and labels.json — and then runs the graph
+# beside the checkpoint over a corpus with the shapes this system really sees,
+# failing the build if they disagree. That check is only possible here, where
+# torch is installed and the original is present; the service it produces can
+# never do it.
+RUN python /finbert_export.py \
+      --repo "${MODEL_REPO}" \
+      --revision "${MODEL_REVISION}" \
+      --out /opt/models/finbert \
+ && rm -rf /opt/models/finbert/tokenizer /root/.cache
+
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+ARG GIT_SHA=unknown
+ENV SCREENER_GIT_SHA=$GIT_SHA
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+# The `sentiment` extra, which exists so this is the only image that takes it.
+# Neither torch nor transformers is here: the forward pass was exported above.
+RUN pip install --no-cache-dir ".[sentiment]"
+
+# The three files, and nothing else the builder touched.
+COPY --from=export /opt/models/finbert /opt/models/finbert
+
+ENV SENTIMENT_MODEL_DIR=/opt/models/finbert \
+    SENTIMENT_THREADS=2 \
+    OMP_NUM_THREADS=2
+
+# Non-root, and the same uid the other images use. Nothing here writes to disk:
+# text is held for one request and dropped, and the weights are read-only.
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin screener
+USER 10001
+
+EXPOSE 8083
+
+CMD ["python", "-m", "screener.sentiment"]

@@ -140,6 +140,22 @@ jobs:
           load: false
           cache-from: type=gha,scope=transcribe
           cache-to: type=gha,mode=max,scope=transcribe
+      # The most expensive build here, and the one worth the most. Its builder
+      # stage downloads torch and the checkpoint, converts FinBERT to ONNX and
+      # then runs the exported graph beside the original, failing if they
+      # disagree — so a change to the export, the opset or the pinned revision
+      # is caught on the pull request rather than at deploy. The gha cache keeps
+      # that off every unrelated PR: nothing in the stage changes, so nothing
+      # re-runs.
+      - uses: docker/build-push-action@v6
+        name: Build the sentiment image
+        with:
+          context: .
+          file: deploy/Dockerfile.sentiment
+          push: false
+          load: false
+          cache-from: type=gha,scope=sentiment
+          cache-to: type=gha,mode=max,scope=sentiment
       - uses: docker/build-push-action@v6
         name: Build the live capture image
         with:

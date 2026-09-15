@@ -18,6 +18,95 @@ Build this and nothing else first:
 Additive once the spine works, in no fixed order: web UI, backtesting harness, LLM
 summarisation, 13F ingestion, expanded universe, forecaster-consensus aggregation.
 
+### FinBERT — the sentiment classifier
+
+Built, and deliberately unconsumed. `screener.sentiment` is FinBERT
+(`ProsusAI/finbert`) exported to ONNX, in a container of its own, answering
+`/score` on the compose network. Hand it text, get back three probabilities.
+Nothing in the pipeline calls it yet; `boot selftest` is its only caller.
+
+**Stopping here is the decision, not an unfinished job.** A new input into an
+existing pillar moves that pillar for every ticker on the night it lands, and
+the diff step reads a universe-wide shift as a universe-wide set of crossings —
+DESIGN.md's procedure is bump the weight version, backfill with alerting
+disabled, then resume live. Building the classifier and wiring the pillar in one
+change would mean the first night of both at once, which is the night most
+likely to mute the channel for good.
+
+Three things worth keeping when something does consume it:
+
+- **The hardware is the constraint, and it is tighter than the plan assumed.**
+  Measured on the VPS, which has AVX but no AVX2: ~11 short headlines/s and
+  ~0.9 long comments/s on two threads, against DESIGN.md's estimated 20–50/s.
+  `screener.reddit` stores ~132,000 r/wallstreetbets comments a week. Scoring
+  all of them is hours a night on a box shared with four other stacks, so the
+  pillar has to sample or read posts and top comments only — a decision to make
+  before it is wired rather than when a night overruns.
+- **The column order is the failure that would not be noticed.** FinBERT emits
+  `positive, negative, neutral`, which is neither alphabetical nor guessable,
+  and reading it wrong scores every beat as a miss with total confidence.
+  `labels.json` ships beside the weights, the service refuses to start without
+  it, `/health` reports it, the deploy asserts it and the self-test scores a
+  beat against a guidance cut to prove it end to end.
+- **The three probabilities are what to persist**, not the scalar.
+  `positive - negative` is derived in the client, so a stored reading always
+  carries its inputs — and "confidently neutral" and "torn" both land near zero
+  and are not the same thing. Same argument as keeping raw metrics beside their
+  percentiles.
+
+`VADER` is not built and the plan for it is withdrawn: a dictionary lookup that
+disagrees with the classifier gives two numbers and no way to choose between
+them. If volume forces something cheaper, sample what FinBERT reads.
+
+#### What is left: the two corpora, through the scorer, into the score
+
+**This is the next piece of work, and both ends of it already exist.** Two
+bodies of text are already ingested, already stored and already readable through
+the playground — and neither is connected to a security or scored by anything:
+
+| Corpus | Table | What it holds | Granted to |
+|---|---|---|---|
+| Reddit | `social_item` | `title`, `body`, `subreddit`, `created_utc`, per-item `content_hash` | `playground`, `playground_bot`, `playground_mcp` |
+| News and articles | `magpie.document` | `title`, `text`, `host`, `published`, `word_count` | all three, per migration 022 |
+
+`screener.reddit` says out loud that it is ingest only. `screener.magpie` keeps
+a page and stops. `screener.sentiment` reads text and does not know where it
+came from. Each half is deliberate and the gap between them is the work:
+
+```
+social_item  ─┐                      ┌─ metric_daily ─ Sentiment pillar ─┐
+              ├─ link to a security ─┼─ screener.sentiment ──────────────┼─ pillar_score_daily ─ snapshot_daily
+magpie.document ┘                    └─ aggregate per security per day ──┘
+```
+
+Four decisions have to be made before any of it is written, and three of them
+are not about sentiment at all:
+
+1. **Which security a text is about.** The hard one, and the reason both
+   ingests stopped short. A Reddit comment mentions zero, one or many tickers;
+   an article about the S&P mentions forty. `$NVDA` is easy and "the chipmaker"
+   is not, and a naive symbol match reads `$ALL`, `$IT` and `$ON` out of
+   ordinary English. This is its own piece of work and should not be smuggled
+   into the sentiment change.
+2. **What gets read, given ~0.9 long comments/sec.** 132,000 r/wallstreetbets
+   comments a week does not fit. Posts and top comments, or a sample, or a
+   length cut — decided up front and written down, not discovered when a night
+   overruns.
+3. **How per-item readings become one number per security per night.** A mean
+   is the obvious answer and probably the wrong one: one viral post would move
+   it. Volume-weighted, trimmed, or median with a minimum item count, and the
+   item count kept alongside so a score computed from three comments is
+   distinguishable from one computed from three hundred.
+4. **Where the readings live.** Per item, or only the daily aggregate? Per item
+   is a row per comment per model version and the honest answer for
+   traceability, since `CLAUDE.md` requires every score to trace to visible raw
+   inputs — but `social_item` is ~7.6M rows a year.
+
+Then, and only then, the onboarding procedure from `DESIGN.md`: bump the weight
+version, backfill with alerting disabled, resume live. The classifier landing
+before the pillar is what makes that possible as two reviewable changes instead
+of one unreviewable one.
+
 ### Steven draws charts — real adjusted prices
 
 Built, and on real data since the UI swap. Ask how a ticker has moved, its high or low, or its
