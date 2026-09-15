@@ -21,7 +21,15 @@ import httpx
 import pytest
 
 from screener.sentiment import LABELS, MAX_CHARS, MAX_TEXTS, Sentiment, score
-from screener.sentiment.server import MAX_BODY_BYTES, build_server, read_labels
+from screener.sentiment.server import (
+    INFERENCE_BATCH,
+    MAX_BATCH_TOKENS,
+    MAX_BODY_BYTES,
+    MAX_TOKENS,
+    build_server,
+    plan_chunks,
+    read_labels,
+)
 
 # FinBERT's own column order, which is not alphabetical. Written out here so a
 # test that assumed alphabetical would fail rather than pass by luck.
@@ -481,3 +489,71 @@ def test_loading_the_model_cannot_be_separated_from_its_column_order():
         if server is not None:
             server.shutdown()
             server.server_close()
+
+
+# -- chunking, which is what keeps the container alive ----------------------
+
+
+def widest(chunk, lengths):
+    """What a chunk actually costs: every row padded to its longest member."""
+    return len(chunk) * max(lengths[i] for i in chunk)
+
+
+def test_a_full_batch_of_maximum_length_texts_is_split():
+    # The regression. Thirty-two rows at the 512 token cap went through the
+    # graph as one chunk, reached 2,091 MB and was killed by the cgroup. Every
+    # cap in the client allowed it.
+    lengths = [MAX_TOKENS] * 32
+    chunks = plan_chunks(lengths)
+    assert len(chunks) > 1
+    assert all(widest(c, lengths) <= MAX_BATCH_TOKENS for c in chunks)
+
+
+def test_short_texts_still_fill_a_whole_chunk():
+    # The budget must not cost throughput on the common case: headlines are
+    # bounded by the row count, not by tokens.
+    lengths = [14] * (INFERENCE_BATCH * 2)
+    assert [len(c) for c in plan_chunks(lengths)] == [INFERENCE_BATCH, INFERENCE_BATCH]
+
+
+def test_one_long_text_does_not_drag_short_ones_into_its_chunk():
+    # What the length sort is for. Before sorting, a 512 token comment sitting
+    # among one-line headlines padded every row in its chunk to 512.
+    lengths = [MAX_TOKENS, 9, MAX_TOKENS, 11, 8, MAX_TOKENS]
+    chunks = plan_chunks(lengths)
+    short = {1, 3, 4}
+    assert any(short.issubset(set(c)) for c in chunks), "the short rows should share a chunk"
+    assert all(widest(c, lengths) <= MAX_BATCH_TOKENS for c in chunks)
+
+
+def test_no_chunk_exceeds_the_budget_for_any_mix():
+    # Property over the shapes a real request takes: headlines, comments,
+    # articles and everything between.
+    import random
+
+    rng = random.Random(0)
+    for _ in range(200):
+        lengths = [rng.choice([8, 14, 40, 120, 300, MAX_TOKENS]) for _ in range(rng.randint(1, 32))]
+        for chunk in plan_chunks(lengths):
+            assert len(chunk) <= INFERENCE_BATCH
+            assert widest(chunk, lengths) <= MAX_BATCH_TOKENS
+
+
+def test_every_row_lands_in_exactly_one_chunk():
+    # Positions are restored by index, so a dropped or duplicated one would
+    # attribute a reading to the wrong text rather than fail.
+    import random
+
+    rng = random.Random(1)
+    for _ in range(200):
+        lengths = [rng.randint(3, MAX_TOKENS) for _ in range(rng.randint(1, 32))]
+        seen = sorted(i for chunk in plan_chunks(lengths) for i in chunk)
+        assert seen == list(range(len(lengths)))
+
+
+def test_a_single_text_at_the_cap_is_one_chunk():
+    assert plan_chunks([MAX_TOKENS]) == [[0]]
+
+
+def test_nothing_to_score_is_no_chunks():
+    assert plan_chunks([]) == []

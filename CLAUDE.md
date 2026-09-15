@@ -277,9 +277,13 @@ nothing outside imports a submodule directly.
   `positive, negative, neutral`, which is neither alphabetical nor guessable, and reading it
   wrong scores every beat as a miss with nothing to notice; it is written beside the weights as
   `labels.json`, the service refuses to start without it, and the deploy and the self-test both
-  assert it. Measured on the box, which has AVX but no AVX2: ~11 short headlines/s and ~0.9 long
-  comments/s on two threads. **That is the number the Sentiment pillar has to be designed
-  around** — it does not reach a week of r/wallstreetbets, so whatever consumes this samples.
+  assert it. Measured on the box, which has AVX but no AVX2: **150 to 180 words a second** on two
+  threads, which is the unit that holds steady, because texts/s varies tenfold with length.
+  **That is the number the Sentiment pillar has to be designed around** — a week of
+  r/wallstreetbets is ten hours, so whatever consumes this samples. Chunks are bounded by
+  *tokens*, not rows: attention is quadratic in length, so 32 rows at the 512-token cap
+  reached 2,091 MB and was killed by the cgroup while 32 headlines is nothing. `plan_chunks`
+  is pure and at module scope so CI checks it without the model.
   **Nothing consumes it yet**, deliberately: a new input moves a pillar for every ticker on the
   night it lands, so it goes in behind a weight-version bump, not beside one. The two corpora it
   is *for* are already stored and already readable through the playground — `social_item` from

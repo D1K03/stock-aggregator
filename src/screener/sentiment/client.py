@@ -34,8 +34,8 @@ DEFAULT_SCORER = "http://sentiment:8083/score"
 
 # The weights are loaded before the service opens its socket, so this covers
 # inference only — and it is derived from MAX_TEXTS below rather than chosen.
-# Measured on the VPS at two threads: ~0.9 texts/sec at the 512-token cap, so a
-# full batch of the slowest legal input is roughly 70 seconds, and a request
+# Measured against the deployed service at two threads: roughly 170 words/sec,
+# so a full batch of the slowest legal input is about 75 seconds, and a request
 # that waited its turn behind another adds BUSY_WAIT_SECONDS to that. Three
 # minutes covers both with room to spare.
 #
@@ -51,12 +51,14 @@ CONNECT_TIMEOUT_SECONDS = 3.0
 
 # How many texts one call may carry.
 #
-# **Measured, not chosen.** The first draft said 256, which is wrong on this
-# hardware in a way that only shows up under real input: the VPS scores ~0.9
-# texts/sec at the 512-token cap, so 256 long Reddit comments is nearly five
-# minutes and every caller would time out while the service kept burning CPU on
-# a batch nobody was waiting for any more. Sixty-four is about seventy seconds
-# of the slowest legal input and under four seconds of the fastest.
+# **Measured against the deployed service, and lowered twice.** 256 was the
+# first draft; 64 was the second, from a mixed-length benchmark. Timed on the
+# box afterwards with texts that are *uniformly* at the cap, which is the case a
+# cap has to survive: 32 rows of 200 words is 39.5s, so 64 rows of 380 (the
+# words that fit in 512 word pieces) is about 150s against a 180s timeout, and
+# 26% headroom on a box shared with five other stacks is not headroom.
+#
+# 32 is roughly 75s of the slowest legal input and under 3s of the fastest.
 #
 # Enforced here rather than by chunking silently, because the service scores a
 # batch under a semaphore of one: a request is also a decision about how long to
@@ -64,7 +66,7 @@ CONNECT_TIMEOUT_SECONDS = 3.0
 # r/wallstreetbets want different answers to that. Same reason
 # `screener.transcribe` leaves its two-minute cap to the callers, who know the
 # length of the clip before any bytes move.
-MAX_TEXTS = 64
+MAX_TEXTS = 32
 
 # Past this, nothing more is read anyway: FinBERT sees 512 word pieces and the
 # tokenizer truncates. This is roughly four times that in characters, so the

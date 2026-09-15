@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="380" viewBox="0 0 780 380" role="img" aria-label="Time to score a corpus at 170 words per second, logarithmic time axis">
+<rect width="780" height="380" fill="#1a1a19"/>
+<text x="28" y="38" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff">What that means for a real corpus</text>
+<text x="28" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#c3c2b7">At the measured 170 words/sec. The time axis is logarithmic: every gridline is ten times the last.</text>
+<line x1="148.0" y1="90" x2="148.0" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="148.0" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">1 sec</text>
+<line x1="250.0" y1="90" x2="250.0" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="250.0" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">10 sec</text>
+<line x1="329.4" y1="90" x2="329.4" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="329.4" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">1 min</text>
+<line x1="431.4" y1="90" x2="431.4" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="431.4" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">10 min</text>
+<line x1="510.7" y1="90" x2="510.7" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="510.7" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">1 hour</text>
+<line x1="612.7" y1="90" x2="612.7" y2="322.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="612.7" y="343.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#898781">10 hours</text>
+<path d="M148.0,108.0 H222.5 Q226.5,108.0 226.5,112.0 V132.4 Q226.5,136.4 222.5,136.4 H148.0 Z" fill="#b7d3f6"/>
+<text x="134" y="121.2" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#ffffff">1,000 words</text>
+<text x="134" y="136.2" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#898781">one news article</text>
+<text x="238.5" y="127.2" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">6 sec</text>
+<path d="M148.0,152.4 H324.5 Q328.5,152.4 328.5,156.4 V176.8 Q328.5,180.8 324.5,180.8 H148.0 Z" fill="#86b6ef"/>
+<text x="134" y="165.6" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#ffffff">10,000 words</text>
+<text x="134" y="180.6" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#898781">a morning of headlines</text>
+<text x="340.5" y="171.6" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">59 sec</text>
+<path d="M148.0,196.8 H426.5 Q430.5,196.8 430.5,200.8 V221.2 Q430.5,225.2 426.5,225.2 H148.0 Z" fill="#3987e5"/>
+<text x="134" y="210.0" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#ffffff">100,000 words</text>
+<text x="134" y="225.0" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#898781">~1,700 Reddit comments</text>
+<text x="442.5" y="216.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">10 min</text>
+<path d="M148.0,241.2 H528.5 Q532.5,241.2 532.5,245.2 V265.6 Q532.5,269.6 528.5,269.6 H148.0 Z" fill="#256abf"/>
+<text x="134" y="254.4" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#ffffff">1 million words</text>
+<text x="134" y="269.4" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#898781">a day of r/wallstreetbets</text>
+<text x="544.5" y="260.4" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">1.6 hours</text>
+<path d="M148.0,285.6 H620.6 Q624.6,285.6 624.6,289.6 V310.0 Q624.6,314.0 620.6,314.0 H148.0 Z" fill="#184f95"/>
+<text x="134" y="298.8" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#ffffff">8 million words</text>
+<text x="134" y="313.8" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#898781">a week of r/wallstreetbets</text>
+<text x="636.6" y="304.8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">13.1 hours</text>
+<line x1="148" y1="90" x2="148" y2="322.0" stroke="#383835" stroke-width="1"/>
+</svg>
