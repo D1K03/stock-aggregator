@@ -137,7 +137,7 @@ jobs:
           fi
 
       - name: Join the tailnet
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@v4
         with:
           # An auth key rather than an OAuth client, for one reason only:
           # OAuth clients cannot be created through the Tailscale API, so this
