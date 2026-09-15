@@ -22,9 +22,9 @@ Four facts do most of the work in this picture:
   collide with the neighbouring stacks and the database has no public surface.
 - **`cloudflared` dials outward.** The Cloudflare edge never dials in. That is
   the whole ingress story, and it is why there is no firewall rule to maintain.
-- **`api`, `bot` and `reddit` are the same image** with different commands. One
-  dependency set, one build; the cost is that the api image carries `discord.py`
-  without importing it.
+- **`api`, `bot`, `reddit` and `edgar` are the same image** with different
+  commands. One dependency set, one build; the cost is that the api image
+  carries `discord.py` without importing it.
 - **`transcribe`, `sentiment` and `skybird` are not**, and that is the rule the
   pair above is the exception to. A separate image is what a separate dependency
   set earns: ctranslate2, onnxruntime and PyAV for the first, ffmpeg and yt-dlp
@@ -49,6 +49,7 @@ flowchart LR
         snt["sentiment<br/>ghcr.io/d1k03/stock-aggregator-sentiment<br/>FinBERT as ONNX, expose 8083"]
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
         rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
+        edg["edgar<br/>same image as api<br/>python -m screener.edgar<br/>off without a contact address"]
         mag["magpie<br/>ghcr.io/d1k03/stock-aggregator-magpie<br/>trafilatura, expose 8082"]
         night["nightly<br/>same image as api<br/>python -m screener.nightly"]
         pg[("postgres:16<br/>named volume pg_data")]
@@ -61,6 +62,7 @@ flowchart LR
     drest["Discord REST v10"]
     streams["YouTube / Twitch"]
     arctic["Arctic Shift"]
+    sec["SEC EDGAR"]
     sites["Any page someone pastes"]
 
     internet --> edge
@@ -77,6 +79,7 @@ flowchart LR
     api -->|"POST /score, selftest only so far"| snt
     sky -->|"audio only, via yt-dlp"| streams
     rdt -->|"posts + comments"| arctic
+    edg -->|"daily index + form 4 filings"| sec
     api -->|"POST /document"| mag
     bot -->|"POST /document"| mag
     mag -->|"direct → isp_proxy → unlocker"| sites
@@ -85,6 +88,7 @@ flowchart LR
     bot --> pg
     sky --> pg
     rdt --> pg
+    edg --> pg
     night --> pg
     api --> infisical
     api --> ghoauth
@@ -94,6 +98,7 @@ flowchart LR
     bot --> router
     bot --> dgw
     rdt --> infisical
+    edg --> infisical
     night --> infisical
     night -->|"only when a night is given up"| drest
 ```

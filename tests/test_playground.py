@@ -74,6 +74,17 @@ MAGPIE = {
 # complete" is answerable on the console rather than only in the logs.
 SOCIAL_GAP = {"public.social_gap"}
 
+# Granted by 027, invisible to the parser here for the same reason.
+#
+# Names and job titles, and on magpie's side of the line rather than skybird's
+# for a stronger version of the same argument. 016 and 017 deny Steven a
+# transcript because of what that data *is*: speech captured by us, from people
+# who did not publish it to us. A Form 4 inverts every part of that — published
+# by law, by the filer's own employer, to a government agency, onto an archive
+# with no authentication in front of it. The name and the title are not
+# incidental to the filing; they are the disclosure.
+EDGAR = {"public.insider_transaction"}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -445,7 +456,7 @@ def test_the_catalogue_lists_exactly_what_the_migration_grants(playground):
     # beside the editor, and a transcript you may query should be a transcript
     # you can see the shape of.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | SKYBIRD | MAGPIE | SOCIAL_GAP
+    assert listed == granted_in_migration() | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR
 
 
 def test_the_catalogue_shows_steven_a_smaller_database(steven):
@@ -455,7 +466,7 @@ def test_the_catalogue_shows_steven_a_smaller_database(steven):
     # Magpie is on both sides, which is the point of listing it separately: the
     # one thing Steven cannot see is the one thing that was never published.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | MAGPIE | SOCIAL_GAP
+    assert listed == granted_in_migration() | MAGPIE | SOCIAL_GAP | EDGAR
     assert listed.isdisjoint(SKYBIRD)
 
 
@@ -490,7 +501,7 @@ def test_every_table_is_either_granted_or_deliberately_denied(playground, fresh_
         """
     ).fetchall()
     assert {r[0] for r in rows} == (
-        granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE | SOCIAL_GAP
+        granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR
     )
 
 
@@ -542,4 +553,20 @@ def test_steven_can_read_a_scraped_document(steven, table):
     # is given the text because reading an article back is the whole point of
     # being able to fetch one — unlike a transcript, which he starts and stops
     # without ever reading.
+    assert "permission denied" not in _tried(f"select * from {table}")
+
+
+# -- insider transactions ---------------------------------------------------
+
+
+@pytest.mark.parametrize("table", sorted(EDGAR))
+def test_the_console_can_read_an_insider_transaction(playground, table):
+    assert "permission denied" not in _tried(f"select * from {table}")
+
+
+@pytest.mark.parametrize("table", sorted(EDGAR))
+def test_steven_can_read_an_insider_transaction(steven, table):
+    # On magpie's side of the line, asserted rather than assumed: "has an
+    # officer been buying" is a question he should be able to answer, and the
+    # filing was public before we ever fetched it.
     assert "permission denied" not in _tried(f"select * from {table}")

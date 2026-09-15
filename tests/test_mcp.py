@@ -59,6 +59,13 @@ MAGPIE = {"magpie.attempt", "magpie.document", "magpie.link"}
 # tell a quiet hour from a lost one.
 SOCIAL_GAP = {"public.social_gap"}
 
+# Granted by 027, invisible to the parser above for the same reason.
+#
+# Names and job titles, which is worth saying plainly rather than arguing
+# around: granting this role means they leave the box to claude.ai. They are
+# public filings that claude.ai could fetch from sec.gov for itself.
+EDGAR = {"public.insider_transaction"}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -328,7 +335,7 @@ def test_every_table_is_granted_or_deliberately_denied(connector, fresh_db):
         """
     ).fetchall()
     assert {r[0] for r in rows} == (
-        granted_in_migration() | set(DENIED) | MAGPIE | SOCIAL_GAP
+        granted_in_migration() | set(DENIED) | MAGPIE | SOCIAL_GAP | EDGAR
     )
 
 
