@@ -204,11 +204,19 @@ def save(
     for tx in transactions:
         security_id = securities.get(tx.issuer_cik)
         if security_id is None:
-            # Unreachable by construction -- the index filter is what decides
-            # which filings are fetched -- so this is a guard against that
-            # invariant being broken later rather than an expected branch. The
-            # column is `not null`; dropping the row beats failing the day.
-            logger.warning(
+            # **An expected branch, not a guard.** The index filter matches a
+            # filing when *any* of its filers is in the universe, and the filers
+            # are the issuer plus every reporting owner -- so a company we hold
+            # filing as a ten percent owner of one we do not brings back a
+            # filing whose issuer is outside the universe. Measured on
+            # 2026-09-11: Corebridge Financial, which we hold, filed against
+            # Carlyle Tactical Private Credit Fund, which we do not.
+            #
+            # The row is dropped rather than stored unlinked, because
+            # `security_id` is `not null` and a transaction we cannot attribute
+            # to a security we score is not evidence for anything. The wasted
+            # fetch is the price of filtering the index instead of every filing.
+            logger.info(
                 "%s names issuer %s which is not in the universe; skipping",
                 tx.accession_number, tx.issuer_cik,
             )

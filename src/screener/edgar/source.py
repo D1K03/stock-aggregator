@@ -253,7 +253,13 @@ def transactions(
     database connection. `screener.edgar.ingest` reads the set once per pass.
 
     Without it a day is 435 filings to keep 174. With it the filter runs against
-    the index, and the 261 we do not hold are never fetched at all.
+    the index, and the rest are never opened.
+
+    The filter matches on *any* filer rather than on the issuer, because the
+    index does not say which line is which. That is deliberately loose: a
+    company we hold filing as a ten percent owner of one we do not is fetched
+    and then dropped by `store.save`, which is the price of deciding from the
+    index instead of from 435 filings.
 
     `sleep` is injected so a test asserts the pauses without waiting, as
     `reddit.source` and `universe.sources.yahoo` do.

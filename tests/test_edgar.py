@@ -736,12 +736,36 @@ def test_the_owners_are_stored_as_arrays_on_the_transaction(fresh_db):
     assert officer is True
 
 
-def test_a_filing_for_an_issuer_outside_the_universe_is_dropped_not_crashed(fresh_db):
-    # Unreachable by construction -- the index filter decides what is fetched --
-    # so this guards the invariant rather than an expected path. The column is
-    # `not null`; dropping the row beats failing the day.
+def test_a_filing_matched_by_an_owner_rather_than_its_issuer_is_dropped(fresh_db):
+    # **A real branch, measured, not a guard.** The index filter matches on any
+    # filer, and the filers are the issuer plus every reporting owner, so a
+    # company we hold filing as a ten percent owner of one we do not comes back
+    # with an issuer outside the universe. On 2026-09-11 that was Corebridge
+    # Financial filing against Carlyle Tactical Private Credit Fund: one of 437
+    # transactions that day. `security_id` is `not null`, so it is dropped.
     source = source_id(fresh_db)
     assert save(fresh_db, source, {}, [a_transaction()]) == (0, 0)
+    assert fresh_db.execute("select count(*) from insider_transaction").fetchone()[0] == 0
+
+
+def test_a_filing_is_fetched_when_any_filer_is_ours_not_only_the_issuer(fresh_db):
+    # The walk half of the same fact: the index does not label which line is the
+    # issuer, so the filter cannot be narrower than "any filer". The wasted
+    # fetch is the price of deciding from the index rather than from every
+    # filing, and `save` is what makes it harmless.
+    theirs = "0000000999-26-000002"
+    got, seen = walk(
+        {
+            "__index__": index(
+                row("4", "Not Ours Plc", "999", theirs),
+                row("4", "Alpha Inc.", "123", theirs),
+            ),
+            theirs: submission(cik="0000000999", symbol="ZZZ", name="Not Ours Plc"),
+        },
+        ciks=("0000000123",),
+    )
+    assert [r.url.path for r in seen if r.url.path.endswith(".txt")] != []
+    assert [t.issuer_cik for t in got] == ["0000000999"]
 
 
 # -- the frontier -----------------------------------------------------------

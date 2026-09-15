@@ -205,7 +205,9 @@ nothing outside imports a submodule directly.
   the complete submission the daily index already names, and guessing `form4.xml` 404s six times in
   seven. **EDGAR writes one index line per filer, not per filing**: 921 Form 4 rows on 2026-09-11
   were 435 filings, one listed eleven times — and because the issuer is always one of those lines,
-  the universe filter runs against the *index*, so the filings we do not hold are never fetched.
+  the universe filter runs against the *index*, so the rest are never opened. That filter matches
+  on any filer rather than on the issuer, so a company we hold filing as a ten percent owner of one
+  we do not is fetched and then dropped: one transaction in 437 on 11 September.
   **A missing daily index is 403, not 404**, indistinguishable from SEC refusing us once
   `screener.fetch` has collapsed it to a string, so the quarter's `index.json` is read first and a
   day it does not name is never requested. A refusal therefore **ends the pass** rather than

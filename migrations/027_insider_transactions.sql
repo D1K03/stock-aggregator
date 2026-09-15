@@ -46,13 +46,17 @@ create table insider_transaction (
     id             bigint generated always as identity primary key,
     source_id      smallint not null references data_source(id),
 
-    -- Not nullable, and that is a decision about the walk expressed as a
-    -- constraint on the column. EDGAR writes one index line per *filer* and the
-    -- issuer is always one of them, so the issuer's CIK is readable from the
-    -- index without opening the filing. `screener.edgar` filters the index
-    -- against the universe's CIKs before fetching anything, so a filing for an
-    -- issuer we do not hold is never fetched, and a row that could not be
-    -- linked is a row that does not exist.
+    -- Not nullable, which decides what happens to a filing we cannot attribute.
+    -- EDGAR writes one index line per *filer* and the issuer is always one of
+    -- them, so `screener.edgar` filters the index against the universe's CIKs
+    -- before opening anything. That filter is deliberately loose: it matches on
+    -- any filer, and the filers are the issuer plus every reporting owner, so a
+    -- company we hold filing as a ten percent owner of one we do not brings back
+    -- a filing whose issuer is outside the universe. On 2026-09-11 that was
+    -- Corebridge Financial, which we hold, filing against Carlyle Tactical
+    -- Private Credit Fund, which we do not: one of 437 transactions that day.
+    -- Those are dropped rather than stored unlinked, because a transaction we
+    -- cannot attribute to a security we score is not evidence for anything.
     --
     -- Written once, at insert, and deliberately absent from the `do update set`
     -- in `store.save`: this link is our resolution of a CIK, not something SEC

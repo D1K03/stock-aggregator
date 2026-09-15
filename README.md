@@ -16,10 +16,11 @@ data.
 
 | Piece | State |
 |---|---|
-| Database schema | Done — 21 migrations |
+| Database schema | Done — 28 migrations |
 | Infrastructure | Done — secrets, fetching, LLM router, alert delivery, status service, GitHub sign-in, CI/CD |
 | Universe and identity | Done — 1,504 securities across eleven sectors, committed as `data/universe.csv` |
 | Ingest | Done — daily prices and corporate actions, plus fundamentals (28 line items/period); nothing consumes a fundamental fact yet |
+| Insider transactions | Done — SEC Form 4 from the EDGAR daily index, ~490 transactions a day. Ingest only; the Insider pillar has no scored metric yet. Off until a contact address is configured |
 | Scoring | Done for the Momentum pillar only — dated snapshots, alerting switched off; the other four pillars have no scored metrics yet |
 | Diff and alerting | Not started |
 
