@@ -187,6 +187,35 @@ jobs:
             # omitting it falls back to every default and starts the stack with
             # no Infisical identity at all.
             COMPOSE="docker compose --env-file .env -f deploy/compose.prod.yaml -f deploy/compose.tunnel.yaml"
+            # Collect this project's superseded SHA tags, and do it *before*
+            # the pull rather than after, because the pull is the step that runs
+            # out of disk. `docker image prune -f` at the end only removes
+            # *dangling* images, so every release since the first has left its
+            # predecessor behind under a tag and nothing has ever collected
+            # them. Measured on the box on 2026-09-15: 152 tagged images from
+            # this project, 41 GB reclaimable, and a deploy that afternoon took
+            # the free space on a 99 GB disk from 1.7 GB to 759 MB. A release is
+            # six images now rather than five, the new one carrying 438 MB of
+            # weights.
+            #
+            # **Scoped to this repository's images, and that is the point.** A
+            # blanket `docker image prune -a` is shorter and would reach across
+            # the five other compose projects on this box, some of which run
+            # images built by hand that exist in no registry — deleting one
+            # because it happened not to be running is not recoverable. Ours
+            # are: they are in GHCR, which is the same reason a rollback still
+            # works, since deploying an older `image_tag` pulls before it starts.
+            #
+            # `latest` and the tag being deployed are kept. The tag currently
+            # running is not, and does not need to be: `docker rmi` refuses an
+            # image a live container holds, which the swallow turns into a
+            # no-op. That is also what makes this safe to run before the new
+            # images exist.
+            docker images --filter "reference=ghcr.io/d1k03/stock-aggregator*" \
+              --format '{{.Repository}}:{{.Tag}}' \
+              | grep -v ':latest$' | grep -v ":${SCREENER_IMAGE_TAG}$" \
+              | xargs -r -n1 docker rmi 2>/dev/null || true
+            df -h / | tail -1
             $COMPOSE pull
             $COMPOSE up -d --remove-orphans
             # Caddy's config is a bind mount, and changing a bind-mounted file
@@ -201,6 +230,7 @@ jobs:
             # anyway, since it has already read the new file.
             $COMPOSE exec -T app caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
               || echo "caddy reload not needed or not possible; it was just started"
+            # Dangling layers left by the pull above.
             docker image prune -f
 
       - name: Smoke test
