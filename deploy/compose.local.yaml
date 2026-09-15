@@ -88,6 +88,13 @@ services:
       - path: local.env
         required: false
 
+  # Same image as `api`, so it has to be told to use the one just built.
+  edgar:
+    image: stock-aggregator:local
+    env_file:
+      - path: local.env
+        required: false
+
   transcribe:
     build:
       context: ..

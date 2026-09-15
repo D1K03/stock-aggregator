@@ -132,6 +132,48 @@ as `playground_bot`, in three statements shared with the dashboard's endpoints, 
 Discord and the chart on the Overview draw the same closes. `crossing` returns with score
 history and alerting.
 
+### Insider transactions — the first data behind the Insider pillar
+
+Built. `screener.edgar` walks SEC's daily filing index twice a day and stores
+every Form 4 filed by a company in the universe: who dealt, in what, how many
+shares, at what price, and whether they are a director, an officer or a ten
+percent holder. Readable on `/playground`, by Steven and through the connector.
+Spec: `docs/specs/2026-09-15-insider-transactions.md`.
+
+**This is the corpus that did not need the hard problem solved first.** The
+Sentiment pillar is blocked on deciding which security a text is about, which is
+why `screener.reddit` and `screener.magpie` both stop at keeping the text. A
+Form 4 names its issuer's CIK and `universe` already matches identity on CIK, so
+that question never arises here. It also needs no classifier, so none of the
+FinBERT throughput arithmetic above applies.
+
+**Nothing scores it, deliberately, on the same terms as FinBERT.** A new input
+moves a pillar for every ticker on the night it lands, so it goes in behind a
+weight-version bump rather than beside one. What exists is the data.
+
+Four things worth keeping when something does consume it:
+
+- **`P` is the code that carries a signal; `A` is compensation policy.** Over two
+  measured days: 354 `A` (grants), 337 `S` (sales), 132 `M` (option exercises),
+  50 `F` (shares withheld for tax), 48 `P` (open-market purchases), 41 `G`
+  (gifts). A pillar that treats a grant and a purchase alike would mostly
+  measure when vesting schedules fire. `direct_or_indirect` matters for the same
+  reason: a family trust rebalancing is not an officer's conviction.
+- **A transaction can have many owners, and 11% do.** 108 of 975 rows carry more
+  than one, and one filing had ten owners against a single 79,649-share trade.
+  Anything summing shares per owner will be wrong; the flags are OR'd across the
+  filing and say no more than the filing does.
+- **An amendment is a separate row with its own accession.** `4/A` is stored
+  beside the `4` it corrects, and nothing links them — Form 4's XML carries only
+  a matching `periodOfReport`. Anything wanting "what actually happened" has to
+  reconcile them.
+- **It is small.** ~490 transactions a day, 689 bytes a row, **~85 MB a year**
+  against the Reddit corpus's ~2.7 GB. Backfilling years of it is affordable in
+  a way backfilling social is not.
+
+Left open: 13F, the other half of the Insider/Institutional pillar, which has no
+adapter. `data_source.code` is `sec_edgar_form4` so it gets a row of its own.
+
 ### Skybird — live stream capture
 
 Built. Paste a YouTube or Twitch live stream into `/skybird` — or ask Steven,

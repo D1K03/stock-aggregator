@@ -25,6 +25,8 @@ NEEDS_DATABASE = {
     "api": "migrations, sign-in, the audit trail and every dashboard read",
     "bot": "the spend cap, Steven's memory, the audit trail, the skybird tools",
     "reddit": "social_item, and the ingest_run rows beside it",
+    "edgar": "insider_transaction, the universe CIKs it filters the index on, "
+             "and ingest_run, which is its frontier rather than only its log",
     "skybird": "the control plane -- it polls for a row and writes transcripts",
     "nightly": "it reads and writes every table the pipeline touches",
     "magpie": "magpie.document and magpie.attempt, which is also its spend meter",

@@ -505,6 +505,76 @@ the holes stayed invisible.
 
 ---
 
+## Insider transactions
+
+`screener.edgar` — every SEC **Form 4** filed by a company in the universe, on a
+twelve-hourly loop in a container of its own. Who dealt, in what, how many
+shares, at what price, and whether they are a director, an officer or a ten
+percent holder.
+
+**This is the unambiguous API case, and worth contrasting with the two above.**
+No key, no session, no proxy, no challenge. `sec.gov/robots.txt` does not
+disallow `/Archives/` and `data.sec.gov` has none at all. SEC publishes both the
+format and the rate it will serve, 10 requests a second. The one requirement is
+a User-Agent naming a contact address, so `EDGAR_CONTACT_EMAIL` is the
+credential and the off switch at once.
+
+Unlike `screener.reddit` and `screener.magpie`, this does **not** stop short of a
+security. A Form 4 names its issuer's CIK and `screener.universe` already matches
+identity on CIK rather than symbol, so the question of which company a text is
+about — the thing that halted both of those — never arises.
+
+| | |
+|---|---|
+| Cost | bandwidth only. No key, no per-request price, ~85 MB/year of rows |
+| Volume | ~490 transactions a day from ~240 filings; 689 bytes a row |
+| Cadence | `EDGAR_REFRESH_HOURS`, `EDGAR_DAYS_PER_PASS` unwalked days at a time, newest first |
+| Switch | an unset `EDGAR_CONTACT_EMAIL`; the container logs it and exits cleanly |
+
+**Do not reach for a mirror.** They were checked. Finnhub's free tier is
+"strictly for personal use", forbids redistributing "derived results" and
+requires all data deleted when a subscription ends — a pillar score posted to
+Discord is a derived result shared with a third party, and an append-only fact
+layer cannot live under a delete-on-cancel clause. The Apify actors charge $0.10
+an alert, which is $50 a day here. secform4.com sets `Crawl-delay: 10`, so one
+sweep of the universe is over four hours against EDGAR's thirty seconds, and
+disallows its own terms-of-use page to crawlers. Every one of them parses the
+same XML this does, so none can add information, only lag.
+
+**Fetch the submission the index names, never `.../{accession}/form4.xml`.** The
+filer's agent names its own XML file: `form4.xml`, `ownership.xml`,
+`wk-form4_1789156901.xml` and `tm2624595-6_4seq1.xml` were four patterns in a
+sample of seven, and guessing costs six filings in seven. The daily index
+already carries the path to the complete submission, which holds the XML
+verbatim.
+
+**Dedupe by accession before fetching.** EDGAR writes one index line per *filer*
+and a Form 4 names at least two, so 921 Form 4 rows on 2026-09-11 were 435
+filings and one was listed eleven times. The happy consequence is the whole
+design: the issuer is always one of those lines, so the universe filter runs
+against the index and the rest are never opened.
+
+**Read the quarter's `index.json` first.** A daily index that does not exist is
+answered 403, and so is a User-Agent SEC has blocked — and `screener.fetch`
+reduces both to the same string. The listing names which days exist, so a
+weekend is never requested and a 403 always means a refusal.
+
+**A refusal ends the pass.** The opposite of Arctic Shift's 422 above, and the
+reason they are different exception types. SEC's limiter blocks the address for
+about ten minutes and every further request extends it, so narrowing and
+retrying is the wrong remedy.
+
+**Do not** point the Bright Data lanes at it. There is no block to route around,
+`EDGAR_DELAY_MS` is the knob, and rotating four exit addresses at a government
+service that publishes its rate limit would be conspicuous rather than clever.
+
+**Do not** add a check constraint on `transaction_code`. SEC owns that
+vocabulary and has grown it before; two measured days already produced nine
+codes. A constraint means the first filing using a new letter loses its row and
+reads as a parser bug.
+
+---
+
 ## Nightly scheduling
 
 `screener.nightly` — prices, then fundamentals, then scoring, once a night at 23:00 UTC, in a

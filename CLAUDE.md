@@ -134,6 +134,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   capture left by a dead supervisor.
 - Serve sentiment: `python -m screener.sentiment` (the container's command) — FinBERT on
   `/score`, weights loaded before the socket opens. No arguments, no credentials, no database.
+- Ingest insider transactions: `python -m screener.edgar` (the container's command) — walks the
+  EDGAR daily indexes it has not walked yet, newest first, `EDGAR_DAYS_PER_PASS` a pass. No
+  arguments and no `backfill` subcommand: widening `EDGAR_BACKFILL_DAYS` offers more days and the
+  running container drains them. Unset `EDGAR_CONTACT_EMAIL` exits 0 without opening a socket.
 - Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
   UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
   given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
@@ -186,6 +190,39 @@ nothing outside imports a submodule directly.
   `bot/render.py` posts it to `/api/render` in the web container, which rasterises the same
   string to PNG for Discord. One renderer, so the two surfaces cannot drift — do not add a second
   way to draw a chart.
+- `screener.edgar` — SEC Form 4, the first data behind the Insider pillar, in a container that
+  wakes every `EDGAR_REFRESH_HOURS`. Two halves sharing nothing but a dataclass, as `reddit` and
+  `universe` do. **The unambiguous API case**: no key, no session, no proxy, `robots.txt` does not
+  disallow `/Archives/`, and SEC publishes the rate it will serve. What it does require is a
+  contact address in the User-Agent, so `EDGAR_CONTACT_EMAIL` is the credential and the off switch
+  at once — deliberately *not* `SEC_CONTACT_EMAIL`, or setting an address for the quarterly
+  universe refresh would start a daily crawler.
+  Unlike `reddit` and `magpie` this does **not** stop short of a security: a Form 4 names its
+  issuer's CIK and `universe` already matches identity on CIK, so the question that blocked both of
+  those does not arise. Three facts decide the whole design and each was measured, not inferred.
+  **The filing's XML filename is the filer agent's choice** — `form4.xml`, `ownership.xml`,
+  `wk-form4_1789156901.xml` and `tm2624595-6_4seq1.xml` in a sample of seven — so what is fetched is
+  the complete submission the daily index already names, and guessing `form4.xml` 404s six times in
+  seven. **EDGAR writes one index line per filer, not per filing**: 921 Form 4 rows on 2026-09-11
+  were 435 filings, one listed eleven times — and because the issuer is always one of those lines,
+  the universe filter runs against the *index*, so the rest are never opened. That filter matches
+  on any filer rather than on the issuer, so a company we hold filing as a ten percent owner of one
+  we do not is fetched and then dropped: one transaction in 437 on 11 September.
+  **A missing daily index is 403, not 404**, indistinguishable from SEC refusing us once
+  `screener.fetch` has collapsed it to a string, so the quarter's `index.json` is read first and a
+  day it does not name is never requested. A refusal therefore **ends the pass** rather than
+  narrowing and retrying, which is the opposite of Arctic Shift's 422: SEC blocks the address for
+  about ten minutes and every further request extends it.
+  One row per transaction, with the reporting owners as arrays — a Form 4 can be filed jointly, and
+  on 2026-09-11 ten owners shared a single 79,649-share trade, so a row per owner would have read
+  as ten times the volume with every figure looking plausible. The key is
+  `(accession, table_kind, transaction_seq)` and the sequence is what makes it safe: two grants on
+  the same day at the same price under different plans are two real transactions, and a key over
+  the contents would silently merge them. The frontier is `ingest_run`, not a new table and not
+  `max(filed_date)` — a day when nobody we hold filed produces no rows, and "walked it, found
+  nothing" must not read as "never walked it". Widening `EDGAR_BACKFILL_DAYS` **is** the backfill;
+  there is no subcommand. Ingest only: nothing scores anything, and the pillar needs a
+  weight-version bump rather than a table.
 - `screener.magpie` — the scraper, in a container of its own. Paste a link and the article is
   fetched over the cheapest route that works, read out of the page and kept. **The escalating
   ladder is not here**: `screener.fetch` already had `direct -> isp_proxy -> unlocker`, and nothing

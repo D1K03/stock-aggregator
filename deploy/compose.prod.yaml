@@ -372,6 +372,52 @@ services:
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
       INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
+  # Insider transactions: SEC Form 4, for the Insider/Institutional pillar.
+  #
+  # The `reddit` arrangement rather than the `magpie` one: httpx, psycopg and
+  # the stdlib XML parser, so this is the api image with a different command.
+  # No second Dockerfile and no extra image to pull on a deploy.
+  #
+  # **Off unless EDGAR_CONTACT_EMAIL is set**, and the address is the credential
+  # and the switch at once -- SEC answers 403 to a User-Agent that names nobody,
+  # so there is nothing here to turn on without one. Deliberately *not*
+  # SEC_CONTACT_EMAIL, which the quarterly universe refresh reads: setting a
+  # contact address for a command run four times a year should not start a
+  # daily crawler against the same government service. Unset, this logs one line
+  # and exits 0, which `restart: unless-stopped` answers by starting it again to
+  # exit again -- a cheap loop, no socket and no connection, and the same shape
+  # `nightly` has with NIGHTLY_ENABLED=false.
+  #
+  # No ports, no Caddy route and no healthcheck, for the reason `reddit` has
+  # none: a probe cannot tell "asleep until the next pass" from "wedged", and
+  # restarting a worker that was fine is worse than not noticing for twelve
+  # hours.
+  edgar:
+    image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "screener.edgar"]
+
+    depends_on:
+      # On `api`, not on `postgres`, for the reason `reddit` gives: a healthy
+      # database is not a migrated one. This needs `insider_transaction` and the
+      # `data_source` row -- and a loaded `security` table, because the walk
+      # filters EDGAR's daily index against `security.cik` and an empty universe
+      # is a pass that correctly fetches nothing while looking exactly like a
+      # broken one.
+      api:
+        condition: service_healthy
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-screener}:${POSTGRES_PASSWORD:-screener}@postgres:5432/${POSTGRES_DB:-screener}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+
   # The nightly pipeline: prices, fundamentals, scoring, once a night.
   #
   # Its own service rather than a cron on the box, because a schedule outside

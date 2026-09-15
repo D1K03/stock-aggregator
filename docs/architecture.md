@@ -14,7 +14,7 @@ draws it so the tables and packages below have somewhere to land.
 
 ## What runs, and what talks to what
 
-Twelve containers in one compose project, sharing a VPS with four other stacks.
+Thirteen containers in one compose project, sharing a VPS with four other stacks.
 Four facts do most of the work in this picture:
 
 - **Nothing publishes a host port in production.** Caddy reaches the services
@@ -22,9 +22,9 @@ Four facts do most of the work in this picture:
   collide with the neighbouring stacks and the database has no public surface.
 - **`cloudflared` dials outward.** The Cloudflare edge never dials in. That is
   the whole ingress story, and it is why there is no firewall rule to maintain.
-- **`api`, `bot` and `reddit` are the same image** with different commands. One
-  dependency set, one build; the cost is that the api image carries `discord.py`
-  without importing it.
+- **`api`, `bot`, `reddit` and `edgar` are the same image** with different
+  commands. One dependency set, one build; the cost is that the api image
+  carries `discord.py` without importing it.
 - **`transcribe`, `sentiment` and `skybird` are not**, and that is the rule the
   pair above is the exception to. A separate image is what a separate dependency
   set earns: ctranslate2, onnxruntime and PyAV for the first, ffmpeg and yt-dlp
@@ -49,6 +49,7 @@ flowchart LR
         snt["sentiment<br/>ghcr.io/d1k03/stock-aggregator-sentiment<br/>FinBERT as ONNX, expose 8083"]
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
         rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
+        edg["edgar<br/>same image as api<br/>python -m screener.edgar<br/>off without a contact address"]
         mag["magpie<br/>ghcr.io/d1k03/stock-aggregator-magpie<br/>trafilatura, expose 8082"]
         night["nightly<br/>same image as api<br/>python -m screener.nightly"]
         pg[("postgres:16<br/>named volume pg_data")]
@@ -61,6 +62,7 @@ flowchart LR
     drest["Discord REST v10"]
     streams["YouTube / Twitch"]
     arctic["Arctic Shift"]
+    sec["SEC EDGAR"]
     sites["Any page someone pastes"]
 
     internet --> edge
@@ -77,6 +79,7 @@ flowchart LR
     api -->|"POST /score, selftest only so far"| snt
     sky -->|"audio only, via yt-dlp"| streams
     rdt -->|"posts + comments"| arctic
+    edg -->|"daily index + form 4 filings"| sec
     api -->|"POST /document"| mag
     bot -->|"POST /document"| mag
     mag -->|"direct → isp_proxy → unlocker"| sites
@@ -85,6 +88,7 @@ flowchart LR
     bot --> pg
     sky --> pg
     rdt --> pg
+    edg --> pg
     night --> pg
     api --> infisical
     api --> ghoauth
@@ -94,6 +98,7 @@ flowchart LR
     bot --> router
     bot --> dgw
     rdt --> infisical
+    edg --> infisical
     night --> infisical
     night -->|"only when a night is given up"| drest
 ```
@@ -124,6 +129,19 @@ is built and deployed; nothing in the pipeline scores anything with it yet.
 them, and wiring the Sentiment pillar is the separate piece of work `PLAN.md`
 describes — a new input into a pillar moves every ticker on the night it lands,
 so it goes in behind a weight-version bump rather than beside one.
+
+**`edgar` is the only service that ships switched off.** Its single outbound
+edge goes to sec.gov, and it holds no credential beyond the contact address SEC
+requires in a User-Agent, which is also its on switch: unset, it logs one line
+and exits 0, and `restart: unless-stopped` starts it again to exit again. That
+costs nothing, opens no socket and no connection, and means merging it changes
+nothing for a running deployment until somebody puts an address in Infisical.
+No port and no healthcheck, for the reason `reddit` has neither.
+
+Unlike `rdt` and `mag`, its arrow reaches a source that can be joined to a
+security without anything being inferred: a Form 4 names its issuer's CIK and
+the universe is already keyed on CIK. It still scores nothing — the Insider
+pillar is a weight-version bump away, not a table away.
 
 **`skybird` has no port either, and no edge pointing at it.** It is the only
 service nothing calls: it reads what to do from Postgres, pulls audio, posts it
@@ -261,6 +279,7 @@ flowchart TD
     universe["universe"]
     blobs["blobs<br/>local + s3, hand-rolled SigV4"]
     ingest["ingest<br/>prices + sweep"]
+    edgar["edgar<br/>source + store, no shared state<br/>off without a contact address"]
     scoring["scoring<br/>eight pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
     sentiment["sentiment<br/>client only; server is one lazy import away from a BERT"]
@@ -312,6 +331,12 @@ flowchart TD
     ingest --> fetch
     ingest --> blobs
 
+    edgar --> settings
+    edgar --> secrets
+    edgar --> fetch
+    edgar --> audit
+    edgar --> env
+
     scoring --> settings
     scoring --> prov
 
@@ -346,9 +371,9 @@ dependency.
 
 ## The database
 
-Thirty-seven tables across five schemas, not counting the yearly partitions.
-`public` holds the screener's own data model; `auth`, `audit`, `skybird` and
-`mcp` are separate for one reason each time — no scoring query joins to any of
+Forty-two tables across six schemas, not counting the yearly partitions.
+`public` holds the screener's own data model; `auth`, `audit`, `skybird`,
+`magpie` and `mcp` are separate for one reason each time — no scoring query joins to any of
 them — and because the test suite's `drop schema public cascade` should keep
 meaning exactly what it says. Each of the four had to say so in its own
 migration, which is the point: a schema is where something goes when it is not
@@ -476,6 +501,46 @@ one** through `restates_id`; nothing is ever overwritten.
 `ingest_observation` is deliberately not partitioned. A partitioned table's
 unique constraint must include the partition key, which would force a composite
 primary key and break the simple foreign keys the traceability chain depends on.
+
+**`insider_transaction` sits beside that chain rather than inside it**, and is
+the only ingested table drawn here that does not hang off `ingest_observation`:
+
+```mermaid
+erDiagram
+    data_source ||--o{ insider_transaction : source_id
+    security ||--o{ insider_transaction : security_id
+
+    insider_transaction {
+        bigint id PK
+        text accession_number "SEC's, immutable"
+        text table_kind "derivative or not"
+        smallint transaction_seq "position in that table"
+        date transaction_date "what it describes"
+        date filed_date "when the paperwork arrived"
+        text transaction_code "P, S, A, M, F, G... SEC's vocabulary"
+        numeric shares
+        numeric price_per_share
+        text_ARRAY owner_names "every reporting owner"
+        boolean is_officer "OR'd across owners"
+        bytea content_hash
+    }
+```
+
+It keeps extracted fields rather than a payload, as `social_item` does, so there
+is no blob and no observation row; the traceability anchor is
+`accession_number`, which resolves to a permanent public URL on sec.gov. It is
+in `public` and not a schema of its own, unlike `magpie` and `skybird`, for the
+reason those two were given schemas in the first place: they reference no
+`security` and no scoring query joins them. This one carries a not-null
+`security_id` and the Insider pillar will join it to `price_daily`.
+
+Two columns carry the design. `transaction_seq` is what makes the key safe — two
+grants on the same day at the same price under different plans are two real
+transactions, and a key over the contents would merge them. `owner_names` is an
+array because a Form 4 can be filed jointly and 11% of rows are: ten owners once
+shared a single 79,649-share trade, and a row per owner would have read as ten
+times the volume. `docs/specs/2026-09-15-insider-transactions.md` has both
+arguments in full.
 
 ### Scoring runs, the derived daily layer and alerting
 
