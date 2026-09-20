@@ -375,6 +375,12 @@ def unconfigured_server(monkeypatch, db_url, fresh_db):
         ("/api/skybird/pause", b'{"id": 1}'),
         ("/api/skybird/resume", b'{"id": 1}'),
         ("/api/skybird/delete", b'{"id": 1}'),
+        # Rupert, same list, same reason. It carries the text of comments
+        # beside our reading of them, so it is not a thing to serve open.
+        ("/api/rupert", None),
+        ("/api/rupert/narrative", b'{"security": 1}'),
+        ("/api/rupert/decision?id=1", None),
+        ("/api/rupert/pause", b'{"paused": true}'),
     ],
 )
 def test_nothing_opens_up_when_sign_in_is_unconfigured(unconfigured_server, path, data):

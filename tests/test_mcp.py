@@ -66,6 +66,23 @@ SOCIAL_GAP = {"public.social_gap"}
 # public filings that claude.ai could fetch from sec.gov for itself.
 EDGAR = {"public.insider_transaction"}
 
+# Granted by 028, invisible to the parser above for the same reason.
+#
+# A ticker, a confidence and three probabilities about a comment `social_item`
+# already sends. What is new is the link between the two, and it leaves the box
+# on the same terms as everything else here: it is our reading of a public post,
+# not anybody's private data.
+RUPERT = {
+    "rupert.mention",
+    "rupert.reading",
+    "rupert.progress",
+    # 029: a paragraph about public Reddit comments social_item already sends.
+    "rupert.narrative",
+    # 031: one row saying whether the nightly passes are allowed to run. No
+    # text and nobody's data — a boolean, a name and a timestamp.
+    "rupert.control",
+}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -335,7 +352,7 @@ def test_every_table_is_granted_or_deliberately_denied(connector, fresh_db):
         """
     ).fetchall()
     assert {r[0] for r in rows} == (
-        granted_in_migration() | set(DENIED) | MAGPIE | SOCIAL_GAP | EDGAR
+        granted_in_migration() | set(DENIED) | MAGPIE | SOCIAL_GAP | EDGAR | RUPERT
     )
 
 

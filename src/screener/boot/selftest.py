@@ -259,6 +259,57 @@ def _sentiment() -> Check:
     )
 
 
+# Ordinary English that a naive symbol match reads as three companies, and that
+# the live corpus produces constantly: ALL, IT and ON were all in the top 25
+# bare-token matches over three measured days. The right answer is `none`.
+UNAMBIGUOUSLY_NOBODY = "honestly I just put IT ALL on red and moved ON with my life"
+
+
+def _rupert() -> Check:
+    """Whether the resolver can still tell a sentence from a ticker.
+
+    The `none` option is the load-bearing part of this whole layer, so it is
+    what gets checked — the same choice `_sentiment` makes in testing polarity
+    rather than reachability. A decisions endpoint that is merely *up* is loud
+    when it breaks. A model that has quietly started picking a company for every
+    sentence is silent, produces a well-formed row per comment, and would wire
+    Allstate to every mention of the word "all" in r/wallstreetbets.
+
+    Costs about four hundredths of a cent, on the same terms as the OpenRouter
+    probe above, and is skipped entirely while the layer is switched off.
+    """
+    from screener.rupert import RupertConfig
+    from screener.rupert import questions
+    from screener.rupert.decide import decide
+
+    config = RupertConfig.from_env()
+    if not config.enabled:
+        return Check("rupert", SKIP, "RUPERT_DAILY_MAX_CALLS is 0")
+
+    names = {"ALL": "The Allstate Corporation", "IT": "Gartner", "ON": "ON Semiconductor"}
+    found = tuple(names)
+    answer = decide(
+        state=questions.state(UNAMBIGUOUSLY_NOBODY, found, names),
+        questions=questions.build(found, names),
+    )
+    choice = answer.choices.get(questions.WHICH)
+    if choice is None:
+        return Check("rupert", FAIL, "the model answered without a choice")
+    if choice.chosen != questions.NONE:
+        return Check(
+            "rupert",
+            FAIL,
+            f"ordinary English resolved to {choice.chosen} at {choice.confidence:.2f} — "
+            "the shortlist is being taken as the answer",
+        )
+    return Check(
+        "rupert",
+        OK,
+        f"three English words refused at {choice.confidence:.2f} confidence, "
+        f"${answer.cost_usd:.6f}",
+    )
+
+
 def _playground() -> Check:
     """Whether the read-only role is reachable, and that it is not privileged.
 
@@ -389,6 +440,7 @@ def run() -> bool:
         _safe("discord bot", _bot),
         _safe("reddit", _reddit),
         _safe("sentiment", _sentiment),
+        _safe("rupert", _rupert),
         _safe("playground", _playground),
         _safe("mcp", _connector),
     ]

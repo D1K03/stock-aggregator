@@ -30,6 +30,8 @@ NEEDS_DATABASE = {
     "skybird": "the control plane -- it polls for a row and writes transcripts",
     "nightly": "it reads and writes every table the pipeline touches",
     "magpie": "magpie.document and magpie.attempt, which is also its spend meter",
+    "rupert": "the corpora it reads, the mentions it writes, and rupert.progress, "
+              "which is its frontier rather than only its log",
 }
 
 # Every service that must NOT be handed one, each for a stated reason.

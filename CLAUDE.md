@@ -138,6 +138,11 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   EDGAR daily indexes it has not walked yet, newest first, `EDGAR_DAYS_PER_PASS` a pass. No
   arguments and no `backfill` subcommand: widening `EDGAR_BACKFILL_DAYS` offers more days and the
   running container drains them. Unset `EDGAR_CONTACT_EMAIL` exits 0 without opening a socket.
+- Resolve what texts are about: `python -m screener.rupert` (the container's command) — a
+  regex shortlists candidate symbols, a decision model picks which one the sentence is actually
+  about, and FinBERT reads what resolved. No arguments and no subcommands: `RUPERT_DAILY_MAX_CALLS`
+  is the budget and the off switch at once, and it defaults to 0, so the container exits 0 until
+  it is set and then needs recreating (`docker compose up -d rupert`) rather than restarting.
 - Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
   UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
   given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
@@ -301,6 +306,69 @@ nothing outside imports a submodule directly.
   held every one. Gaps drain *after* the catch-up span, never before, because a repair has no
   upper bound and fresh comments should not wait behind one. `python -m screener.reddit backfill
   [days]` queues a stretch and exits; the running container drains it.
+- `screener.rupert` — which security a text is about, and what kind of thing it says. **The join
+  `screener.reddit` and `screener.magpie` both stopped short of**, and the reason both stopped:
+  012 and 022 each said in their own migration that connecting an item to a ticker was its own
+  piece of work, and 022 said why a nullable `security_id` was the wrong shape for it. A
+  resolution is a decision made with a model, at a moment, with a confidence and a set of
+  alternatives — so it is a table, and all of that is kept.
+  Two halves sharing nothing but a dataclass, as `reddit` and `edgar` do: `decide` never opens a
+  database connection, `store` never opens a socket, and `candidates`, `questions` and `reduce`
+  are pure and open neither.
+  **Three measurements decided the design, and all three are from the live corpus.** `$TICKER`
+  reaches **0.6% of comments**, so a cashtag-only resolver sees nothing and bare uppercase tokens
+  have to be candidates. Doing that reaches **5.6% of items** — and roughly **a quarter of the top
+  matches are ordinary English**: `YOU`, `ON`, `IT`, `ARE`, `ALL`, `AM`, `NOW` and `PM` all sat in
+  the top 25 over three days, beside real traffic in `MU`, `SNDK`, `AMD` and `NVDA`. **A blacklist
+  is lossy in both directions** — dropping `ALL`, `IT` and `ON` discards Allstate, Gartner and ON
+  Semiconductor for good, because the difference between "I put it ALL on calls" and "ALL reported
+  a combined ratio of 91" is the sentence and not the word. So the regex shortlists and refuses to
+  choose, and something that can read the sentence chooses.
+  The chooser is **Jev** (`typesafe/jev-1.13`), reached through OpenRouter's separate
+  `/api/alpha/decisions` endpoint — same key, same bill, same `usage.cost` the rest of the tree
+  already trusts instead of a local price table. It is not an LLM and generates no text: it
+  answers typed questions with probability distributions. **`DESIGN.md`'s rule stands unchanged —
+  an LLM never emits a score.** It is asked `choice` and `noul` only (which company, what kind of
+  claim, and three gates); tone is FinBERT's and only FinBERT's. Its own `score` primitive is the
+  worst-calibrated of the three out of distribution and is deliberately unused.
+  **The calibration is a reading to threshold, not a fact to trust.** An independent test measured
+  it overconfident on `choice` out of distribution (refit temperature 3.29) and *under*confident on
+  `noul` (0.66) — which is why the yes/no questions are the gates and the choice carries a high
+  floor, and why the whole distribution is stored so a threshold can be re-cut without re-deciding
+  a night. A choice below the floor is kept as `unsure` rather than dropped.
+  **`/rupert` is the page, and the review list at the bottom of it is the point.** A wrong link
+  is this layer's failure mode, no aggregate will ever show you one, and the only way to catch
+  `ALL` being read as Allstate in "I put it ALL on calls" is to read the sentence beside the
+  decision — so the page shows the sentences, the alternatives each was chosen between, and the
+  refusals, on `magpie.attempt`'s terms. Above it: what the resolver did and what it cost per day
+  on one plot (bars are decisions, the filled part resolved, the line dollars), the securities
+  being talked about with `reduce`'s own tone and an attention z-score, the frontier, and the
+  recent passes. `screener.rupert.panel` is the read layer, standing to `rupert` as
+  `screener.screen` stands to `screener.scoring`, and it **calls `reduce` rather than
+  reimplementing the trimming in SQL** so the number on the page and the number a pillar would
+  score cannot drift. One endpoint, `/api/rupert`, because the spend explains the activity and the
+  activity explains the coverage — six calls would let one screen disagree with itself.
+  **Rupert is versioned, and the diagrams are part of the deliverable.** `screener.rupert.VERSION`
+  is the *pipeline* version — the shortlist rules, the question set, the gates, the thresholds —
+  and is stamped on every row as `rupert.mention.rupert_version`, for the reason `scoring_run`
+  carries a `logic_version_id`: a decision taken under different questions is not comparable with
+  one taken under these. It is **not** the model's version; `mention.model` is that, and the two
+  move independently. Bump it when the *decision* changes, never for a refactor that produces the
+  same decisions, and add a `CHANGELOG` entry in `rupert/version.py` — a version with no entry is
+  one nobody can explain.
+  **When you change how Rupert decides, update `docs/rupert.md` in the same change.** The
+  diagrams there are the explanation people actually read, they are rendered in the dashboard at
+  `/rupert/how`, and `tests/test_rupert_docs.py` fails if the two copies drift. A new question, a
+  new state, a changed threshold or a new corpus is a diagram edit as much as a code edit; leaving
+  the picture describing the previous Rupert is worse than having no picture, because it is
+  believed.
+  `rupert.progress` is the frontier, not `max(observed_at)` over the mentions: 94.4% of the corpus
+  shortlists nothing and writes no row, so "read it, found nothing" would otherwise be
+  indistinguishable from "never read it" — `screener.edgar`'s argument about `max(filed_date)`,
+  applied to a scalar instead of a set. Its own counter rather than `DAILY_SPEND_CAP_USD`, on
+  magpie's precedent: one counter for the assistant and for a corpus pass would let a busy night
+  silence Steven. Ingest only — `reduce` is pure and **nothing consumes it**, because a new input
+  moves a pillar for every ticker on the night it lands.
 - `screener.sentiment` — FinBERT, in a container of its own, split the way `transcribe` is: the
   client half is `httpx` and nothing else, the server half holds `onnxruntime` and is the only
   thing that installs the `sentiment` extra. A separate image is earned here by the **weights**

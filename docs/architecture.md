@@ -22,7 +22,7 @@ Four facts do most of the work in this picture:
   collide with the neighbouring stacks and the database has no public surface.
 - **`cloudflared` dials outward.** The Cloudflare edge never dials in. That is
   the whole ingress story, and it is why there is no firewall rule to maintain.
-- **`api`, `bot`, `reddit` and `edgar` are the same image** with different
+- **`api`, `bot`, `reddit`, `edgar` and `rupert` are the same image** with different
   commands. One dependency set, one build; the cost is that the api image
   carries `discord.py` without importing it.
 - **`transcribe`, `sentiment` and `skybird` are not**, and that is the rule the
@@ -50,6 +50,7 @@ flowchart LR
         sky["skybird<br/>ghcr.io/d1k03/stock-aggregator-skybird<br/>yt-dlp + ffmpeg, no port"]
         rdt["reddit<br/>same image as api<br/>python -m screener.reddit"]
         edg["edgar<br/>same image as api<br/>python -m screener.edgar<br/>off without a contact address"]
+        rup["rupert<br/>same image as api<br/>python -m screener.rupert<br/>off without a call budget"]
         mag["magpie<br/>ghcr.io/d1k03/stock-aggregator-magpie<br/>trafilatura, expose 8082"]
         night["nightly<br/>same image as api<br/>python -m screener.nightly"]
         pg[("postgres:16<br/>named volume pg_data")]
@@ -76,10 +77,12 @@ flowchart LR
     api -->|"POST /transcribe"| tr
     bot -->|"POST /transcribe"| tr
     sky -->|"POST /transcribe"| tr
-    api -->|"POST /score, selftest only so far"| snt
+    api -->|"POST /score, selftest"| snt
+    rup -->|"POST /score, tone for what resolved"| snt
     sky -->|"audio only, via yt-dlp"| streams
     rdt -->|"posts + comments"| arctic
     edg -->|"daily index + form 4 filings"| sec
+    rup -->|"POST /api/alpha/decisions"| router
     api -->|"POST /document"| mag
     bot -->|"POST /document"| mag
     mag -->|"direct → isp_proxy → unlocker"| sites
@@ -89,6 +92,7 @@ flowchart LR
     sky --> pg
     rdt --> pg
     edg --> pg
+    rup --> pg
     night --> pg
     api --> infisical
     api --> ghoauth
@@ -99,6 +103,7 @@ flowchart LR
     bot --> dgw
     rdt --> infisical
     edg --> infisical
+    rup --> infisical
     night --> infisical
     night -->|"only when a night is given up"| drest
 ```
@@ -123,14 +128,34 @@ port, no Caddy route and no healthcheck — discord.py reconnects with its own
 backoff, and a check that cannot tell "reconnecting" from "wedged" would restart
 a bot that was about to recover.
 
-**`sentiment` has exactly one inbound edge, and it is a self-test.** The service
-is built and deployed; nothing in the pipeline scores anything with it yet.
-`screener.reddit` stores posts and comments and deliberately does not score
-them, and wiring the Sentiment pillar is the separate piece of work `PLAN.md`
-describes — a new input into a pillar moves every ticker on the night it lands,
-so it goes in behind a weight-version bump rather than beside one.
+**`sentiment` has a second inbound edge now, and it is `rupert`.** For most of
+this project's life it had exactly one and it was a self-test. What changed is
+not the classifier — it is that something finally knows which security a text is
+about, which is the question `screener.reddit` and `screener.magpie` both stopped
+short of and the reason nothing could consume a reading before. `rupert` resolves
+first and reads second, so the batch that reaches `/score` is only the items that
+turned out to be about a company.
 
-**`edgar` is the only service that ships switched off.** Its single outbound
+It is also the first ingest in this tree with a page of its own on day one,
+`/rupert`, served by `/api/rupert` off the application's own connection the way
+`/api/screen` is. That is not decoration: a resolution is a judgement rather
+than a fetch, so unlike a stored bar it can be *wrong in a way that still looks
+right*, and the only defence is somebody reading a sample of them next to the
+sentences they were made about.
+
+It still scores nothing. `rupert.reduce` is pure and unconsumed, and wiring the
+Sentiment pillar remains the separate piece of work `PLAN.md` describes — a new
+input into a pillar moves every ticker on the night it lands, so it goes in
+behind a weight-version bump rather than beside one.
+
+**`edgar` and `rupert` are the two services that ship switched off**, and
+`rupert` is the only one that does so because it spends money per item rather
+than per request from a person: its budget starts at zero, it logs one line and
+exits 0, and `restart: unless-stopped` starts it again to exit again. Merging it
+therefore changes nothing for a running deployment until somebody sets
+`RUPERT_DAILY_MAX_CALLS` in Infisical and recreates the container.
+
+As for `edgar`: its single outbound
 edge goes to sec.gov, and it holds no credential beyond the contact address SEC
 requires in a User-Agent, which is also its on switch: unset, it logs one line
 and exits 0, and `restart: unless-stopped` starts it again to exit again. That
@@ -140,7 +165,10 @@ No port and no healthcheck, for the reason `reddit` has neither.
 
 Unlike `rdt` and `mag`, its arrow reaches a source that can be joined to a
 security without anything being inferred: a Form 4 names its issuer's CIK and
-the universe is already keyed on CIK. It still scores nothing — the Insider
+the universe is already keyed on CIK. That is still the distinction, and `rupert`
+is what the other two needed to cross it — the difference being that edgar's join
+is read off the filing and rupert's is a decision it has to record, with a
+confidence and the alternatives it chose between. It still scores nothing — the Insider
 pillar is a weight-version bump away, not a table away.
 
 **`skybird` has no port either, and no edge pointing at it.** It is the only
@@ -280,6 +308,7 @@ flowchart TD
     blobs["blobs<br/>local + s3, hand-rolled SigV4"]
     ingest["ingest<br/>prices + sweep"]
     edgar["edgar<br/>source + store, no shared state<br/>off without a contact address"]
+    rupert["rupert<br/>decide + store, no shared state<br/>off without a call budget"]
     scoring["scoring<br/>eight pure modules + peers + run<br/>advisory lock, reconcile"]
     skybird["skybird<br/>store + platforms only"]
     sentiment["sentiment<br/>client only; server is one lazy import away from a BERT"]
@@ -336,6 +365,12 @@ flowchart TD
     edgar --> fetch
     edgar --> audit
     edgar --> env
+    rupert --> settings
+    rupert --> secrets
+    rupert --> audit
+    rupert --> env
+    rupert --> ai
+    rupert --> sentiment
 
     scoring --> settings
     scoring --> prov

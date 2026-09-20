@@ -8,7 +8,7 @@ import threading
 import time
 import urllib.parse
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -50,6 +50,22 @@ NEXT_COOKIE = "screener_after_login"
 # beside them and the two are paged independently.
 ATTEMPT_PAGE = 12
 DOCUMENT_PAGE = 10
+
+# The decision states /api/rupert will filter on. Named here rather than read
+# off the table, so a value that is not a state is a 400 that says so instead of
+# a query returning nothing and a page saying "no decisions yet".
+RUPERT_STATES = frozenset({"resolved", "none", "unsure", "crowded", "failed"})
+
+
+def reduce_floor() -> int:
+    """The minimum mention count a tone reading needs, from the one definition.
+
+    Imported at call time rather than at module scope, so the status service
+    does not pull `screener.rupert` in to answer /health.
+    """
+    from screener.rupert.reduce import MIN_MENTIONS
+
+    return MIN_MENTIONS
 
 MAX_QUESTION = 500
 
@@ -310,6 +326,12 @@ class Handler(BaseHTTPRequestHandler):
         # it sends a Discord message — but a GET that deletes a transcript is
         # one prefetch or one followed link away from deleting it by accident,
         # and that is worth a Content-Length for.
+        elif route == "/api/rupert/narrative":
+            self._rupert_narrative(config)
+
+        elif route == "/api/rupert/pause":
+            self._rupert_pause(config)
+
         elif route == "/api/magpie/scrape":
             self._magpie_scrape(config)
 
@@ -1073,6 +1095,602 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
+    def _rupert(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """What the resolver has decided, what it found, and what it cost.
+
+        Behind the session for the reason /api/magpie is: it carries the text of
+        comments beside our reading of them, and a list of what a corpus is
+        saying about which companies is not a thing to serve to the internet.
+
+        One answer rather than six endpoints. Every panel on the page is a view
+        of the same pass — the spend explains the activity, the activity
+        explains the coverage — and fetching them separately would let the
+        numbers on one screen disagree by however long the slowest call took.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        wanted_state = (query.get("state") or [""])[0].strip() or None
+        try:
+            page = max(1, int((query.get("page") or ["1"])[0]))
+        except ValueError:
+            page = 1
+        try:
+            wanted_security = int((query.get("security") or ["0"])[0]) or None
+        except ValueError:
+            wanted_security = None
+        if wanted_state is not None and wanted_state not in RUPERT_STATES:
+            # Refused by name rather than silently ignored, on the terms
+            # `screener.screen.params` sets: a wrong query-string value is a
+            # 400 that says which one, never a quiet fallback to everything.
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                {"error": f"state must be one of {', '.join(sorted(RUPERT_STATES))}"},
+            )
+            return
+
+        from screener.rupert import RupertConfig
+        from screener.rupert import panel, store as rupert_store
+        from screener.rupert import version as rupert_version
+        from screener.rupert.run import FINBERT
+
+        settings_ = RupertConfig.from_env()
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                source = rupert_store.source_id(conn)
+                held, by, since = rupert_store.paused(conn)
+                last = rupert_store.last_pass(conn, source)
+                spend = panel.spend(conn)
+                mentioned, scoreable = panel.covered(conn)
+                board = panel.standings(conn, model=FINBERT)
+                # Whichever security was asked for, else the one being talked
+                # about most. A chart that defaulted to empty would make the
+                # busiest thing in the corpus the one you had to go looking for.
+                charted = next(
+                    (s for s in board if s.security_id == wanted_security),
+                    board[0] if board else None,
+                )
+                scored_series = (
+                    [
+                        {
+                            "day": row.day.isoformat(),
+                            "mentions": row.mentions,
+                            "window_mentions": row.window_mentions,
+                            "tone": float(row.tone) if row.tone is not None else None,
+                        }
+                        for row in panel.scored(
+                            conn, charted.security_id, model=FINBERT
+                        )
+                    ]
+                    if charted
+                    else []
+                )
+                payload = {
+                    # The switch, reported rather than inferred. An off resolver
+                    # and a resolver with nothing to do look identical in every
+                    # number below, and the page has to be able to say which.
+                    # Which pipeline decided, and what changed in it. Shown on
+                    # the page and on the diagrams, so a reader can tell whether
+                    # what they are looking at is how it works now.
+                    "version": rupert_version.VERSION,
+                    "version_released": rupert_version.released(),
+                    "version_note": rupert_version.described(),
+                    "changelog": [
+                        {"version": code, "released": when, "note": note}
+                        for code, when, note in rupert_version.CHANGELOG
+                    ],
+                    "enabled": settings_.enabled,
+                    # The schedule, so the page can say when it next runs rather
+                    # than leaving somebody to work it out from a log. `next_at`
+                    # is computed from the last pass's *finish*, because the
+                    # container sleeps its interval after a pass — anchoring on
+                    # the start would promise a run that is already late.
+                    "paused": held,
+                    "paused_by": by,
+                    "paused_at": since.isoformat() if since else None,
+                    "refresh_hours": settings_.refresh_hours,
+                    "last_run_at": last.isoformat() if last else None,
+                    "next_run_at": (
+                        (last + timedelta(hours=settings_.refresh_hours)).isoformat()
+                        if last
+                        else None
+                    ),
+                    "daily_max_calls": settings_.daily_max_calls,
+                    "confidence_floor": settings_.confidence_floor,
+                    "counts": panel.counts(conn),
+                    "spend": {
+                        "calls_today": spend.calls_today,
+                        "cost_today": float(spend.cost_today),
+                        "cost_window": float(spend.cost_window),
+                        "decisions_total": spend.decisions_total,
+                        "per_decision": (
+                            float(spend.per_decision)
+                            if spend.per_decision is not None
+                            else None
+                        ),
+                    },
+                    "coverage": {
+                        "mentioned": mentioned,
+                        "scoreable": scoreable,
+                        "active": panel.active_securities(conn),
+                        "floor": reduce_floor(),
+                        "days": panel.LEADERBOARD_DAYS,
+                    },
+                    "daily": [
+                        {
+                            "day": d.day.isoformat(),
+                            "decisions": d.decisions,
+                            "resolved": d.resolved,
+                            "cost_usd": float(d.cost_usd),
+                        }
+                        for d in panel.daily(conn)
+                    ],
+                    "scored": scored_series,
+                    "scored_security": (
+                        {
+                            "security_id": charted.security_id,
+                            "symbol": charted.symbol,
+                            "name": charted.name,
+                        }
+                        if charted
+                        else None
+                    ),
+                    "rolling_days": panel.ROLLING_DAYS,
+                    "standings": [
+                        {
+                            "security_id": s.security_id,
+                            "symbol": s.symbol,
+                            "name": s.name,
+                            "mentions": s.mentions,
+                            "read": s.read,
+                            "tone": float(s.mood.tone) if s.mood else None,
+                            "trimmed": s.mood.trimmed if s.mood else None,
+                            "attention": (
+                                float(s.attention) if s.attention is not None else None
+                            ),
+                        }
+                        for s in board
+                    ],
+                    "review": [
+                        {
+                            "id": d.id,
+                            "state": d.state,
+                            "chosen": d.chosen,
+                            "symbol": d.symbol,
+                            "confidence": (
+                                float(d.confidence) if d.confidence is not None else None
+                            ),
+                            "candidates": list(d.candidates),
+                            "claim_kind": d.claim_kind,
+                            "injection": (
+                                float(d.injection) if d.injection is not None else None
+                            ),
+                            "position_talk": (
+                                float(d.position_talk)
+                                if d.position_talk is not None
+                                else None
+                            ),
+                            "tone": float(d.tone) if d.tone is not None else None,
+                            "subreddit": d.subreddit,
+                            "excerpt": d.excerpt,
+                            "at": d.at.isoformat(),
+                            "observed_at": d.observed_at.isoformat(),
+                        }
+                        for d in panel.review(
+                            conn,
+                            state=wanted_state,
+                            offset=(page - 1) * panel.REVIEW_SIZE,
+                        )
+                    ],
+                    "review_page": page,
+                    "review_pages": max(
+                        1,
+                        -(-panel.review_total(conn, state=wanted_state)
+                          // panel.REVIEW_SIZE),
+                    ),
+                    "review_total": panel.review_total(conn, state=wanted_state),
+                    "frontiers": [
+                        {
+                            "corpus": f.corpus,
+                            "read_through": f.read_through.isoformat(),
+                            "items_read": f.items_read,
+                            "updated_at": f.updated_at.isoformat(),
+                        }
+                        for f in panel.frontiers(conn)
+                    ],
+                    "passes": [
+                        {
+                            "endpoint": p.endpoint,
+                            "status": p.status,
+                            "started_at": p.started_at.isoformat(),
+                            "finished_at": (
+                                p.finished_at.isoformat() if p.finished_at else None
+                            ),
+                            "shortlisted": p.shortlisted,
+                            "resolved": p.resolved,
+                            "error": p.error,
+                        }
+                        for p in panel.passes(conn, source)
+                    ],
+                }
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        self._respond(HTTPStatus.OK, payload)
+
+    def _rupert_narrative(self, config: AuthConfig) -> None:
+        """What the corpus was saying about one security, in English.
+
+        A POST rather than a GET on the route it sits beside, because it spends
+        money and writes a row — and because a GET that did either is one prefetch
+        away from being expensive by accident.
+
+        **Narrative extraction, never a score.** The model is shown the sentences
+        and never the tone, the confidence or the counts; `panel.for_narrative` is
+        what enforces that rather than the prompt, because a model handed a figure
+        will hand it back as though it had found it.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        try:
+            security_id = int(body.get("security") or 0)
+        except (TypeError, ValueError):
+            security_id = 0
+        if security_id <= 0:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "security is required"})
+            return
+
+        from screener.rupert import narrative, panel
+        from screener.rupert.narrative import WINDOW_DAYS
+
+        today = datetime.now(UTC).date()
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                named = panel.security_named(conn, security_id)
+                if named is None:
+                    self._respond(HTTPStatus.NOT_FOUND, {"error": "no such security"})
+                    return
+                symbol, name = named
+
+                # The cached answer costs nothing and is checked before the cap,
+                # so being over the cap never hides a paragraph that has already
+                # been paid for.
+                held = panel.read_narrative(
+                    conn, security_id, as_of=today, model=narrative.DEFAULT_MODEL
+                )
+                if held is not None:
+                    text, used, window = held
+                    self._respond(
+                        HTTPStatus.OK,
+                        {
+                            "symbol": symbol, "name": name, "text": text,
+                            "mentions_used": used, "window_days": window,
+                            "cached": True,
+                        },
+                    )
+                    return
+
+                rows = panel.for_narrative(
+                    conn, security_id,
+                    days=WINDOW_DAYS, limit=narrative.MAX_MENTIONS,
+                )
+                if not rows:
+                    self._respond(
+                        HTTPStatus.OK,
+                        {
+                            "symbol": symbol, "name": name, "text": None,
+                            "mentions_used": 0, "window_days": WINDOW_DAYS,
+                            "cached": False,
+                        },
+                    )
+                    return
+
+                # Two caps, both before the model is called — the point of a
+                # cap is that the request over it is never paid for.
+                #
+                # This one bounds how many narratives exist in a day at all,
+                # across everybody, on `screener.magpie`'s precedent: a narrative
+                # is about five times a chat reply, and one counter for both
+                # would let a morning of clicking through the leaderboard eat the
+                # allowance Steven answers from.
+                if panel.narratives_today(conn, as_of=today) >= narrative.DAILY_MAX:
+                    self._respond(
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        {
+                            "error": (
+                                f"{narrative.DAILY_MAX} narratives have been "
+                                "written today, which is the daily ceiling. The "
+                                "ones already written are still readable."
+                            )
+                        },
+                    )
+                    return
+
+                from screener.bot import budget
+
+                # And this one is per person, folded onto GitHub so it cannot be
+                # doubled by switching surface. Both apply: being under the
+                # ceiling above does not buy you room over your own cap.
+                allowance = budget.check(login, "github")
+                if not allowance.allowed:
+                    self._respond(
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        {
+                            "error": (
+                                "That would go over the daily spend cap — "
+                                f"{budget.usd(allowance.spent)} of "
+                                f"{budget.usd(allowance.cap)} used in the last 24 hours."
+                            )
+                        },
+                    )
+                    return
+
+                written = narrative.write(
+                    symbol, name,
+                    [narrative.Mention(excerpt=e, claim_kind=k) for e, k in rows],
+                )
+                if written is None:
+                    # Two different failures, and telling them apart is the
+                    # whole value of this branch. "No key" is a deployment that
+                    # was never finished and stays broken until somebody acts;
+                    # "the model would not answer" passes on its own. A single
+                    # message for both is how the first one goes unnoticed for
+                    # a month -- the failure mode this project keeps naming.
+                    from screener.ai import RouterConfig
+
+                    configured = RouterConfig.from_env().enabled
+                    self._respond(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {
+                            "error": (
+                                "The narrative model is not configured — "
+                                "OPENROUTER_API_KEY is unset, so nothing can "
+                                "summarise. Everything else on this page works "
+                                "without it."
+                                if not configured
+                                else "The model would not answer just now. "
+                                "Try again in a moment."
+                            ),
+                            "configured": configured,
+                        },
+                    )
+                    return
+
+                panel.save_narrative(
+                    conn, security_id,
+                    as_of=today, text=written.text,
+                    mentions_used=written.mentions_used, window_days=WINDOW_DAYS,
+                    model=narrative.DEFAULT_MODEL, cost_usd=written.cost_usd,
+                )
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        # Outside the connection block: `record` opens its own, and it is the
+        # same trail Steven's replies land on so one person's spend is one sum.
+        audit.record(
+            kind="agent",
+            operation="rupert.narrative",
+            actor=login,
+            actor_kind="github",
+            model=written.model,
+            cost_usd=written.cost_usd,
+            detail={"symbol": symbol, "mentions": written.mentions_used},
+        )
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "symbol": symbol, "name": name, "text": written.text,
+                "mentions_used": written.mentions_used, "window_days": WINDOW_DAYS,
+                "cached": False,
+            },
+        )
+
+    def _rupert_pause(self, config: AuthConfig) -> None:
+        """Stop or start Rupert's nightly passes.
+
+        Deliberately *not* the same switch as `RUPERT_DAILY_MAX_CALLS`. That one
+        lives in Infisical and means "this container has no business running";
+        changing it needs the container recreated. This is the operator's switch
+        — reversible in a second, for "not tonight" — and it is a row the pass
+        reads at the top of each wake, which is how it takes effect without a
+        deploy.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        body = self._json_body(MAX_SKYBIRD_BODY)
+        if body is None:
+            return
+        wanted = body.get("paused")
+        if not isinstance(wanted, bool):
+            self._respond(
+                HTTPStatus.BAD_REQUEST, {"error": "paused must be true or false"}
+            )
+            return
+
+        from screener.rupert import store as rupert_store
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                rupert_store.set_paused(conn, wanted, by=login)
+                held, by, since = rupert_store.paused(conn)
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        audit.record(
+            kind="system",
+            operation="rupert.pause" if wanted else "rupert.resume",
+            actor=login,
+            actor_kind="github",
+            detail={"paused": wanted},
+        )
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "paused": held,
+                "paused_by": by,
+                "paused_at": since.isoformat() if since else None,
+            },
+        )
+
+    def _rupert_decision(
+        self, config: AuthConfig, query: dict[str, list[str]]
+    ) -> None:
+        """Everything that went into one decision, and everything that came out.
+
+        **The whole provenance, in one answer.** What the text was, what the
+        regex shortlisted, the exact question set the model was asked, every
+        probability it returned, what FinBERT was given and the three numbers it
+        gave back — plus which Rupert asked and what it cost.
+
+        The request is **reconstructed rather than stored**, which is
+        `screener.screen.explain`'s move: `rupert.questions` is pure, so the
+        questions for a given shortlist can be rebuilt exactly instead of kept
+        as a duplicate copy that could drift from the code that sends them.
+        Rebuilt under *today's* question set, so a decision taken under an older
+        Rupert is marked rather than silently redrawn — `rupert_version` on the
+        row is what says which.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+        try:
+            mention_id = int((query.get("id") or ["0"])[0])
+        except ValueError:
+            mention_id = 0
+        if mention_id <= 0:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "id is required"})
+            return
+
+        from screener import sentiment as sentiment_client
+        from screener.rupert import config as rupert_config
+        from screener.rupert import panel
+        from screener.rupert import questions as rupert_questions
+        from screener.rupert import version as rupert_version
+
+        try:
+            with psycopg.connect(
+                settings().database_url, connect_timeout=3, autocommit=True
+            ) as conn:
+                found = panel.decision(conn, mention_id)
+                if found is None:
+                    self._respond(HTTPStatus.NOT_FOUND, {"error": "no such decision"})
+                    return
+                names = panel.names_for(conn, found.candidates)
+        except psycopg.Error as exc:
+            self._respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)[:200]})
+            return
+
+        asked = None
+        if found.candidates:
+            asked = {
+                "state": rupert_questions.state(found.sent_text, found.candidates, names),
+                "questions": rupert_questions.build(found.candidates, names),
+            }
+
+        self._respond(
+            HTTPStatus.OK,
+            {
+                "id": found.id,
+                "state": found.state,
+                "rupert_version": found.rupert_version,
+                "version_is_current": found.rupert_version == rupert_version.VERSION,
+                "current_version": rupert_version.VERSION,
+                "source": {
+                    "corpus": found.corpus,
+                    "subreddit": found.subreddit,
+                    "author": found.author,
+                    "permalink": found.permalink,
+                    "created_utc": found.created_utc.isoformat()
+                    if found.created_utc
+                    else None,
+                    "title": found.title,
+                    "body": found.body,
+                },
+                "shortlist": {
+                    "candidates": list(found.candidates),
+                    "names": names,
+                    # What was actually sent, after the excerpt trim — not the
+                    # whole comment, which is what a reader would assume.
+                    "sent_text": found.sent_text,
+                },
+                "jev": {
+                    "model": found.model,
+                    "asked": asked,
+                    "reconstructed": True,
+                    "chosen": found.chosen,
+                    "confidence": float(found.confidence)
+                    if found.confidence is not None
+                    else None,
+                    "probabilities": found.probabilities,
+                    "own_business": float(found.own_business)
+                    if found.own_business is not None
+                    else None,
+                    "position_talk": float(found.position_talk)
+                    if found.position_talk is not None
+                    else None,
+                    "injection": float(found.injection)
+                    if found.injection is not None
+                    else None,
+                    "claim_kind": found.claim_kind,
+                    "claim_confidence": float(found.claim_confidence)
+                    if found.claim_confidence is not None
+                    else None,
+                    "input_tokens": found.input_tokens,
+                    "cost_usd": float(found.cost_usd),
+                    "decided_at": found.observed_at.isoformat(),
+                },
+                # What FinBERT was actually handed, and the three caps between
+                # the comment and the tokens the model saw. Shown for the same
+                # reason the Jev request is: a reading whose input you cannot see
+                # is a number you have to take on trust, and the excerpt is not
+                # the comment — it is a trimmed copy of it.
+                "finbert_input": {
+                    "text": found.sent_text,
+                    "chars": len(found.sent_text),
+                    "excerpt_cap": rupert_config.DEFAULT_MAX_CHARS,
+                    "client_cap": sentiment_client.MAX_CHARS,
+                    "batch_cap": sentiment_client.MAX_TEXTS,
+                    "token_cap": 512,
+                    "same_as_jev": True,
+                },
+                "finbert": [
+                    {
+                        "model": r.model,
+                        "positive": float(r.positive),
+                        "negative": float(r.negative),
+                        "neutral": float(r.neutral),
+                        # Derived here the way the client derives it, never
+                        # stored: one definition, and a reading always carries
+                        # the inputs it came from.
+                        "score": float(r.positive) - float(r.negative),
+                        "read_at": r.observed_at.isoformat(),
+                    }
+                    for r in found.readings
+                ],
+                "security": (
+                    {"id": found.security_id, "symbol": found.symbol, "name": found.name}
+                    if found.security_id
+                    else None
+                ),
+            },
+        )
+
     def _magpie_document(
         self, config: AuthConfig, query: dict[str, list[str]]
     ) -> None:
@@ -1533,6 +2151,12 @@ class Handler(BaseHTTPRequestHandler):
 
         elif route == "/api/magpie/document":
             self._magpie_document(config, query)
+
+        elif route == "/api/rupert":
+            self._rupert(config, query)
+
+        elif route == "/api/rupert/decision":
+            self._rupert_decision(config, query)
 
         elif route == "/api/skybird":
             self._skybird_sessions(config)

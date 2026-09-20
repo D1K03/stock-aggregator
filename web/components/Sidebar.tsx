@@ -53,6 +53,7 @@ const ITEMS: Item[] = [
   { label: "Playground", href: "/playground", icon: <Icon d="M4 17l6-6-6-6M13 19h7" /> },
   { label: "Magpie", href: "/magpie", icon: <Icon d="M4 20s2-8 9-9c3-.4 5-2 6-3 1 2 1 5-1 7s-5 3-8 3M4 20l5-5" /> },
   { label: "Skybird", href: "/skybird", icon: <Icon d="M4.9 4.9a10 10 0 000 14.2M19.1 4.9a10 10 0 010 14.2M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4M12 10.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3" /> },
+  { label: "Rupert", href: "/rupert", icon: <Icon d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V4a1 1 0 011-1h8a2 2 0 011.4.6l7.4 7.4a2 2 0 010 2.4zM7.5 7.5h.01" /> },
   { label: "Universe", href: "#", soon: true, icon: <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /> },
   { label: "Alerts", href: "#", soon: true, icon: <Icon d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0" /> },
   { label: "Runs", href: "#", soon: true, icon: <Icon d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> },

@@ -201,6 +201,126 @@ def _latest_transcripts(arguments: dict[str, Any]) -> str:
     return _rows_as_text(result, "newest first; reverse them to read in order")
 
 
+def _rupert_mentions(arguments: dict[str, Any]) -> str:
+    """What resolved to a security, with how it read and what kind of claim it is.
+
+    The shaped read over `rupert.mention` joined to the text it was decided
+    about, because the join is the whole point of that table and writing it by
+    hand every time is three tables and two left joins.
+    """
+    symbol = str(arguments.get("symbol") or "").strip().upper()[:20]
+    days = _int(arguments, "days", DEFAULT_DAYS, 1, MAX_DAYS)
+    limit = _int(arguments, "limit", 50, 1, playground.MAX_ROWS)
+    state = str(arguments.get("state") or "resolved").strip().lower()
+    if state not in {"resolved", "none", "unsure", "crowded", "failed", "any"}:
+        return json.dumps({"error": "state must be resolved, none, unsure, crowded, failed or any"})
+
+    clause = "" if state == "any" else "and m.state = %(state)s"
+    symbol_clause = "and s.primary_symbol = %(symbol)s" if symbol else ""
+    result = playground.select(
+        """
+        select m.id, si.created_utc, s.primary_symbol as symbol, m.state,
+               m.confidence, m.claim_kind,
+               r.positive - r.negative as tone,
+               si.subreddit,
+               left(coalesce(nullif(si.title, '') || ' ', '') || si.body, 300) as text
+          from rupert.mention m
+          join social_item si on si.id = m.social_item_id
+          left join security s on s.id = m.security_id
+          left join rupert.reading r on r.mention_id = m.id
+         where si.created_utc > now() - make_interval(days => %(days)s)
+        """
+        + clause
+        + symbol_clause
+        + " order by si.created_utc desc",
+        {"days": days, "state": state, "symbol": symbol},
+        limit,
+    )
+    if result.row_count == 0:
+        return json.dumps(
+            {
+                "rows": [],
+                "note": "nothing resolved there. Rupert only decides about "
+                "securities in the universe, and most of the corpus resolves to "
+                "nothing at all — which is the layer working, not failing.",
+            }
+        )
+    return _rows_as_text(
+        result,
+        "tone is FinBERT's positive minus negative; confidence is the decision "
+        "model's and is a reading to threshold rather than a fact to trust",
+    )
+
+
+def _rupert_decision(arguments: dict[str, Any]) -> str:
+    """One decision, whole: the text, the shortlist, every probability, the tone.
+
+    The provenance behind a single row, which is the thing worth being able to
+    ask for — a wrong link is this layer's failure mode and no aggregate shows
+    you one.
+    """
+    mention_id = _int(arguments, "id", 0, 0, 2**31)
+    if mention_id <= 0:
+        return json.dumps({"error": "id is required; get one from rupert_mentions"})
+    result = playground.select(
+        """
+        select m.id, m.state, m.rupert_version, m.candidates, m.chosen,
+               m.confidence, m.probabilities,
+               m.own_business, m.position_talk, m.injection,
+               m.claim_kind, m.claim_confidence,
+               m.model, m.input_tokens, m.cost_usd, m.observed_at,
+               s.primary_symbol as symbol,
+               si.subreddit, si.created_utc,
+               coalesce(nullif(si.title, '') || ' ', '') || si.body as text,
+               r.model as tone_model, r.positive, r.negative, r.neutral
+          from rupert.mention m
+          join social_item si on si.id = m.social_item_id
+          left join security s on s.id = m.security_id
+          left join rupert.reading r on r.mention_id = m.id
+         where m.id = %s
+        """,
+        [mention_id],
+        5,
+    )
+    if result.row_count == 0:
+        return json.dumps({"error": f"no decision {mention_id}"})
+    return _rows_as_text(
+        result,
+        "everything stored about one decision. `probabilities` is the full "
+        "distribution the choice came from; the three noul columns are the gates",
+    )
+
+
+def _rupert_standings(arguments: dict[str, Any]) -> str:
+    """Which securities the corpus is talking about, and how it reads."""
+    days = _int(arguments, "days", 7, 1, MAX_DAYS)
+    limit = _int(arguments, "limit", 25, 1, playground.MAX_ROWS)
+    result = playground.select(
+        """
+        select s.primary_symbol as symbol, s.name,
+               count(*) as mentions,
+               count(r.id) as read_for_tone,
+               round(avg(r.positive - r.negative)::numeric, 4) as mean_tone
+          from rupert.mention m
+          join social_item si on si.id = m.social_item_id
+          join security s on s.id = m.security_id
+          left join rupert.reading r on r.mention_id = m.id
+         where m.state = 'resolved'
+           and si.created_utc > now() - make_interval(days => %s)
+         group by 1, 2
+         order by mentions desc
+        """,
+        [days],
+        limit,
+    )
+    return _rows_as_text(
+        result,
+        "mean_tone here is a plain average. The pillar uses a trimmed mean with "
+        "a minimum item count, so a security with three mentions has a number "
+        "here and would have none there",
+    )
+
+
 def _ingest_health(_: dict[str, Any]) -> str:
     result = playground.select(
         """
@@ -298,6 +418,47 @@ TOOLS: tuple[Tool, ...] = (
             }
         ),
         _latest_transcripts,
+    ),
+    Tool(
+        "rupert_mentions",
+        "Reddit comments Rupert linked to a security, with the tone FinBERT read "
+        "and what kind of claim each makes. Omit symbol for everything.",
+        _schema(
+            {
+                "symbol": {"type": "string", "description": "Ticker, e.g. NVDA."},
+                "state": {
+                    "type": "string",
+                    "description": "resolved (default), none, unsure, crowded, "
+                    "failed, or any.",
+                },
+                "days": {"type": "integer", "description": "How far back. Default 7."},
+                "limit": {"type": "integer", "description": "Rows. Default 50."},
+            }
+        ),
+        _rupert_mentions,
+    ),
+    Tool(
+        "rupert_decision",
+        "Everything behind one decision: the text, the shortlist it chose "
+        "between, every probability it returned, the gates, what it cost, and "
+        "the tone FinBERT read. Get an id from rupert_mentions.",
+        _schema(
+            {"id": {"type": "integer", "description": "A rupert.mention id."}},
+            ["id"],
+        ),
+        _rupert_decision,
+    ),
+    Tool(
+        "rupert_standings",
+        "Which securities the Reddit corpus is talking about most, over a "
+        "window, with how many were read for tone.",
+        _schema(
+            {
+                "days": {"type": "integer", "description": "Window. Default 7."},
+                "limit": {"type": "integer", "description": "Rows. Default 25."},
+            }
+        ),
+        _rupert_standings,
     ),
     Tool(
         "ingest_health",
