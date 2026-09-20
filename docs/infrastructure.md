@@ -912,14 +912,56 @@ model asked for either produces a confident answer with nothing behind it.
 
 | Model | $/M in | $/M out | Context | Reach for it when |
 |---|---|---|---|---|
-| `upstage/solar-pro4` | 0.030 | 0.120 | 524k | Default for conversation. Cheapest here. |
-| `deepseek/deepseek-v4-flash` | 0.086 | 0.171 | 1M | Extraction from one document. |
-| `deepseek/deepseek-v4-pro` | 0.921 | 1.842 | 1M | A whole transcript, where the cheap model visibly struggles. |
+| `deepseek/deepseek-v4-flash` | 0.036 | 0.072 | 1M | Extraction from one document. The default. |
+| `deepseek/deepseek-v4-pro` | 0.422 | 0.845 | 1M | A whole transcript, where the cheap model visibly struggles. |
+| `upstage/solar-pro4` | 0.090 | 0.360 | 524k | The bot's configured fallback. |
 
 Prices are indicative and for humans. **The real charge comes back on the
 response** (`Completion.cost_usd`), because a local price table is wrong the
 first time a provider changes a rate and silently wrong after that. The table
-above was already stale once.
+above was stale twice: every figure in it was out by a factor of two or three,
+and Solar — described here as the cheapest of the three — had tripled to become
+the dearest.
+
+That is why the table is no longer where the choice is made. `screener.ai.catalogue`
+reads OpenRouter's public models endpoint, caches it six hours, and ranks what
+it finds; the three above are the fallback for when that cannot be reached.
+
+### Which model answers
+
+A picker on both chat surfaces, ranked by capability per dollar.
+
+- **The catalogue is the allow-list.** Four hundred models cannot be maintained
+  by hand, so the list the browser offers and the list the server accepts are
+  the same fetched object rather than two that drift.
+- **Eligibility is refusal with a reason**, never a preference: no tool support,
+  no `:batch` endpoint, no free tier, nothing Anthropic, nothing under 32k
+  context, and nothing dearer than six times the cheapest eligible turn. That
+  last one is relative on purpose — "too expensive" is a claim about the market,
+  not a number somebody typed — and six is set by the dearest model this project
+  actually runs, so the ceiling describes our budget rather than a round figure.
+- **Ranking mirrors the screener.** Each Artificial Analysis index becomes a
+  percentile within the pool that reports it; absent is absent, never zero.
+  Weighted for a tool loop (agentic 0.55, intelligence 0.30, coding 0.15) over a
+  turn cost that is 90% input, because the prompt and the tool schemas are
+  re-sent every round while the reply is capped at a few hundred tokens.
+- **Pickable and recommendable are different questions.** Anything eligible can
+  be chosen. Only a model measured on two of three benchmarks and above the
+  median capability is offered as *the* choice, and the button carries the
+  sentence that says why — a recommendation that cannot show its working is the
+  same thing as an alert that says STRONG BUY.
+- **The default is a rule, not a model.** The first row is *Steven*, and
+  selecting it stores "follow the ranking" rather than the model the ranking
+  currently points at. It is resolved fresh on every question, so a better or
+  cheaper model next month is picked up with nobody reopening this menu; pinning
+  a model is the other option, and it is the one that goes stale. The chip shows
+  what Steven currently resolves to and what it costs, because "automatic" with
+  nothing under it is how somebody stops knowing what they are paying for.
+- **The choice follows the person, not the window.** `/api/model` records it,
+  `audit.chosen_model` reads it back folded across Discord and GitHub by the
+  same mapping the spend cap uses, and a pinned model lapses after 24 hours back
+  to Steven — so a dearer one picked for one afternoon does not silently become
+  what every message costs.
 
 The model id is an allow-list: a typo falls back to the default rather than
 matching some other provider's model and billing at a rate nobody chose.

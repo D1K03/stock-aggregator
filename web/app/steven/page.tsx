@@ -6,6 +6,7 @@ import ChatChart from "@/components/ChatChart";
 import ChatRows from "@/components/ChatRows";
 import DiscordHandoff from "@/components/DiscordHandoff";
 import MicButton from "@/components/MicButton";
+import ModelPicker from "@/components/ModelPicker";
 import Orb, { OrbState } from "@/components/Orb";
 import Sidebar from "@/components/Sidebar";
 import ToolTrace from "@/components/ToolTrace";
@@ -30,7 +31,7 @@ const EASE = [0, 0, 0.2, 1] as const;
 export default function StevenPage() {
   const {
     turns, threads, threadId, thinking, settling, conversing,
-    ask, newChat, openThread, removeThread,
+    model, setModel, adoptModel, ask, newChat, openThread, removeThread,
   } = useSteven();
   // No table on this page, so the ticker offered is the one the screen leads
   // with, read by the provider rather than published by anything here.
@@ -207,8 +208,8 @@ export default function StevenPage() {
                 a few things to ask, and the way out to Discord. The handoff sits
                 apart from the suggestions because it ends the conversation here
                 rather than continuing it. */}
-            {conversing && (
-              <div className="stv-next">
+            <div className="stv-next">
+              {conversing && (
                 <div className="stv-skills">
                   {suggestions.map((skill) => (
                     <button key={skill.label} onClick={() => void ask(skill.prompt)}>
@@ -216,9 +217,14 @@ export default function StevenPage() {
                     </button>
                   ))}
                 </div>
-                <DiscordHandoff />
-              </div>
-            )}
+              )}
+              {/* Always shown, unlike the suggestions: which model answers is
+                  a decision about the question you are about to ask, so it has
+                  to be reachable before there is a conversation to change it
+                  in. */}
+              <ModelPicker value={model} onChange={setModel} onAdopt={adoptModel} />
+              {conversing && <DiscordHandoff />}
+            </div>
           </div>
         </main>
       </div>
