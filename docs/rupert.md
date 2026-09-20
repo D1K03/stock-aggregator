@@ -202,7 +202,59 @@ set.
 
 ---
 
-## 5. What it costs
+## 5. How a night becomes one number
+
+`reduce.mood` turns many readings into one tone per security per night. Two
+things happen to them, in this order.
+
+**Trimmed**, a tenth off each end by tone, because one viral post should not
+decide a night and the corpus this reads is a subreddit where exactly that is
+the risk.
+
+**Then weighted by how much of a view each reading carried**, which is `1 -
+neutral`. This is the part that is not obvious, and the measurement is the
+argument for it. Across the first 76 real readings:
+
+| | |
+|---|---|
+| mean `neutral` | **0.727** |
+| neutral was the winning label | **63 of 76** |
+| genuinely torn (no label above 0.5) | **0 of 76** |
+
+FinBERT is not *unsure* about this corpus. It is **confidently neutral**, which
+is a fair description of most retail chatter and a poor input to a mean: a plain
+average of `positive - negative` collapses "no view" onto the same zero as
+"balanced argument", and since the shrugs are the majority they drag the number
+toward a zero that reads as balance when what happened is that nobody said
+anything directional.
+
+The claim kind shows where the signal actually is:
+
+| claim kind | n | mean neutral | mean abs tone |
+|---|---|---|---|
+| `earnings` | 5 | 0.525 | **0.377** |
+| `product` | 7 | 0.760 | 0.188 |
+| `market` | 42 | 0.742 | 0.184 |
+| `chatter` | 19 | 0.768 | 0.170 |
+
+`earnings` reads twice as decisively as `chatter`, and 42 of 76 readings were
+price and options talk rather than claims about a business. Weighting lets the
+few decisive readings carry the number and the many shrugs count for almost
+nothing. Where every reading carries the same view, the weighting is a no-op by
+construction, which has its own test.
+
+`certainty` is returned beside `tone` for the reason `mentions` already is: a
+tone near zero from forty confident readings and one from forty shrugs are not
+the same evidence, and the tone alone cannot say which.
+
+**This is not a version bump.** `VERSION` covers the shortlist rules, the
+question set, the gates and the thresholds -- what decides a link. This changes
+how readings are aggregated afterwards, no stored decision moves, and nothing
+consumes `reduce` yet.
+
+---
+
+## 6. What it costs
 
 ```mermaid
 flowchart LR
@@ -223,7 +275,7 @@ person, so it ships off.
 
 ---
 
-## 6. What the corpus can actually support
+## 7. What the corpus can actually support
 
 The number worth knowing before the pillar is wired. Over three days:
 

@@ -53,6 +53,40 @@ MIN_BASELINE_DAYS = 14
 
 
 @dataclass(frozen=True, slots=True)
+class Reading:
+    """One FinBERT reading, as the three probabilities it actually returned.
+
+    Named fields rather than a positional triple, deliberately: the order of
+    FinBERT's columns is the one thing this project refuses to assume anywhere,
+    which is why `labels.json` ships beside the weights and the service will not
+    start without it. A `tuple[float, float, float]` would put that failure
+    straight back, silently and with the right shape.
+    """
+
+    positive: float
+    negative: float
+    neutral: float
+
+    @property
+    def tone(self) -> float:
+        """`positive - negative`, the same derivation the client makes."""
+        return self.positive - self.negative
+
+    @property
+    def certainty(self) -> float:
+        """How much of this reading is a view rather than an absence of one.
+
+        Measured on the live corpus: mean neutral is 0.727 and neutral wins in
+        63 of 76 readings, while *none* of them is genuinely torn. FinBERT is
+        not unsure here, it is confidently neutral -- which is a fair reading of
+        most retail chatter and a poor input to an average, because
+        `positive - negative` collapses "no view" onto the same zero as
+        "balanced argument".
+        """
+        return 1.0 - self.neutral
+
+
+@dataclass(frozen=True, slots=True)
 class Mood:
     """One security, one night: how it read and how much of it there was.
 
@@ -60,43 +94,72 @@ class Mood:
     because a score computed from three comments and one computed from three
     hundred are different evidence and the number alone cannot say which it is.
     Same rule the pillars follow in keeping a raw metric beside its percentile.
+
+    `certainty` is there for the same reason and answers the question `tone`
+    cannot: a tone near zero from forty confident readings and one from forty
+    shrugs are not the same evidence either.
     """
 
     tone: Decimal
     mentions: int
     trimmed: int
+    certainty: Decimal
 
 
-def mood(tones: Sequence[float]) -> Mood | None:
+def mood(readings: Sequence[Reading]) -> Mood | None:
     """The night's tone for one security, or None when there is too little.
 
-    `tones` is one `positive - negative` per resolved mention, as
-    `screener.sentiment.Sentiment.score` derives it. The derivation stays there
-    and is not repeated here: one definition, computed where the inputs are.
+    **Weighted by how much of a view each reading carries, not by headcount.**
+    A plain mean of `positive - negative` treats a confident earnings note and a
+    shrug as equal evidence, and on this corpus the shrugs are the majority, so
+    the mean is dragged toward a zero that reads as "balanced" when what
+    happened is "nobody said anything directional". Weighting each reading by
+    `1 - neutral` lets the decisive ones carry the number and the neutral ones
+    count for almost nothing, which is what keeping three probabilities rather
+    than one was for.
 
-    None rather than zero for a thin night, because zero is a real reading --
-    it is what a genuinely balanced day looks like -- and a security nobody
+    Measured on the live corpus, the difference is not cosmetic: `earnings`
+    reads at 0.377 mean absolute tone against `chatter`'s 0.170, and 42 of 76
+    readings were `market` talk rather than claims about a business.
+
+    Trimming still happens first and still happens on tone, because the thing it
+    exists to remove is one viral post at an extreme, and an extreme carried by
+    a confident reading is exactly the one that would otherwise survive.
+
+    None rather than zero for a thin night, because zero is a real reading -- it
+    is what a genuinely balanced day looks like -- and a security nobody
     mentioned is not having a balanced day. The caller turns this into an
     absence with a reason.
     """
-    if len(tones) < MIN_MENTIONS:
+    if len(readings) < MIN_MENTIONS:
         return None
 
-    ordered = sorted(tones)
+    ordered = sorted(readings, key=lambda r: r.tone)
     cut = int(len(ordered) * TRIM)
     kept = ordered[cut : len(ordered) - cut] if cut else ordered
     # Trimming can only empty the list if TRIM ever reached a half, which would
     # be a different statistic. Guarded anyway, because the failure would be a
     # crash in the middle of a night rather than a wrong number.
-    middle = fmean(kept) if kept else median(ordered)
+    if not kept:
+        kept = ordered
+
+    weight = sum(r.certainty for r in kept)
+    if weight <= 0:
+        # Every kept reading is pure neutral, so there is no view to average.
+        # The unweighted mean of those is zero anyway; taking it explicitly
+        # avoids dividing by nothing and keeps the arithmetic obvious.
+        middle = fmean([r.tone for r in kept])
+    else:
+        middle = sum(r.tone * r.certainty for r in kept) / weight
 
     return Mood(
         # Quantised on the way out. The pillars are decimal arithmetic
         # throughout, and a float's binary-repr tail rendered into a
         # traceability panel reads as a bug in the panel.
         tone=Decimal(f"{middle:.6f}"),
-        mentions=len(tones),
+        mentions=len(readings),
         trimmed=len(ordered) - len(kept),
+        certainty=Decimal(f"{(weight / len(kept) if kept else 0.0):.6f}"),
     )
 
 

@@ -395,12 +395,16 @@ export default function RupertPage() {
             <section className="card rup-card">
               <h2>Most talked about</h2>
               <p className="sub">
-                Over {coverage?.days ?? 7} days. Tone is the trimmed mean of what
-                FinBERT read, so one viral post cannot decide it — and a security
-                under {coverage?.floor ?? 10} mentions shows its count and no
-                tone, because a count is not a reading. Attention is volume
-                against that security&rsquo;s own recent normal, not the
-                market&rsquo;s.
+                Over {coverage?.days ?? 7} days. Tone is trimmed so one viral
+                post cannot decide it, then <b>weighted by how much of a view
+                each reading carried</b>: FinBERT reads most retail chatter as
+                confidently neutral, and averaging those by headcount drags the
+                number toward a zero that reads as &ldquo;balanced&rdquo; when
+                what happened is &ldquo;nobody said anything directional&rdquo;.
+                A security under {coverage?.floor ?? 10} mentions shows its
+                count and no tone, because a count is not a reading. Attention
+                is volume against that security&rsquo;s own recent normal, not
+                the market&rsquo;s.
               </p>
               {(data?.standings ?? []).length === 0 && (
                 <p className="rup-empty">Nothing resolved in this window.</p>
@@ -433,7 +437,9 @@ export default function RupertPage() {
                     title={
                       s.tone === null
                         ? `under ${coverage?.floor ?? 10} mentions — no reading`
-                        : `${s.read} read, ${s.trimmed ?? 0} trimmed`
+                        : `${s.read} read, ${s.trimmed ?? 0} trimmed, ` +
+                          `${((s.certainty ?? 0) * 100).toFixed(0)}% of the reading was a view ` +
+                          `rather than "no opinion"`
                     }
                   >
                     {s.tone === null ? "—" : `${s.tone > 0 ? "+" : ""}${s.tone.toFixed(2)}`}

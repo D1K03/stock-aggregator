@@ -16,6 +16,7 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from screener.rupert.decide import Choice
+from screener.rupert.reduce import Reading
 from screener.rupert.version import VERSION
 from screener.sentiment import Sentiment
 
@@ -442,18 +443,17 @@ def mentions_by_day(
 
 def tones_for(
     conn: psycopg.Connection, security_id: int, *, on: date, model: str
-) -> list[float]:
-    """Every `positive - negative` for one security on one day, under one model.
+) -> list[Reading]:
+    """Every reading for one security on one day, under one model.
 
-    The input to `reduce.mood`. The subtraction happens here rather than in SQL
-    only in the sense that the columns are handed over whole -- the definition
-    of `score` stays in `screener.sentiment.Sentiment`, so there is exactly one
-    of it.
+    The input to `reduce.mood`, handed over as the three probabilities rather
+    than the collapsed scalar: `mood` weights by how much of a view each reading
+    carries, and `positive - negative` has already thrown that away.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            select r.positive, r.negative
+            select r.positive, r.negative, r.neutral
             from rupert.reading r
             join rupert.mention m on m.id = r.mention_id
             join social_item si on si.id = m.social_item_id
@@ -462,7 +462,10 @@ def tones_for(
             """,
             [security_id, model, on, on],
         )
-        return [float(positive) - float(negative) for positive, negative in cur.fetchall()]
+        return [
+            Reading(float(positive), float(negative), float(neutral))
+            for positive, negative, neutral in cur.fetchall()
+        ]
 
 
 def start_run(conn: psycopg.Connection, source: int, endpoint: str) -> int:

@@ -1252,6 +1252,13 @@ class Handler(BaseHTTPRequestHandler):
                             "read": s.read,
                             "tone": float(s.mood.tone) if s.mood else None,
                             "trimmed": s.mood.trimmed if s.mood else None,
+                            # How much of a view the readings carried. A tone
+                            # near zero from confident readings and one from
+                            # shrugs are not the same evidence, and the number
+                            # alone cannot say which.
+                            "certainty": (
+                                float(s.mood.certainty) if s.mood else None
+                            ),
                             "attention": (
                                 float(s.attention) if s.attention is not None else None
                             ),

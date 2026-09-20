@@ -25,6 +25,7 @@ from decimal import Decimal
 import psycopg
 
 from screener.rupert.reduce import BASELINE_DAYS, Mood, attention, mood
+from screener.rupert.reduce import Reading as ToneReading
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +436,7 @@ def standings(
     with conn.cursor() as cur:
         cur.execute(
             """
-            select m.security_id, r.positive, r.negative
+            select m.security_id, r.positive, r.negative, r.neutral
             from rupert.reading r
             join rupert.mention m on m.id = r.mention_id
             join social_item si on si.id = m.social_item_id
@@ -445,9 +446,14 @@ def standings(
             """,
             {"ids": ids, "days": days, "model": model},
         )
-        tones: dict[int, list[float]] = {}
-        for security_id, positive, negative in cur.fetchall():
-            tones.setdefault(int(security_id), []).append(float(positive) - float(negative))
+        # The three probabilities travel, not `positive - negative`: `mood`
+        # weights by how much of a view each reading carries, and the collapsed
+        # scalar has thrown that away.
+        tones: dict[int, list[ToneReading]] = {}
+        for security_id, positive, negative, neutral in cur.fetchall():
+            tones.setdefault(int(security_id), []).append(
+                ToneReading(float(positive), float(negative), float(neutral))
+            )
 
     out: list[Standing] = []
     for security_id, symbol, name, mentions, read in top:
@@ -505,7 +511,7 @@ def scored(
         cur.execute(
             """
             select date_trunc('day', si.created_utc at time zone 'utc')::date,
-                   r.positive, r.negative
+                   r.positive, r.negative, r.neutral
             from rupert.mention m
             join social_item si on si.id = m.social_item_id
             left join rupert.reading r on r.mention_id = m.id and r.model = %(model)s
@@ -518,12 +524,14 @@ def scored(
         )
         rows = cur.fetchall()
 
-    per_day: dict[date, list[float]] = {}
+    per_day: dict[date, list[ToneReading]] = {}
     counted: dict[date, int] = {}
-    for day, positive, negative in rows:
+    for day, positive, negative, neutral in rows:
         counted[day] = counted.get(day, 0) + 1
-        if positive is not None and negative is not None:
-            per_day.setdefault(day, []).append(float(positive) - float(negative))
+        if positive is not None and negative is not None and neutral is not None:
+            per_day.setdefault(day, []).append(
+                ToneReading(float(positive), float(negative), float(neutral))
+            )
 
     today = datetime.now(UTC).date()
     out: list[Scored] = []
