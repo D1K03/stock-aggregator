@@ -8,6 +8,7 @@ import ChatChart from "@/components/ChatChart";
 import ChatRows from "@/components/ChatRows";
 import DiscordHandoff from "@/components/DiscordHandoff";
 import MicButton from "@/components/MicButton";
+import ModelPicker from "@/components/ModelPicker";
 import Orb, { OrbState } from "@/components/Orb";
 import ToolTrace from "@/components/ToolTrace";
 import { renderMarkdown } from "@/lib/markdown";
@@ -50,7 +51,7 @@ export default function Palette() {
   const pathname = usePathname();
   const {
     turns, threads, thinking, settling, conversing, seeing,
-    ask, newChat, openThread, removeThread,
+    model, setModel, adoptModel, ask, newChat, openThread, removeThread,
   } = useSteven();
 
   // Whatever the screen ranks first — the Overview's top row while it is the
@@ -233,6 +234,9 @@ export default function Palette() {
             <span className="chip-text">{seeing}</span>
           </span>
         )}
+        {/* Compact here: the docked panel is narrow, so the trigger shows the
+            name alone and the prices live inside the menu. */}
+        <ModelPicker value={model} onChange={setModel} onAdopt={adoptModel} compact />
         <DiscordHandoff />
       </div>
 
