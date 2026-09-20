@@ -184,30 +184,53 @@ export default function RupertPage() {
             </p>
           </motion.header>
 
+          {/* Three states, not two. `paused` is the operator's switch and
+              `enabled` is the deployment's, and a card that read only the
+              first said "Running" while the container was exiting on boot
+              because RUPERT_DAILY_MAX_CALLS was 0. Off wins: there is nothing
+              to pause, so the button is disabled rather than offering to stop
+              something that is not started. */}
           {data && (
-            <section className="card rup-sched">
+            <section className={`card rup-sched${data.enabled ? "" : " off"}`}>
               <button
                 className={`rup-play${data.paused ? " paused" : ""}`}
                 onClick={() => setAsking(true)}
-                disabled={pausing}
-                title={data.paused ? "Let it run again" : "Stop the nightly passes"}
+                disabled={pausing || !data.enabled}
+                title={
+                  !data.enabled
+                    ? "Nothing to pause: the budget is zero, so no pass runs"
+                    : data.paused
+                      ? "Let it run again"
+                      : "Stop the nightly passes"
+                }
                 aria-label={data.paused ? "Resume Rupert" : "Pause Rupert"}
               >
-                {data.paused ? "▶" : "❚❚"}
+                {data.paused || !data.enabled ? "▶" : "❚❚"}
               </button>
               <div className="rup-sched-words">
                 <p className="rup-sched-state">
-                  {data.paused ? "Paused" : "Running"}
+                  {!data.enabled ? "Off" : data.paused ? "Paused" : "Running"}
                   <small>
                     {" · every "}
                     {data.refresh_hours}h
-                    {data.paused && data.paused_by ? ` · by ${data.paused_by}` : ""}
+                    {data.enabled && data.paused && data.paused_by
+                      ? ` · by ${data.paused_by}`
+                      : ""}
                   </small>
                 </p>
-                {/* Definite either way. "Runs in 4h" and "would run in 4h" are
-                    both statements; a hedge here is what sends somebody to the
-                    logs to find out what is actually going to happen. */}
-                <p className="rup-sched-next">{until(data.next_run_at, data.paused)}</p>
+                {/* Definite in all three states. "Runs in 4h" and "would run in
+                    4h" are both statements; a hedge here is what sends somebody
+                    to the logs to find out what is actually going to happen. */}
+                <p className="rup-sched-next">
+                  {data.enabled ? (
+                    until(data.next_run_at, data.paused)
+                  ) : (
+                    <>
+                      No pass will run. <code>RUPERT_DAILY_MAX_CALLS</code> is 0,
+                      which is the budget and the switch at once.
+                    </>
+                  )}
+                </p>
               </div>
             </section>
           )}
@@ -251,8 +274,10 @@ export default function RupertPage() {
                 rather than resolving anything. It is the only thing here that
                 spends money per item rather than per question from a person, so
                 it ships off and the budget is also the switch. Setting it needs
-                the container recreated, not restarted. Everything below is what
-                it decided while it was last running.
+                the container recreated, not restarted.{" "}
+                {(spend?.decisions_total ?? 0) > 0
+                  ? "Everything below is what it decided while it was last running."
+                  : "It has not decided anything yet, so everything below is empty rather than quiet."}
               </p>
             </section>
           )}

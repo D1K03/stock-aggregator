@@ -2122,7 +2122,16 @@ footer.site .prov {
 }
 .rup-h2-again { padding-top: calc(var(--sp) * 5); border-top: 1px solid var(--line); margin-top: calc(var(--sp) * 4); }
 
-.rup-off { margin-top: calc(var(--sp) * 4); border-color: var(--amber-4); }
+/* Both margins, for the reason .rup-sched carries both: `.tiles` has none of
+   its own, so a card sitting between the hero and that row was flush against
+   it. */
+.rup-off {
+  margin: calc(var(--sp) * 4) 0 calc(var(--sp) * 6);
+  border-color: var(--amber-4);
+}
+/* Off is a state, not a fault: the card below already explains it at length,
+   so this only needs to stop reading as running. */
+.rup-sched.off .rup-sched-state { color: var(--ink-muted); }
 .rup-off p {
   padding: 0 calc(var(--sp) * 5) calc(var(--sp) * 5);
   font-size: 0.85rem; color: var(--ink-muted); max-width: 72ch; line-height: 1.5;
