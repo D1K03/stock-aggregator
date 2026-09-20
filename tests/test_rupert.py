@@ -18,6 +18,7 @@ from screener.rupert import candidates as shortlist
 from screener.rupert import panel, questions, reduce, run, store
 from screener.rupert.config import RupertConfig
 from screener.rupert.decide import DecideError, Throttled, decide
+from screener.rupert.reduce import Reading
 from screener.sentiment import Sentiment
 
 BASE = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
@@ -233,23 +234,82 @@ def test_no_key_is_an_error_rather_than_a_request(monkeypatch):
 # -- reduce ------------------------------------------------------------------
 
 
+def shrug(tone: float = 0.0) -> Reading:
+    """A reading with almost no view, which is what most of the corpus is.
+
+    Measured: mean neutral 0.727, and neutral wins in 63 of 76 readings.
+    """
+    half = tone / 2
+    return Reading(positive=0.135 + half, negative=0.135 - half, neutral=0.73)
+
+
+def decisive(tone: float) -> Reading:
+    """A reading that actually says something, as `earnings` texts do."""
+    half = tone / 2
+    return Reading(positive=0.43 + half, negative=0.43 - half, neutral=0.14)
+
+
 def test_a_thin_night_is_no_reading_rather_than_zero():
     # Zero is a real reading -- it is what a balanced day looks like -- and a
     # security three people mentioned is not having a balanced day.
-    assert reduce.mood([0.4] * (reduce.MIN_MENTIONS - 1)) is None
+    assert reduce.mood([decisive(0.4)] * (reduce.MIN_MENTIONS - 1)) is None
 
 
 def test_one_viral_post_does_not_decide_the_night():
-    ordinary = [0.5] * 19
-    with_outlier = reduce.mood(ordinary + [-40.0])
-    without = reduce.mood(ordinary + [0.5])
+    ordinary = [decisive(0.5)] * 19
+    with_outlier = reduce.mood([*ordinary, decisive(-1.9)])
+    without = reduce.mood([*ordinary, decisive(0.5)])
     assert with_outlier is not None and without is not None
     assert with_outlier.tone == without.tone
 
 
 def test_the_item_count_travels_beside_the_number():
-    got = reduce.mood([0.2] * 40)
+    got = reduce.mood([decisive(0.2)] * 40)
     assert got is not None and got.mentions == 40
+
+
+def test_a_confident_minority_outweighs_a_shrugging_majority():
+    """The whole reason three probabilities are kept rather than one number.
+
+    A crowd saying nothing much in one direction, against a handful saying
+    something definite in the other. Averaging `positive - negative` by headcount
+    reads the crowd; weighting by how much of a view each reading carries reads
+    the claim. Measured on the live corpus, that gap is real: `earnings` reads at
+    0.377 mean absolute tone against `chatter`'s 0.170.
+    """
+    crowd = [shrug(0.3)] * 24
+    claims = [decisive(-0.8)] * 6
+    got = reduce.mood([*crowd, *claims])
+    assert got is not None
+
+    plain = sum(r.tone for r in [*crowd, *claims]) / 30
+    assert plain > 0            # by headcount the crowd wins
+    assert got.tone < 0         # by evidence it does not
+
+
+def test_uniform_certainty_changes_nothing():
+    # Weighting a set that all carries the same view has to be a no-op, or the
+    # statistic is doing something other than what it says.
+    same = [shrug(0.34)] * 30
+    got = reduce.mood(same)
+    assert got is not None
+    assert got.tone == Decimal(f"{sum(r.tone for r in same) / 30:.6f}")
+
+
+def test_certainty_is_reported_beside_the_tone():
+    # A tone near zero from forty confident readings and one from forty shrugs
+    # are not the same evidence, and the tone alone cannot say which.
+    shrugs = reduce.mood([shrug(0.2)] * 20)
+    claims = reduce.mood([decisive(0.2)] * 20)
+    assert shrugs is not None and claims is not None
+    assert claims.certainty > shrugs.certainty
+
+
+def test_readings_with_no_view_at_all_do_not_divide_by_zero():
+    got = reduce.mood([Reading(positive=0.0, negative=0.0, neutral=1.0)] * 12)
+    assert got is not None
+    assert got.tone == Decimal("0.000000")
+    assert got.certainty == Decimal("0.000000")
 
 
 def test_attention_needs_a_baseline_before_it_will_call_anything_unusual():
@@ -664,7 +724,7 @@ def test_the_leaderboard_uses_reduce_for_tone_rather_than_its_own_sql(db):
     assert len(got) == 1
     assert got[0].symbol == "NVDA"
     assert got[0].mentions == reduce.MIN_MENTIONS
-    direct = reduce.mood([0.6] * reduce.MIN_MENTIONS)
+    direct = reduce.mood([Reading(0.8, 0.2, 0.0)] * reduce.MIN_MENTIONS)
     assert direct is not None and got[0].mood is not None
     # The same number `reduce` would give, because the panel calls it rather
     # than reimplementing the trimming in SQL.
@@ -765,7 +825,14 @@ def test_the_scored_series_agrees_with_reduce_rather_than_recomputing_in_sql(db)
         a_resolved(db, "NVDA", security_id, tone=tone, at=now)
     got = panel.scored(db, security_id, model=run.FINBERT)
     today = [row for row in got if row.day == now.date()][0]
-    direct = reduce.mood(tones)
+    # Built the way `a_resolved` stores them, so this is the same arithmetic on
+    # the same inputs rather than a second opinion about what they were. These
+    # carry no neutral mass, so every reading weighs the same and the weighted
+    # mean and the plain trimmed mean coincide -- which is the point of the
+    # uniform-certainty case having its own test above.
+    direct = reduce.mood(
+        [Reading(max(tone, 0.0), max(-tone, 0.0), 0.0) for tone in tones]
+    )
     assert direct is not None and today.tone == direct.tone
     # Trimmed rather than averaged in: the plain mean of these is 0.26, and the
     # trimmed mean drops the -1.0 and one 0.4 to leave 0.40.

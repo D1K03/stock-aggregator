@@ -20,6 +20,10 @@ export type RupertStanding = {
   tone: number | null;
   /** How many items the trimmed mean discarded from the ends. */
   trimmed: number | null;
+  /** Mean `1 - neutral` over what was kept: how much of a view there was at
+      all. A tone near zero from confident readings and one from shrugs are not
+      the same evidence, and the tone alone cannot say which. */
+  certainty: number | null;
   /** Volume against this security's own baseline, null without enough history. */
   attention: number | null;
 };
