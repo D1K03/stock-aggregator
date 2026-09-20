@@ -171,6 +171,43 @@ nothing outside imports a submodule directly.
   rather than "concurrency is fine". Reach for `fetch()` unless you are holding a cookie, and
   read `docs/specs/2026-09-05-yahoo-exit-lanes.md` before changing it.
 - `screener.ai` — OpenRouter. Narrative extraction only, never a sentiment number.
+  `catalogue` is the live half: OpenRouter's public models endpoint, cached six hours, filtered
+  and ranked so the dashboard can offer a real choice of model. **The catalogue is the
+  allow-list** — `resolve_model` refuses an unknown slug so a typo cannot bill against a model
+  nobody chose, and four hundred models cannot be typed out by hand, so the list the browser
+  picks from and the list the server accepts are the same fetched object. Eligibility is refusal
+  with a reason, never a preference: no tool support (the agent is a tool loop, and a model that
+  cannot call one invents the figure instead), no `:batch` endpoint, no free tier, nothing
+  Anthropic, and nothing dearer than **six times the cheapest eligible turn** — relative, because
+  "too expensive" is a claim about the market rather than a number, and set by the dearest model
+  the project actually runs. The ranking mirrors `screener.scoring`: each Artificial Analysis
+  index becomes a **percentile within the pool that reports it**, averaged over the ones that
+  exist and never imputed, weighted for a tool loop (agentic 0.55) and divided by a turn cost
+  that is 90% input, because the prompt and tool schemas are re-sent every round while the reply
+  is capped. Being *pickable* and being *recommendable* are different: anything eligible can be
+  chosen, but only two-of-three benchmark coverage above the median gets offered as the
+  recommendation, and `why()` is the sentence the button shows — a recommendation that cannot
+  show its working is an alert that says STRONG BUY.
+- **The default is a rule, not a model.** `catalogue.ROUTER` is a sentinel — shown as *Steven* —
+  that stores "use whatever tops the ranking", resolved through `routed()` at the moment a
+  question is asked rather than at the moment it was chosen, so a better or cheaper model arriving
+  next month is picked up with nobody revisiting the menu. Pinning a specific model is the other
+  option and is the one that goes stale. The sentinel has no slash in it and every OpenRouter id
+  does, so it cannot collide with a real model or reach a provider as one; `offers()` answers
+  "may a person choose this" and `allows()` answers "may this be sent to OpenRouter", and the
+  router is only ever the first.
+- **Which model answers is per person, not per conversation.** The dashboard's picker records a
+  choice through `/api/model`; `audit.chosen_model` reads it back folded across identities by the
+  same `budget.identities` mapping the cap uses, so a model picked on the dashboard is the model
+  that person's Discord messages come back on. A pinned model **lapses after 24 hours** back to
+  the router, so a dearer one picked for one afternoon does not become what everything costs.
+  Read as a window rather than expired by a job: there is no row to delete and nothing to go wrong
+  if a cleanup never runs, exactly as `recent_turns` bounds memory by age. Never chose, chose the
+  router, and chose a model two days ago are deliberately the same state. The audit row *is* the
+  storage — the choice changes what the next reply costs, so it was going in the trail regardless,
+  and a preferences table beside it would be a second thing to keep in step. `agent.choice_for`
+  is what the picker ticks and `agent.for_person` is what answers; they differ on the router, and
+  collapsing them would hide the thing the person actually selected.
 - `screener.notify` — a `NotificationChannel` protocol and a Discord webhook. Delivery only.
 - `screener.bot` — the Discord gateway bot, its own process (`python -m screener.bot`) and its
   own container. A command surface, not a delivery channel: `/ping`, a reply when mentioned in
@@ -427,6 +464,11 @@ nothing outside imports a submodule directly.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
   their own `auth` schema, never in `public` with the screener's own tables.
 - `screener.health` — stdlib status service; the Cloudflare Tunnel's origin.
+  `/api/models` serves the ranked catalogue and `/api/model` records a pick — a POST, on
+  skybird's terms, because a prefetched link that quietly moves somebody onto a dearer model is
+  what a Content-Length is cheap insurance against. `/api/ask` takes **no** model parameter: it
+  is read per person inside `agent.respond`, so the browser cannot ask for one thing on the
+  dashboard and be answered on another in Discord.
   `/health` and `/ready` stay open because the container healthcheck and the
   deploy smoke test cannot hold a session. Everything else requires one
   **unconditionally** — never `config.enabled and login is None`, which makes an

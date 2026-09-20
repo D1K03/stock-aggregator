@@ -71,3 +71,9 @@ class ActorSpend:
     tokens: int
     cost_24h: Decimal
     last_seen: datetime
+
+
+# The operation a model choice is recorded under. Named here rather than spelled
+# out at both ends, because a reader and a writer that disagree about a string
+# produce an empty result and no error.
+MODEL_CHOICE = "steven.model"

@@ -365,3 +365,72 @@ def test_recalling_for_nobody_asks_the_database_nothing(fresh_db):
     # An empty identity list would otherwise compose an `or` of no conditions,
     # which is a syntax error rather than an empty answer.
     assert audit.recent_turns(fresh_db, []) == []
+
+
+# -- which model answers this person ----------------------------------------
+
+
+def chose(conn, model, **overrides):
+    """One model choice, as `/api/model` records it."""
+    insert(
+        conn,
+        kind="command",
+        operation=audit.MODEL_CHOICE,
+        model=model,
+        detail={"model": model, "surface": "web"},
+        **overrides,
+    )
+
+
+def test_the_latest_choice_is_the_one_that_counts(fresh_db):
+    # Picking twice in an afternoon is normal; the trail keeps both and the
+    # second is what answers.
+    chose(fresh_db, "inclusionai/ling-3.0-flash")
+    chose(fresh_db, "z-ai/glm-5.3-flash")
+    assert audit.chosen_model(fresh_db, [("42", "discord")]) == "z-ai/glm-5.3-flash"
+
+
+def test_a_model_chosen_on_the_dashboard_answers_in_discord(fresh_db):
+    # The point of the feature. The choice is recorded under a GitHub login and
+    # the DM arrives under a Discord id, so without folding the identities the
+    # two surfaces would answer on different models.
+    chose(fresh_db, "z-ai/glm-5.3-flash", actor="ehewes", actor_kind="github")
+    carried = audit.chosen_model(fresh_db, [("2807", "discord"), ("ehewes", "github")])
+    assert carried == "z-ai/glm-5.3-flash"
+
+
+def test_a_choice_older_than_the_window_stops_counting(fresh_db):
+    # What makes the feature safe to hand out: a dearer model picked for one
+    # afternoon reverts on its own rather than becoming what everything costs.
+    fresh_db.execute(
+        """
+        insert into audit.event (kind, operation, actor, actor_kind, model, detail, occurred_at)
+        values ('command', 'steven.model', '42', 'discord', 'z-ai/glm-5.3-flash',
+                '{"model": "z-ai/glm-5.3-flash"}'::jsonb, now() - interval '25 hours')
+        """
+    )
+    assert audit.chosen_model(fresh_db, [("42", "discord")]) is None
+    # Still there if you ask over a longer window, so it lapsed rather than
+    # being deleted — there is no job to expire a row and nothing to go wrong
+    # if one never runs.
+    within = audit.chosen_model(fresh_db, [("42", "discord")], within_hours=48)
+    assert within == "z-ai/glm-5.3-flash"
+
+
+def test_someone_elses_choice_does_not_answer_you(fresh_db):
+    chose(fresh_db, "z-ai/glm-5.3-flash", actor="4010")
+    assert audit.chosen_model(fresh_db, [("42", "discord")]) is None
+
+
+def test_nobody_having_chosen_is_not_an_error(fresh_db):
+    # The normal case for a new person, and the one that lands on the
+    # recommendation rather than on a failure.
+    assert audit.chosen_model(fresh_db, [("42", "discord")]) is None
+
+
+def test_a_reply_is_not_mistaken_for_a_choice(fresh_db):
+    # Every reply row carries a `model` column too. Only rows written by the
+    # picker are choices, which is why the read filters on the operation rather
+    # than on the column being present.
+    insert(fresh_db, model="upstage/solar-pro4", detail={"question": "hi", "reply": "hello"})
+    assert audit.chosen_model(fresh_db, [("42", "discord")]) is None

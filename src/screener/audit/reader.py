@@ -7,7 +7,7 @@ from typing import Any
 import psycopg
 from psycopg import sql
 
-from screener.audit.models import KINDS, ActorSpend, Event, Spend
+from screener.audit.models import KINDS, MODEL_CHOICE, ActorSpend, Event, Spend
 
 # The interface pages in fifties. Fixed rather than caller-supplied: a page
 # size in a query string is a way to ask for the whole table at once.
@@ -299,3 +299,58 @@ def recent_turns(
         cur.execute(query, params)
         rows = cur.fetchall()
     return [(asked, said) for asked, said in reversed(rows) if asked and said]
+
+# How long a chosen model lasts before the recommendation takes over again.
+#
+# A day, because a model choice is a mood rather than a setting: somebody picks
+# a stronger one to get through a hard afternoon and would not otherwise think
+# to put it back, and the bill for forgetting compounds silently. Expiry means
+# the expensive case has to be re-chosen and the cheap case is where everyone
+# ends up by default.
+#
+# Read as a window rather than written as a deadline: there is no job to expire
+# a row and nothing to go wrong if one never runs, exactly as `recent_turns`
+# bounds memory by age rather than deleting it.
+MODEL_CHOICE_HOURS = 24
+
+
+def chosen_model(
+    conn: psycopg.Connection,
+    identities: Sequence[tuple[str, str]],
+    *,
+    within_hours: int = MODEL_CHOICE_HOURS,
+) -> str | None:
+    """The model this person last picked, if the pick is still live.
+
+    Folded across identities by the caller, so a model chosen on the dashboard
+    is the model Discord answers them on — the same mapping the cap and the
+    memory use, and for the same reason: it is one person, and a preference
+    that stopped at the surface it was set on would be a setting per window
+    rather than a choice.
+
+    Read out of the trail rather than kept in a table, on `recent_turns`'
+    terms. The choice is already an auditable event — it changes what the next
+    reply costs — so recording it is not optional, and once it is recorded a
+    second copy in a preferences table is a second thing to keep in step.
+    """
+    if not identities:
+        return None
+
+    matches = sql.SQL(" or ").join(
+        sql.SQL("(actor = %s and actor_kind = %s)") for _ in identities
+    )
+    query = sql.SQL(
+        "select detail ->> 'model' from audit.event "
+        "where operation = %s and outcome = 'ok' "
+        "and detail ->> 'model' is not null "
+        "and occurred_at > now() - make_interval(hours => %s) and ({}) "
+        "order by occurred_at desc, id desc limit 1"
+    ).format(matches)
+
+    params: list[object] = [MODEL_CHOICE, within_hours]
+    params.extend(value for pair in identities for value in pair)
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] else None

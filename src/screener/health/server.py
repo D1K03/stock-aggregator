@@ -16,7 +16,7 @@ from typing import Any
 import psycopg
 
 from screener import audit, auth, mcp, screen
-from screener.ai import converse
+from screener.ai import MODELS, catalogue_payload, converse, offers, ranked_models
 from screener.auth.config import AuthConfig
 from screener.auth.session import state_cookie
 from screener.config import settings
@@ -317,6 +317,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if route == "/api/transcribe":
             self._transcribe(config)
+        elif route == "/api/model":
+            self._choose_model(
+                config, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            )
         elif route == "/api/playground/query":
             self._playground_query(config)
         elif route == "/api/playground/suggest":
@@ -2132,6 +2136,9 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/ask":
             self._ask(config, query)
 
+        elif route == "/api/models":
+            self._models(config, query)
+
         elif route == "/api/handoff":
             self._handoff(config, query)
 
@@ -2283,6 +2290,11 @@ class Handler(BaseHTTPRequestHandler):
 
         from screener.bot import agent
 
+        # Which model answers is not a parameter of the question. It is read
+        # per person inside `agent.respond`, from the choice `/api/model`
+        # recorded — so the model is the same one their Discord messages come
+        # back on, and there is no second place for the browser to say
+        # something different.
         try:
             reply = asyncio.run(
                 agent.respond(
@@ -2311,13 +2323,95 @@ class Handler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "reply": reply.text,
-                "model": agent.agent_model(),
+                # What actually answered, not what the server would default to.
+                # The two differ the moment the picker is used, and a receipt
+                # that names the wrong model is worse than none.
+                "model": reply.model,
                 "tools": [{"name": t.name, "ms": t.ms} for t in reply.tools],
                 # Drawn by a tool and passed straight through. None of this was
                 # in the conversation, so none of it was paid for per round.
                 "charts": [c.payload() for c in reply.charts],
                 "rows": [r.payload() for r in reply.rows],
             },
+        )
+
+    def _models(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """What the model picker offers, ranked, with the recommendation.
+
+        Behind a session like everything else, and for a plainer reason than
+        usual: this endpoint is what tells the browser which slugs `/api/ask`
+        will accept, so leaving it open would publish the shape of the
+        allow-list to anyone who found the URL.
+
+        Served from the catalogue's own six-hour cache, so opening the
+        dashboard does not cost a round trip to OpenRouter. An empty list is
+        the honest answer when OpenRouter cannot be reached: the picker falls
+        back to showing the configured model alone, which is the one it was
+        going to use anyway.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        from screener.bot import agent
+
+        # What this conversation is on now, so the picker can draw its own
+        # selection even when that model has dropped out of the ranked slice.
+        # The browser sends what the thread was using; absent, it is whatever
+        # the server would pick, which is what a new conversation gets.
+        # What this person has *selected*, which is the router unless they
+        # picked a model — not the model that selection currently resolves to.
+        # The picker has to tick the thing they chose; showing the resolved
+        # model instead would make choosing the router look like choosing
+        # whatever it happened to pick that morning.
+        current = agent.choice_for(login, "github")
+        self._respond(HTTPStatus.OK, catalogue_payload(ranked_models(), current=current))
+
+    def _choose_model(self, config: AuthConfig, query: dict[str, list[str]]) -> None:
+        """Record which model this person wants to be answered on.
+
+        A POST rather than a GET with the slug in the query string, on
+        skybird's terms: this one writes, and a prefetched or followed link
+        that silently moves somebody onto a dearer model is the kind of
+        accident a Content-Length is cheap insurance against.
+
+        Checked against the live catalogue rather than taken at its word. The
+        browser is not a trusted source of a thing that bills, and
+        `resolve_model` would fall back to the default in silence — which
+        reads, from the interface, as the picker not working. An unknown slug
+        is refused out loud so the page can say the model went away.
+
+        The record *is* the storage. There is no preferences table: the choice
+        changes what the next reply costs, so it was going in the trail either
+        way, and `audit.chosen_model` reads it back folded across identities.
+        """
+        login = self._require_login(config)
+        if login is None:
+            return
+
+        slug = (query.get("slug") or [""])[0].strip()
+        if not slug:
+            self._respond(HTTPStatus.BAD_REQUEST, {"error": "no model"})
+            return
+        # `offers` rather than `allows`, because the router is a legitimate
+        # choice that is not a model and the catalogue does not contain it.
+        if not offers(slug) and slug not in MODELS:
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "that model is not one the catalogue offers", "model": slug},
+            )
+            return
+
+        audit.record(
+            kind="command",
+            operation=audit.MODEL_CHOICE,
+            actor=login,
+            actor_kind="github",
+            model=slug,
+            detail={"model": slug, "surface": "web"},
+        )
+        self._respond(
+            HTTPStatus.OK, {"model": slug, "hours": audit.MODEL_CHOICE_HOURS}
         )
 
     def _handoff(self, config: AuthConfig, query: dict[str, list[str]]) -> None:

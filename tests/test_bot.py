@@ -1,14 +1,16 @@
 import asyncio
+import contextlib
 import types
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
 import httpx
+import psycopg
 import pytest
 from discord import app_commands
 
 from screener import audit
-from screener.ai import AiError
+from screener.ai import ROUTER, AiError
 from screener.ai.models import MODELS, resolve_model
 from screener.bot import agent, client
 from screener.bot.tools import MAX_RESULT, TOOLS, dispatch, specs, tool
@@ -390,10 +392,92 @@ def test_a_reply_nobody_asked_for_is_not_remembered(monkeypatch):
     assert asyncio.run(agent.respond("nightly check")).text == "ok"
 
 
+class _FakeConnect:
+    """Stands in for `psycopg` inside the agent, so reading a preference needs
+    no database. `Error` is the real class, so the module's except clause
+    behaves exactly as it does in production."""
+
+    Error = psycopg.Error
+
+    def __init__(self, raises: bool = False):
+        self._raises = raises
+
+    def connect(self, *args, **kwargs):
+        if self._raises:
+            raise OSError("no database here")
+        return contextlib.nullcontext(object())
+
+
+def _without_a_database(monkeypatch, *, raises: bool = False):
+    """Let `choice_for` run with no database behind it.
+
+    Both halves are needed: `settings()` raises before psycopg is reached when
+    DATABASE_URL is unset, and that RuntimeError is caught by the same clause as
+    a connection failure — so stubbing only the driver would test the failure
+    path while looking like it tested the success one.
+    """
+    monkeypatch.setattr(agent, "psycopg", _FakeConnect(raises=raises))
+    monkeypatch.setattr(
+        agent, "settings", lambda: types.SimpleNamespace(database_url="postgresql:///x")
+    )
+
+
 def test_the_agent_answers_on_solar_by_default(monkeypatch):
+    # The configured fallback, reached only when the catalogue cannot be read.
+    # Which model actually answers a person is `for_person`, below.
     monkeypatch.delenv("DISCORD_BOT_MODEL", raising=False)
     assert agent.agent_model() == "upstage/solar-pro4"
     assert agent.agent_model() in MODELS
+
+
+def test_nobody_having_chosen_means_the_router(monkeypatch):
+    # The default is the rule, not a model. Three ways to land here — never
+    # chose, chose the router, chose something over a day ago — and they are
+    # deliberately the same state.
+    monkeypatch.setattr(agent, "chosen_model", lambda *a, **k: None)
+    _without_a_database(monkeypatch)
+    assert agent.choice_for("someone", "github") == ROUTER
+
+
+def test_a_pinned_model_is_what_is_shown_as_chosen(monkeypatch):
+    # What the picker ticks. Deliberately not resolved here: rendering the
+    # router as whatever it currently lands on would hide the thing they chose.
+    monkeypatch.setattr(agent, "chosen_model", lambda *a, **k: "z-ai/glm-5.3-flash")
+    monkeypatch.setattr(agent, "offers", lambda slug: True)
+    _without_a_database(monkeypatch)
+    assert agent.choice_for("someone", "github") == "z-ai/glm-5.3-flash"
+
+
+def test_a_pinned_model_that_left_the_catalogue_falls_back_to_the_router(monkeypatch):
+    # A slug stored yesterday is not evidence the catalogue still offers it, and
+    # the place to land is the same place everything else lands.
+    monkeypatch.setattr(agent, "chosen_model", lambda *a, **k: "gone/withdrawn")
+    monkeypatch.setattr(agent, "offers", lambda slug: False)
+    _without_a_database(monkeypatch)
+    assert agent.choice_for("someone", "github") == ROUTER
+
+
+def test_an_unreadable_trail_lands_on_the_router_rather_than_failing(monkeypatch):
+    # Refusing to answer because Postgres blinked is the worse failure, and a
+    # preference that cannot be read is a preference nobody set.
+    _without_a_database(monkeypatch, raises=True)
+    assert agent.choice_for("someone", "github") == ROUTER
+
+
+def test_the_router_is_resolved_before_anything_is_sent(monkeypatch):
+    # The sentinel never leaves the agent: `for_person` is what the model call
+    # is given, and it is always a real slug.
+    monkeypatch.setattr(agent, "choice_for", lambda *a: ROUTER)
+    monkeypatch.setattr(agent, "routed", lambda choice: "deepseek/deepseek-v4-flash-0731")
+    assert agent.for_person("someone", "github") == "deepseek/deepseek-v4-flash-0731"
+
+
+def test_an_unreachable_catalogue_falls_back_to_the_configured_model(monkeypatch):
+    # OpenRouter being unreachable should cost the ranking, not the reply.
+    monkeypatch.delenv("DISCORD_BOT_MODEL", raising=False)
+    monkeypatch.setattr(agent, "choice_for", lambda *a: ROUTER)
+    monkeypatch.setattr(agent, "routed", lambda choice: None)
+    assert agent.for_person("someone", "github") == "upstage/solar-pro4"
 
 
 def test_an_unknown_override_still_bills_against_a_known_model(monkeypatch):

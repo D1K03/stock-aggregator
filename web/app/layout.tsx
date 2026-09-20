@@ -19,18 +19,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  /* `suppressHydrationWarning` on <html> because the script below deliberately
+     writes `--rail-w` and `rail-shut` onto that element before React hydrates.
+     That is the entire point of it — the rail has to be the right width in the
+     first paint — but it means the client's <html> legitimately differs from
+     the server's, and React reports it as a hydration mismatch on every page
+     load in development. The warning is accurate and the behaviour is intended,
+     so it is silenced rather than left as a standing error that teaches
+     everyone to ignore the overlay. It covers this element's own attributes
+     only: children still hydrate normally, so a real mismatch underneath is
+     still reported. */
   return (
-    /* `suppressHydrationWarning` belongs to the inline script below, and only
-       to it. That script runs before React hydrates and deliberately mutates
-       this element — it sets `--rail-w` and may add `rail-shut` — so the client
-       has two attributes the server never sent, and React reports an attribute
-       mismatch it cannot patch up. Suppressing here is the documented answer for
-       exactly this pattern and is what every theme script does.
-
-       It is one element deep, not a blanket: a mismatch on <body> or anywhere
-       inside the app still fails loudly, which is the point. The alternative --
-       rendering the stored width on the server -- is impossible, because the
-       server has no localStorage and that is the whole reason the script exists. */
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {/* The rail's width, applied before anything is painted.

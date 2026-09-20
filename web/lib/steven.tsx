@@ -3,6 +3,7 @@
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
+import { chooseModel } from "@/lib/models";
 import { describe, useScreenContext } from "@/lib/screen-context";
 import {
   Thread, Turn, deleteThread, loadThreads, saveThread, titleFor,
@@ -47,6 +48,17 @@ type Steven = {
   conversing: boolean;
   /** What the current page says it is showing, as one line, or "". */
   seeing: string;
+  /** Which model is answering this person, or "" until the picker has read it. */
+  model: string;
+  /* Recorded on the server rather than here, which is the point: it is one
+     person's choice, so it applies to their Discord messages too. Changing it
+     mid-thread is deliberate and allowed — the next question goes to the new
+     model and the answers already given stay as they were given. */
+  setModel: (slug: string) => void;
+  /* What the server says is already answering. Reflected without being written
+     back: adopting a value is not choosing it, and re-recording it would push
+     the expiry a day further out every time the picker was opened. */
+  adoptModel: (slug: string) => void;
   ask: (question: string) => Promise<void>;
   newChat: () => void;
   openThread: (thread: Thread) => void;
@@ -74,6 +86,7 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
   const [threadId, setThreadId] = useState<string>(() => String(Date.now()));
   const [thinking, setThinking] = useState(false);
   const [settling, setSettling] = useState(false);
+  const [model, setModelState] = useState("");
   const [handoffState, setHandoffState] = useState<Handoff>("idle");
   const [handoffNote, setHandoffNote] = useState("");
   const { context } = useScreenContext();
@@ -146,6 +159,10 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
                server cannot know is which conversation this is, so an empty
                transcript says so and New chat clears his memory as well as the
                screen. */
+            /* Deliberately no model parameter. Which model answers is read
+               per person on the server, from what the picker recorded — the
+               same value the Discord bot reads — so the browser cannot ask for
+               one thing here and be answered on another there. */
             (turns.length === 0 ? "&fresh=1" : ""),
           { credentials: "include", cache: "no-store" }
         );
@@ -201,6 +218,14 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
     [threadId, newChat]
   );
 
+  /* Written to the server first, and only reflected here if that worked. A
+     picker that moved its own tick on a refused write would tell you that you
+     were on a model you were not being answered on. */
+  const setModel = useCallback(async (slug: string) => {
+    const saved = await chooseModel(slug);
+    if (saved) setModelState(saved.model);
+  }, []);
+
   const handoff = useCallback(async () => {
     setHandoffState("sending");
     try {
@@ -252,11 +277,13 @@ export function StevenProvider({ children }: { children: React.ReactNode }) {
       turns, threads, threadId, thinking, settling,
       conversing: turns.length > 0 || thinking,
       seeing: context ? `${context.page} · ${context.summary}` : "",
+      model, setModel: (slug: string) => void setModel(slug),
+      adoptModel: setModelState,
       ask, newChat, openThread, removeThread,
       handoffState, handoffNote, handoff, transcribe,
     }),
     [
-      turns, threads, threadId, thinking, settling, context,
+      turns, threads, threadId, thinking, settling, context, model, setModel,
       ask, newChat, openThread, removeThread, handoffState, handoffNote, handoff,
       transcribe,
     ]
