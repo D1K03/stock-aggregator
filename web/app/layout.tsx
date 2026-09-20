@@ -19,8 +19,18 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  /* `suppressHydrationWarning` on <html> because the script below deliberately
+     writes `--rail-w` and `rail-shut` onto that element before React hydrates.
+     That is the entire point of it — the rail has to be the right width in the
+     first paint — but it means the client's <html> legitimately differs from
+     the server's, and React reports it as a hydration mismatch on every page
+     load in development. The warning is accurate and the behaviour is intended,
+     so it is silenced rather than left as a standing error that teaches
+     everyone to ignore the overlay. It covers this element's own attributes
+     only: children still hydrate normally, so a real mismatch underneath is
+     still reported. */
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {/* The rail's width, applied before anything is painted.
 
