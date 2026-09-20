@@ -20,7 +20,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    /* `suppressHydrationWarning` belongs to the inline script below, and only
+       to it. That script runs before React hydrates and deliberately mutates
+       this element — it sets `--rail-w` and may add `rail-shut` — so the client
+       has two attributes the server never sent, and React reports an attribute
+       mismatch it cannot patch up. Suppressing here is the documented answer for
+       exactly this pattern and is what every theme script does.
+
+       It is one element deep, not a blanket: a mismatch on <body> or anywhere
+       inside the app still fails loudly, which is the point. The alternative --
+       rendering the stored width on the server -- is impossible, because the
+       server has no localStorage and that is the whole reason the script exists. */
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {/* The rail's width, applied before anything is painted.
 
