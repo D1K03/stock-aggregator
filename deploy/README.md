@@ -15,7 +15,7 @@ drops and recreates — and has nothing to do with this.
 
 | Piece | Where it lives |
 |---|---|
-| Application image | `ghcr.io/d1k03/stock-aggregator`, tagged with the commit SHA and `latest`. The bot runs from it too, with a different command. |
+| Application image | `ghcr.io/d1k03/stock-aggregator`, tagged with the commit SHA and `latest`. The bot, reddit, edgar, rupert and nightly all run from it too, each with a different command. |
 | Dashboard image | `…-web`, its own context and its own dependency set |
 | Transcriber image | `…-transcribe`, faster-whisper and the weights baked in |
 | Sentiment image | `…-sentiment`, FinBERT as ONNX baked in. The only two-stage build here: torch converts the checkpoint in a builder that is thrown away. |

@@ -38,10 +38,19 @@ Three things worth keeping when something does consume it:
 - **The hardware is the constraint, and it is tighter than the plan assumed.**
   Measured on the VPS, which has AVX but no AVX2: ~11 short headlines/s and
   ~0.9 long comments/s on two threads, against DESIGN.md's estimated 20–50/s.
-  `screener.reddit` stores ~132,000 r/wallstreetbets comments a week. Scoring
-  all of them is hours a night on a box shared with four other stacks, so the
-  pillar has to sample or read posts and top comments only — a decision to make
-  before it is wired rather than when a night overruns.
+
+  **Corrected 2026-09-20, against the corpus rather than against a worst case.**
+  The "hours a night" figure came from the *long*-comment rate, and the corpus is
+  not made of long comments: over 22 days and 424,178 items the median comment is
+  **9 words**, the mean 14 and the p90 29. At 150–180 words/sec that is
+  **~28 minutes to score every item ingested in a day**, and a week of
+  r/wallstreetbets is closer to three hours than ten.
+
+  So the sampling mandate is withdrawn as stated. FinBERT is not the bottleneck
+  and never was; what made it look like one was measuring the tail. The real
+  reduction comes earlier and for a different reason — only 5.6% of items resolve
+  to a security at all, so the batch that reaches the classifier is small because
+  most of the corpus is about nothing, not because we decided to look away.
 - **The column order is the failure that would not be noticed.** FinBERT emits
   `positive, negative, neutral`, which is neither alphabetical nor guessable,
   and reading it wrong scores every beat as a miss with total confidence.
@@ -106,6 +115,95 @@ Then, and only then, the onboarding procedure from `DESIGN.md`: bump the weight
 version, backfill with alerting disabled, resume live. The classifier landing
 before the pillar is what makes that possible as two reviewable changes instead
 of one unreviewable one.
+
+### Rupert — which security a text is about
+
+Built. The first of the four decisions above is answered, and it was the one
+blocking the other three.
+
+A regex shortlists candidate symbols out of a text and **deliberately refuses to
+choose between them**; a decision model that has the sentence in front of it
+picks which one — if any — the text is actually about; FinBERT reads what
+resolved. `rupert.mention` is the join both ingests stopped short of, and
+`rupert.reading` is the tone beside it.
+
+**Three measurements decided the shape, and the second one is worth keeping.**
+
+- `$TICKER` reaches **0.6% of comments**. A cashtag-only resolver sees almost
+  nothing, so bare uppercase tokens have to be candidates.
+- Doing that reaches **5.6% of items**, and **roughly a quarter of the top
+  matches are ordinary English**. `PLAN.md` named `$ALL`, `$IT` and `$ON`; the
+  live top 25 over three days also produced `YOU` (113), `ARE` (63), `AM` (45),
+  `NOW` (44) and `PM` (43), beside real traffic in `MU` (346), `SNDK` (214),
+  `AMD` (157) and `NVDA` (125). The warning was right and understated.
+- **A blacklist is lossy in both directions.** Dropping `ALL`, `IT` and `ON`
+  discards Allstate, Gartner and ON Semiconductor permanently, because the
+  difference between "I put it ALL on calls" and "ALL reported a combined ratio
+  of 91" is the sentence and not the word. That is the whole argument for a
+  layer here rather than a word list.
+
+The chooser is **Jev** (`typesafe/jev-1.13`), through OpenRouter's separate
+`/api/alpha/decisions` endpoint. It is not an LLM and emits no text: typed
+questions in, probability distributions out. **`DESIGN.md`'s rule did not move**
+— it is asked `choice` and `noul` only, tone stays FinBERT's, and its own
+`score` primitive is the worst-calibrated of the three out of distribution and
+is unused.
+
+Four things worth keeping:
+
+- **The `none` option is the load-bearing part.** Without it the model must pick
+  a company for "I put it ALL on calls", and Allstate is the only move available
+  to it. The self-test checks exactly this, for the reason the sentiment
+  self-test checks polarity rather than reachability: a model that has quietly
+  started answering every sentence is silent and produces a well-formed row per
+  comment.
+- **The calibration is a reading to threshold, not a fact to trust.** An
+  independent test measured it overconfident on `choice` out of distribution
+  (refit temperature 3.29) and *under*confident on `noul` (0.66). So the yes/no
+  questions are the gates, the choice carries a high floor, and the whole
+  distribution is stored — a choice below the floor is kept as `unsure`, which is
+  what lets a threshold be re-cut later without re-deciding a night.
+- **Never ask it a question the text cannot answer.** The same test put an
+  unanswerable question to it and got 44.7% accuracy at 0.74 average confidence.
+  "Is this comment about NVDA" is in the text; "will NVDA go up" is not, and it
+  would answer anyway.
+- **The frontier is `rupert.progress`, not the mentions.** 94.4% of the corpus
+  shortlists nothing and writes no row, so `max(observed_at)` over what was
+  stored would make "read it, found nothing" indistinguishable from "never read
+  it" — `screener.edgar`'s argument about `max(filed_date)`, applied to a scalar
+  instead of a set.
+
+**`/rupert` is where you watch it.** Tiles, a per-day plot of work against cost,
+the securities being talked about with their tone and attention, the frontier,
+the recent passes — and under all of it the list of what it actually decided,
+sentence by sentence, filterable by state. That last list is the page: a wrong
+link is this layer's failure mode and no total will ever show you one.
+
+~1,080 decisions a day at about $0.00002 each, so **roughly $0.50 a month**. Its
+own counter (`RUPERT_DAILY_MAX_CALLS`) rather than `DAILY_SPEND_CAP_USD`, on
+magpie's precedent, and **it defaults to zero**: this is the only thing in the
+tree that spends money per item rather than per request from a person.
+
+**Nothing scores it, on the same terms as everything else here.** `rupert.reduce`
+is pure and unconsumed. It produces two numbers rather than one, and the second
+is the one the evidence favours: `mood` is a trimmed tone with the item count
+beside it, and `attention` is how much a security is being discussed against its
+own trailing baseline — which the literature keeps finding predicts better than
+polarity, and which `CLAUDE.md` already half-says in "treat it as a crowding
+warning". Both go in so a backtest can choose rather than an assumption.
+
+Two things left open, and the first is a real finding rather than a to-do:
+
+1. **The corpus covers about 4% of the universe at usable depth.** Over three
+   days, 291 securities were mentioned at all, **57 reached ten mentions** and 27
+   reached thirty. A Sentiment pillar would be `Absent` for ~96% of the universe.
+   That is why it must land at `weight = 0` — `blend` excludes a zero-weighted
+   pillar from both the blend and `min_coverage` — and it is an open question
+   whether it belongs as a weighted pillar at all rather than as a crowding flag
+   on `event_flag_daily`, which exists, is granted, and has no writer.
+2. **The pillar itself.** Migration for the metrics, `weight_version` v3, and the
+   hard-coded threes in `screener.screen` and `web/` that would otherwise drop it
+   from the payload in silence.
 
 ### Steven draws charts — real adjusted prices
 

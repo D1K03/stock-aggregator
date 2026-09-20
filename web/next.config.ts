@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /* Without this `next dev` refuses to serve /_next/* to 127.0.0.1 and the
+     dashboard is a blank white page. Not an obvious blank either: every element
+     on it is a framer-motion node server-rendered at `opacity: 0` and animated
+     to 1 on mount, so when the dev bundle is blocked the markup is all there,
+     the page returns 200, and nothing is visible. Naming both spellings because
+     "localhost" and "127.0.0.1" are different origins to a browser and people
+     type both. Development only -- Next ignores it in a production build. */
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+
   // Emits .next/standalone: a self-contained server plus only the node_modules
   // it actually reaches. The runtime image then carries no build toolchain and
   // no dev dependencies.
@@ -54,6 +63,8 @@ const nextConfig: NextConfig = {
       { source: "/api/playground", destination: `${api}/api/playground` },
       { source: "/api/magpie/:path*", destination: `${api}/api/magpie/:path*` },
       { source: "/api/magpie", destination: `${api}/api/magpie` },
+      { source: "/api/rupert/:path*", destination: `${api}/api/rupert/:path*` },
+      { source: "/api/rupert", destination: `${api}/api/rupert` },
       { source: "/api/skybird/:path*", destination: `${api}/api/skybird/:path*` },
       { source: "/api/skybird", destination: `${api}/api/skybird` },
       { source: "/api/transcribe", destination: `${api}/api/transcribe` },

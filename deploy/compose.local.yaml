@@ -95,6 +95,12 @@ services:
       - path: local.env
         required: false
 
+  rupert:
+    image: stock-aggregator:local
+    env_file:
+      - path: local.env
+        required: false
+
   transcribe:
     build:
       context: ..

@@ -12,8 +12,18 @@ const AUTH_LOGIN = process.env.NEXT_PUBLIC_API_BASE
 
 /* Compiled in only by a local build. The status service refuses /auth/local
    whenever GitHub sign-in is configured, so this is the second of two locks
-   rather than the only one. */
+   rather than the only one.
+
+   Built the same way as AUTH_LOGIN above, and it has to be: this was a bare
+   "/auth/local" for its whole life, which works behind one origin and 404s
+   against `next dev` on a different port from the status service -- the exact
+   arrangement the README tells you to use NEXT_PUBLIC_API_BASE for. The GitHub
+   button honoured the variable and this one did not, so local sign-in was the
+   one route that could not be reached the way the docs describe. */
 const LOCAL_LOGIN = process.env.NEXT_PUBLIC_LOCAL_LOGIN === "1";
+const AUTH_LOCAL = process.env.NEXT_PUBLIC_API_BASE
+  ? `${process.env.NEXT_PUBLIC_API_BASE}/auth/local`
+  : "/auth/local";
 
 function GithubMark() {
   return (
@@ -56,7 +66,7 @@ export default function Login() {
         {LOCAL_LOGIN && (
           <motion.a
             className="local-login"
-            href="/auth/local"
+            href={AUTH_LOCAL}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.4 }}

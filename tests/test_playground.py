@@ -85,6 +85,24 @@ SOCIAL_GAP = {"public.social_gap"}
 # incidental to the filing; they are the disclosure.
 EDGAR = {"public.insider_transaction"}
 
+# Granted by 028, invisible to the parser here for the same reason.
+#
+# Which company a public Reddit comment was about, how sure we were, and how it
+# read. `social_item` is already granted, so the text itself leaves nothing new
+# -- what this adds is our resolution of it, which is exactly the thing worth
+# being able to audit from the console. A wrong link is the failure mode of this
+# whole layer, and the only way to catch one is to look at them.
+RUPERT = {
+    "rupert.mention",
+    "rupert.reading",
+    "rupert.progress",
+    # 029: a paragraph about public Reddit comments social_item already sends.
+    "rupert.narrative",
+    # 031: one row saying whether the nightly passes are allowed to run. No
+    # text and nobody's data — a boolean, a name and a timestamp.
+    "rupert.control",
+}
+
 
 def granted_in_migration() -> set[str]:
     text = MIGRATION.read_text()
@@ -456,7 +474,7 @@ def test_the_catalogue_lists_exactly_what_the_migration_grants(playground):
     # beside the editor, and a transcript you may query should be a transcript
     # you can see the shape of.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR
+    assert listed == granted_in_migration() | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR | RUPERT
 
 
 def test_the_catalogue_shows_steven_a_smaller_database(steven):
@@ -466,7 +484,7 @@ def test_the_catalogue_shows_steven_a_smaller_database(steven):
     # Magpie is on both sides, which is the point of listing it separately: the
     # one thing Steven cannot see is the one thing that was never published.
     listed = {f"{t.schema}.{t.name}" for t in catalog()}
-    assert listed == granted_in_migration() | MAGPIE | SOCIAL_GAP | EDGAR
+    assert listed == granted_in_migration() | MAGPIE | SOCIAL_GAP | EDGAR | RUPERT
     assert listed.isdisjoint(SKYBIRD)
 
 
@@ -501,7 +519,7 @@ def test_every_table_is_either_granted_or_deliberately_denied(playground, fresh_
         """
     ).fetchall()
     assert {r[0] for r in rows} == (
-        granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR
+        granted_in_migration() | set(DENIED) | SKYBIRD | MAGPIE | SOCIAL_GAP | EDGAR | RUPERT
     )
 
 
