@@ -26,7 +26,7 @@ from typing import Any
 
 import psycopg
 
-from screener.ai import AiError, converse
+from screener.ai import ROUTER, AiError, converse, offers, resolve_model, routed
 from screener.ai.models import SOLAR
 from screener.bot import budget
 from screener.bot.tools import (
@@ -38,7 +38,7 @@ from screener.bot.tools import (
     dispatch,
     specs,
 )
-from screener.audit import recent_turns, record
+from screener.audit import chosen_model, recent_turns, record
 from screener.config import env, settings
 from screener.provenance import git_sha
 
@@ -133,10 +133,75 @@ class Reply:
     # Result sets, same idea and for the same reason: they never entered the
     # conversation, so they cost nothing per round.
     rows: tuple[Rows, ...] = field(default_factory=tuple)
+    # Which model actually answered. Carried out rather than re-derived by the
+    # caller, because once a conversation can pick its own model the server's
+    # default is no longer the answer to "what replied" — and the audit row and
+    # the receipt on screen must agree with each other.
+    model: str = ""
 
 
-def agent_model() -> str:
-    return env.text("DISCORD_BOT_MODEL", DEFAULT_AGENT_MODEL)
+def agent_model(requested: str | None = None) -> str:
+    """The model to answer on: what was asked for, or the configured default.
+
+    `requested` is an explicit pick. It is resolved rather than trusted —
+    `resolve_model` checks it against the static table and the live catalogue —
+    so a slug that has gone away answers on the default instead of failing, and
+    nothing reaches OpenRouter that this project did not offer.
+    """
+    configured = env.text("DISCORD_BOT_MODEL", DEFAULT_AGENT_MODEL)
+    return resolve_model(requested) if requested else configured
+
+
+def choice_for(actor: str, actor_kind: str) -> str:
+    """What this person has selected: a model slug, or the router.
+
+    What the picker draws a tick beside, which is not the same question as what
+    answers them — selecting the router *is* a selection, and rendering it as
+    whichever model it currently resolves to would hide the thing they chose.
+
+    Three ways to land on the router, all meaning the same thing and all
+    deliberately indistinguishable here: never chose, chose it, or chose a model
+    over a day ago. A lapsed choice is not a special state to be explained, it
+    is simply back to the default.
+
+    Never raises. A preference that cannot be read is a preference nobody set.
+    """
+    try:
+        with psycopg.connect(
+            settings().database_url, connect_timeout=CONNECT_TIMEOUT
+        ) as conn:
+            picked = chosen_model(conn, budget.identities(actor, actor_kind))
+    except (psycopg.Error, OSError, RuntimeError) as exc:
+        # Deliberately narrower than the bare `except Exception` used elsewhere
+        # in this module. What is being tolerated here is the database being
+        # unreachable or unconfigured; a NameError or a TypeError is a fault in
+        # this function, and catching one would report it as "nobody has chosen
+        # a model" — which is indistinguishable from working, and is how the
+        # first version of this hid a missing import.
+        logger.warning("could not read the chosen model: %s", exc)
+        return ROUTER
+
+    if picked is None:
+        return ROUTER
+    # Re-checked rather than trusted, even though it was checked when it was
+    # chosen: a model can be withdrawn from the catalogue between the pick and
+    # the next question, and a stored slug is not evidence that it still
+    # exists. One that has gone falls back to the router rather than to an
+    # error, which is the same place everything else falls back to.
+    return picked if offers(picked) else ROUTER
+
+
+def for_person(actor: str, actor_kind: str) -> str:
+    """The concrete model that answers this person.
+
+    `choice_for` resolved through the router, so the sentinel never leaves this
+    module and nothing downstream has to know it exists.
+
+    The last fallback is the configured model, for when the catalogue cannot be
+    read at all: OpenRouter being unreachable should cost the ranking, not the
+    reply.
+    """
+    return routed(choice_for(actor, actor_kind)) or agent_model()
 
 
 def _truncate(text: str) -> str:
@@ -177,6 +242,7 @@ def _think(
     history: Sequence[tuple[str, str]] = (),
     actor: str = "system",
     actor_kind: str = "system",
+    model: str = "",
 ) -> Reply:
     """Run the tool loop and return (reply, tokens, cost).
 
@@ -233,7 +299,7 @@ def _think(
         collecting(can_draw) as drawn,
         collecting_rows(can_table) as selected,
     ):
-        return _rounds(messages, used_tools, drawn, selected, tokens, cost)
+        return _rounds(messages, used_tools, drawn, selected, tokens, cost, model)
 
 
 def _rounds(
@@ -243,12 +309,19 @@ def _rounds(
     selected: list[Rows],
     tokens: int,
     cost: float,
+    model: str,
 ) -> Reply:
-    """The tool-calling loop itself. Split out so the collecting context wraps it."""
+    """The tool-calling loop itself. Split out so the collecting context wraps it.
+
+    `model` is resolved once by the caller and passed down rather than read per
+    round: re-reading it would let a configuration change land between two
+    rounds of one conversation, so the tool call and the answer that used its
+    result could come from different models.
+    """
     for round_number in range(MAX_TOOL_ROUNDS):
         completion = converse(
             messages=messages,
-            model=agent_model(),
+            model=model,
             tools=specs(),
             max_tokens=MAX_REPLY_TOKENS,
         )
@@ -263,6 +336,10 @@ def _rounds(
                 tools=tuple(used_tools),
                 charts=tuple(drawn),
                 rows=tuple(selected),
+                # What the provider says answered, not what was asked for.
+                # OpenRouter substitutes when a route is down, so these can
+                # differ, and the receipt should show the one that ran.
+                model=completion.model or model,
             )
 
         # The assistant turn goes back verbatim: a rebuilt one loses fields the
@@ -289,6 +366,7 @@ def _rounds(
         tools=tuple(used_tools),
         charts=tuple(drawn),
         rows=tuple(selected),
+        model=model,
     )
 
 
@@ -313,6 +391,7 @@ async def respond(
     can_table: bool = False,
     fresh: bool = False,
     voice: bool = False,
+    model: str | None = None,
     allowance: budget.Budget | None = None,
 ) -> Reply:
     """The reply to one message. Never raises.
@@ -332,6 +411,12 @@ async def respond(
     question differently would be a behaviour nobody asked for, paid for on
     every request forever.
 
+    `model` is the dashboard's picker: which model this conversation is on.
+    Resolved once here and carried everywhere below rather than read again at
+    each use, because `agent_model()` consults configuration and the catalogue,
+    and a turn whose audit row names a different model from the one that
+    answered it is a trail that cannot be believed.
+
     `allowance` is for a caller that had to check the cap earlier than this. The
     voice path does: it must decide before spending a core on transcription, and
     checking again here would mean two connections and two sums for one turn. A
@@ -340,6 +425,14 @@ async def respond(
     because that check sits above the empty-question guard below and a spoken
     turn refused before transcription arrives here with nothing to say.
     """
+    # An explicit pick wins for this one turn; otherwise it is whatever this
+    # person is on, which is their live choice or the recommendation.
+    chosen = (
+        agent_model(model)
+        if model
+        else await asyncio.to_thread(for_person, actor, actor_kind)
+    )
+
     # Checked before the model is called, not after: the point of a cap is
     # that the request over it is never paid for. On a worker thread because it
     # opens a database connection and this may be the gateway's event loop.
@@ -370,7 +463,8 @@ async def respond(
                 f"{budget.usd(allowance.spent)} of {budget.usd(allowance.cap)} "
                 "used in the last 24 hours. It frees up as those charges age "
                 "out, or someone can raise DAILY_SPEND_CAP_USD."
-            )
+            ),
+            model=chosen,
         )
 
     if not question.strip():
@@ -378,7 +472,8 @@ async def respond(
             text=(
                 "I got a mention with no text. If this keeps happening, message "
                 "content may not be reaching me."
-            )
+            ),
+            model=chosen,
         )
 
     # On a worker thread for the same reason the budget check is: it opens a
@@ -395,7 +490,7 @@ async def respond(
     try:
         reply = await asyncio.to_thread(
             _think, question, context, can_draw, can_table, history,
-            actor, actor_kind,
+            actor, actor_kind, chosen,
         )
     except AiError as exc:
         logger.warning("agent reply failed: %s", exc)
@@ -406,15 +501,15 @@ async def respond(
             actor=actor,
             actor_kind=actor_kind,
             outcome="error",
-            model=agent_model(),
+            model=chosen,
             duration_ms=int((time.perf_counter() - started) * 1000),
             detail={"error": str(exc)[:200], "surface": surface},
         )
-        return Reply(text="I could not reach the model just now.")
+        return Reply(text="I could not reach the model just now.", model=chosen)
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info(
-        "replied on %s: %d tokens, $%.5f", agent_model(), reply.tokens, reply.cost_usd
+        "replied on %s: %d tokens, $%.5f", chosen, reply.tokens, reply.cost_usd
     )
 
     # Recorded on a worker thread for the same reason the model call is: this
@@ -425,7 +520,11 @@ async def respond(
         operation=OPERATION,
         actor=actor,
         actor_kind=actor_kind,
-        model=agent_model(),
+        # What ran, which is not always what was asked for: OpenRouter
+        # substitutes a provider when a route is down and names the
+        # substitution in the response. `chosen` is the fallback for a reply
+        # that never reached a provider at all.
+        model=reply.model or chosen,
         # The split is not reported per turn, so the whole conversation is
         # attributed to prompt tokens rather than invented as a ratio.
         prompt_tokens=reply.tokens,
@@ -460,6 +559,7 @@ async def respond(
             # Whatever a tool did produce is still worth showing. The model
             # having nothing to say about a table is not a reason to hide it.
             rows=reply.rows,
+            model=reply.model or chosen,
         )
     return Reply(
         text=_truncate(reply.text),
@@ -473,6 +573,7 @@ async def respond(
         # past. Every test around the tool exercised `collecting_rows` directly
         # rather than through here, so nothing caught it.
         rows=reply.rows,
+        model=reply.model or chosen,
     )
 
 
