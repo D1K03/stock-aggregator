@@ -776,8 +776,17 @@ cap has to apply again.
 'requested' and the supervisor polls for it every two seconds. There is no
 internal HTTP surface between the two containers, nothing to authenticate, and
 a capture outlives the process running it — a session left `running` by a
-container that died is reconciled to `failed` on the next boot rather than
+container that died goes back in the queue on the next boot rather than
 disappearing with it.
+
+**A deploy costs a seam, not the capture.** The next supervisor starts ffmpeg as
+far behind live as the audio stopped, using the platform's own playlist — an
+hour on YouTube, thirty seconds on Twitch — and reads the backlog at about
+ninety times real time before settling back at the live edge. The seam is good
+to about one segment (five seconds on YouTube); anything the playlist no longer
+held is written to the session's `last_error`. `SKYBIRD_MAX_REWIND_SECONDS=0`
+turns the rewind off, and because a restart no longer ends a capture, a restart
+is all it takes to apply. Spec D15 in `docs/specs/2026-09-05-skybird-live-capture.md`.
 
 **Steven knows the cap because a tool tells him, not because the prompt does.**
 `captures` answers `used/limit` every time, and `watch` names the limit in its

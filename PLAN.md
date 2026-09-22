@@ -293,7 +293,9 @@ Five decisions worth keeping when something is built on top of it:
   'requested'; the supervisor in its own container polls for it. No internal
   HTTP surface between two containers, nothing to authenticate, and a capture
   outlives the process running it — a session left `running` by a container that
-  died reconciles to `failed` on the next boot instead of vanishing with it.
+  died goes back in the queue on the next boot, and rewinds into the stream's own
+  playlist for the audio it missed (spec D15). A deploy mid-broadcast now costs a
+  seam of about one segment rather than the rest of the broadcast.
 - **yt-dlp is the platform layer; our adapters are identity and embedding.** A
   module in `skybird/platforms` recognises a URL and builds an embed, and never
   touches the network. That is what makes a third platform one module, one

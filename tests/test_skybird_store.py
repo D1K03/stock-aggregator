@@ -4,12 +4,13 @@ Constraints are asserted by catching the specific psycopg error class, so a
 test cannot pass because something else went wrong first.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
 
 from screener.skybird import store
+from screener.skybird.config import MAX_RESTARTS
 from screener.skybird.platforms import StreamRef
 
 REF = StreamRef(
@@ -109,6 +110,17 @@ def test_segments_come_back_after_a_sequence_number_in_order(fresh_db):
     assert [s.seq for s in store.segments(fresh_db, session.id, after=2)] == [3, 4, 5]
 
 
+def test_a_nul_in_a_line_is_taken_out_rather_than_refused(fresh_db):
+    # Postgres will not hold one in `text`, and a refusal would come back on
+    # every resume of the same audio.
+    session = _create(fresh_db)
+    written = store.append_segments(
+        fresh_db, session.id, [(1, 0, datetime.now(UTC), 0.0, 1.0, "buy\x00back")]
+    )
+    assert written == 1
+    assert [s.text for s in store.segments(fresh_db, session.id)] == ["buyback"]
+
+
 def test_silence_is_not_stored_as_an_empty_line(fresh_db):
     # Whisper runs with a voice filter, so quiet comes back as nothing at all.
     # A row saying nothing was said is not worth the space or the scroll.
@@ -206,23 +218,135 @@ def test_only_one_supervisor_can_claim_a_requested_capture(fresh_db):
     assert store.start(fresh_db, session.id) is False
 
 
-def test_a_capture_left_running_by_a_dead_supervisor_reconciles_to_failed(fresh_db):
+def _running(conn, session_id: int) -> None:
+    store.start(conn, session_id)
+    store.describe(conn, session_id, running=True)
+
+
+def test_a_capture_left_running_by_a_supervisor_that_went_away_is_queued_again(
+    fresh_db,
+):
     """The reason the state lives in the database at all.
 
-    Nobody asked for this to end, so it is failed rather than stopped: a row
-    saying 'stopped' would read as a clean finish nobody ordered.
+    The process went away and the stream did not, so the capture goes back in
+    the queue with everything it had: its clock, and where its audio stops.
     """
     session = _create(fresh_db)
-    store.start(fresh_db, session.id)
-    store.describe(fresh_db, session.id, running=True)
+    _running(fresh_db, session.id)
+    until = datetime.now(UTC)
+    store.count_chunk(fresh_db, session.id, ok=1, seconds=15.0, until=until)
 
     assert store.reconcile(fresh_db) == 1
 
     read = store.get(fresh_db, session.id)
     assert read is not None
-    assert read.state == "failed"
-    assert read.stop_reason == "supervisor_restart"
+    assert read.state == "requested"
+    assert read.stop_reason is None and read.stopped_at is None
+    assert read.restarts == 1
+    assert read.captured_seconds == 15.0
+    assert read.captured_until == until
+
+
+def test_a_capture_that_was_stopping_when_its_supervisor_went_away_is_stopped(
+    fresh_db,
+):
+    # Somebody already asked for it to end, so it ends.
+    session = _create(fresh_db)
+    _running(fresh_db, session.id)
+    store.request_stop(fresh_db, session.id)
+
+    store.reconcile(fresh_db)
+
+    read = store.get(fresh_db, session.id)
+    assert read is not None
+    assert (read.state, read.stop_reason) == ("stopped", "asked to stop")
     assert read.stopped_at is not None
+
+
+def test_a_capture_that_keeps_taking_its_supervisor_down_is_given_up_on(fresh_db):
+    """Resuming it would fetch the same audio again, and fail again, for ever.
+
+    A deploy never gets past one of these before a chunk puts the count back.
+    """
+    session = _create(fresh_db)
+    for _ in range(MAX_RESTARTS):
+        _running(fresh_db, session.id)
+        store.reconcile(fresh_db)
+        read = store.get(fresh_db, session.id)
+        assert read is not None and read.state == "requested"
+
+    _running(fresh_db, session.id)
+    store.reconcile(fresh_db)
+
+    read = store.get(fresh_db, session.id)
+    assert read is not None
+    assert (read.state, read.stop_reason) == ("failed", "supervisor_restart")
+    assert read.last_error is not None and "restarted 3 times" in read.last_error
+    assert read.stopped_at is not None
+
+
+def test_a_chunk_that_moves_the_clock_puts_the_restart_count_back(fresh_db):
+    session = _create(fresh_db)
+    _running(fresh_db, session.id)
+    store.reconcile(fresh_db)
+
+    store.count_chunk(fresh_db, session.id, error="could not reach the stream")
+    read = store.get(fresh_db, session.id)
+    assert read is not None and read.restarts == 1
+
+    store.count_chunk(fresh_db, session.id, failed=1, seconds=15.0)
+    read = store.get(fresh_db, session.id)
+    assert read is not None and read.restarts == 0
+
+
+def test_where_the_audio_stops_is_kept_only_while_it_is_being_captured(fresh_db):
+    # A chunk still being heard when somebody pauses must not re-arm a rewind
+    # across the gap they chose.
+    session = _create(fresh_db)
+    until = datetime.now(UTC)
+    store.count_chunk(fresh_db, session.id, ok=1, seconds=15.0, until=until)
+    read = store.get(fresh_db, session.id)
+    assert read is not None and read.captured_until is None
+
+    _running(fresh_db, session.id)
+    store.count_chunk(fresh_db, session.id, ok=1, seconds=15.0, until=until)
+    read = store.get(fresh_db, session.id)
+    assert read is not None and read.captured_until == until
+
+    store.pause(fresh_db, session.id)
+    later = until + timedelta(seconds=15)
+    store.count_chunk(fresh_db, session.id, ok=1, seconds=15.0, until=later)
+    read = store.get(fresh_db, session.id)
+    assert read is not None and read.captured_until == until
+
+
+def test_resuming_forgets_where_the_audio_stopped(fresh_db):
+    # So the capture starts at the live edge rather than hearing the pause back.
+    session = _create(fresh_db)
+    _running(fresh_db, session.id)
+    store.count_chunk(
+        fresh_db, session.id, ok=1, seconds=15.0, until=datetime.now(UTC)
+    )
+    store.pause(fresh_db, session.id)
+    store.resume(fresh_db, session.id)
+
+    read = store.get(fresh_db, session.id)
+    assert read is not None
+    assert read.captured_until is None
+    assert read.captured_seconds == 15.0
+
+
+def test_a_probe_coming_back_after_a_pause_does_not_undo_it(fresh_db):
+    # The probe takes seconds, and somebody can press pause while it is out.
+    session = _create(fresh_db)
+    store.start(fresh_db, session.id)
+    store.pause(fresh_db, session.id)
+    store.describe(fresh_db, session.id, title="Market open", running=True)
+
+    read = store.get(fresh_db, session.id)
+    assert read is not None
+    assert read.state == "paused"
+    assert read.title == "Market open"
 
 
 def test_reconcile_leaves_a_requested_capture_alone(fresh_db):

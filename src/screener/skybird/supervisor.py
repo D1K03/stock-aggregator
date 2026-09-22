@@ -4,7 +4,15 @@ What it does every couple of seconds is ask the database what it should be
 doing. That is the whole control plane — the status service writes a row and
 this reads it — so there is no internal HTTP surface between the two containers
 to authenticate, and a capture is durable: the row outlives the process, and
-`store.reconcile` settles anything a dead one left behind.
+`store.reconcile` puts anything a dead one left behind back in the queue.
+
+**A restart costs a seam, not the capture.** Every deploy recreates this
+container. What was captured is in the database — the offset, the sequence
+numbers, and the capture clock where the audio stops — so the next supervisor
+starts the stream as far behind live as the gap, which the platform's own
+playlist still holds, and reads the backlog faster than real time until it is
+back at the live edge. The same path serves every reconnect, so an ffmpeg that
+exits when its manifest expires stops costing the seconds it took to come back.
 
 **One supervisor captures at a time**, held by a Postgres advisory lock, the way
 `screener.boot` holds one for migrations. A second copy stands by and retries
@@ -18,9 +26,11 @@ Python functions.
 """
 
 import logging
+import math
 import signal
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -37,12 +47,19 @@ from screener.skybird.capture import (
     Probe,
     ProbeFailed,
     Recorder,
+    Rewind,
+    Window,
     chunk_seconds_of,
     probe,
+    rewind,
 )
 from screener.skybird.config import (
+    CHUNKS_PER_TICK,
     MAX_PENDING_CHUNKS,
+    MIN_AUDIBLE_SECONDS,
+    MIN_REPORTED_LOSS_SECONDS,
     POLL_SECONDS,
+    TRANSCRIBER_PATIENCE_SECONDS,
     SkybirdConfig,
 )
 from screener.skybird.platforms import find as find_platform
@@ -56,8 +73,10 @@ __all__ = ["Supervisor", "run"]
 # migration that created these tables so the two are traceable to each other.
 SUPERVISOR_LOCK_ID: Final = 8_119_012
 
-# Consecutive probe or start failures before a capture is given up on. A live
-# stream that has genuinely ended fails every one of these in about a minute.
+# Consecutive failures to get audio flowing — a probe that fails, an ffmpeg that
+# will not start or exits before it has produced a chunk — before a capture is
+# given up on. A live stream that has genuinely ended fails every one of these
+# in about a minute.
 MAX_FAILURES: Final = 5
 
 # Backoff between attempts, doubling, capped. A stream that has just gone offline
@@ -85,10 +104,30 @@ class Running:
     # what `offset_seconds` counts, and it is why a session started once keeps
     # one timeline even if ffmpeg is restarted six times.
     offset: float = 0.0
-    # Wall clock corresponding to `offset == 0`, re-anchored on every reconnect
-    # so an outage does not push the whole transcript permanently behind real
-    # time. Within a continuous run the two agree exactly.
+    # Wall clock corresponding to `offset == 0`. A reconnect keeps it when the
+    # rewind recovers the whole gap, and moves it on by whatever the stream no
+    # longer held, so an outage never pushes the transcript permanently behind
+    # real time. Within a continuous run the two agree exactly.
     wall_origin: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Where the stored audio stops on that clock: `wall_origin + offset` once
+    # anything has been heard, and read back from the row after a restart. None
+    # when there is nothing to rewind for — a new capture, or a resumed pause.
+    captured_until: datetime | None = None
+    # Finished chunks not yet heard, oldest first. Held on the tmpfs rather than
+    # read at once, so a transcriber that is restarting can be waited out and a
+    # rewound backlog heard a few at a time.
+    held: deque[Path] = field(default_factory=deque)
+    # Extra backlog tolerated while a rewind is being read, or the chunks it
+    # exists to recover would be the first ones shed for being old.
+    allowance: int = 0
+    # When the transcriber first stopped answering, on the monotonic clock.
+    stalled_since: float | None = None
+    # Whether this ffmpeg was started behind live, and whether it has produced
+    # anything yet. One that rewound and died without a chunk is not trusted to
+    # rewind again: the next connect starts at the live edge, as they used to.
+    rewound: bool = False
+    produced: bool = False
+    no_rewind: bool = False
     failures: int = 0
     retry_at: float = 0.0
 
@@ -124,9 +163,11 @@ class Supervisor:
         signal.signal(signal.SIGINT, stop)
 
         logger.info(
-            "skybird supervising: %ds chunks, %d session(s) at once",
+            "skybird supervising: %ds chunks, %d session(s) at once, "
+            "rewinding up to %ds after a restart",
             self.config.chunk_seconds,
             self.config.max_sessions,
+            self.config.max_rewind_seconds,
         )
         try:
             while not self._stopping.is_set():
@@ -166,6 +207,14 @@ class Supervisor:
                 # process and fail it on the next poll.
                 self._release(session.id)
             elif session.state == "requested":
+                # Paused and resumed between two polls: the row is back in the
+                # queue but its old ffmpeg is still here, and starting a second
+                # one beside it would leave the first writing into the tmpfs
+                # with nothing ever reading it.
+                self._release(session.id)
+                # A probe can take seconds, and a SIGTERM allows ten.
+                if self._stopping.is_set():
+                    continue
                 if len(self._running) < self.config.max_sessions:
                     self._begin(conn, session)
             elif session.id in self._running:
@@ -197,6 +246,8 @@ class Supervisor:
             # which is what lets a resumed capture carry on counting instead of
             # laying a second timeline over the first.
             offset=session.captured_seconds,
+            # And where that audio stops, which is what a restart rewinds to.
+            captured_until=session.captured_until,
         )
         self._running[session.id] = run
         self._connect_stream(conn, run)
@@ -217,18 +268,63 @@ class Supervisor:
             )
             return
 
+        now = datetime.now(UTC)
+        if run.captured_until is None:
+            # Nothing to recover: start at the live edge, as a capture always
+            # did, and let the clock begin here.
+            plan = Rewind(live_start_index=None, skipped=0.0)
+            anchor = now
+            recovered = 0.0
+        else:
+            gap = (now - run.captured_until).total_seconds()
+            window = found.window if found.is_live and not run.no_rewind else Window()
+            plan = rewind(gap, window, limit=self.config.max_rewind_seconds)
+            # Where the first new audio falls on the clock. The whole gap
+            # recovered keeps the old timeline exactly; none of it recovered
+            # is `now`, which is where every reconnect used to put it.
+            anchor = run.captured_until + timedelta(seconds=plan.skipped)
+            recovered = gap - plan.skipped
+
         try:
             run.capture = self._capture(
                 found.manifest_url,
                 chunk_seconds=run.chunk_seconds,
                 work_dir=self.config.work_dir,
+                live_start_index=plan.live_start_index,
             )
         except Exception as exc:
             self._stumble(conn, run, f"could not start ffmpeg: {exc}")
             return
 
-        run.failures = 0
-        run.wall_origin = datetime.now(UTC) - timedelta(seconds=run.offset)
+        # `failures` is not reset here but on the first chunk: an ffmpeg that
+        # starts and exits at once, every time, is not a stream that is working.
+        run.rewound = plan.live_start_index is not None
+        run.produced = False
+        run.wall_origin = anchor - timedelta(seconds=run.offset)
+        run.allowance = (
+            math.ceil(recovered / run.chunk_seconds) + 1 if recovered > 0 else 0
+        )
+        if plan.live_start_index is not None:
+            logger.info(
+                "session %d starts at live_start_index %d: %.0fs recovered, "
+                "%.0fs skipped",
+                run.session_id,
+                plan.live_start_index,
+                recovered,
+                plan.skipped,
+            )
+        if run.captured_until is not None and plan.skipped >= max(
+            found.window.segment_seconds, MIN_REPORTED_LOSS_SECONDS
+        ):
+            # More than the one segment a rewind is good to: the playlist no
+            # longer held it, or the platform keeps no playlist to rewind into.
+            # Said on the row, because the transcript will not say it — its
+            # offsets carry straight on across the hole.
+            store.count_chunk(
+                conn,
+                run.session_id,
+                error=f"missed {plan.skipped:.0f}s of the stream between connections",
+            )
         store.describe(
             conn,
             run.session_id,
@@ -264,11 +360,20 @@ class Supervisor:
 
         self._drain(conn, run)
 
-        if not run.capture.running:
+        # Not torn down while chunks are still waiting to be heard: when a
+        # stream ends, the last of them are the end of it.
+        if not run.capture.running and not run.held:
             code = run.capture.returncode
             error = run.capture.error
             run.capture.stop()
             run.capture = None
+            if run.rewound and not run.produced:
+                logger.warning(
+                    "session %d's rewound ffmpeg produced nothing; "
+                    "reconnecting at the live edge",
+                    run.session_id,
+                )
+                run.no_rewind = True
             # A manifest URL expires after a few hours, so an exit part way
             # through a broadcast is expected rather than exceptional. Probe
             # again: that is also what notices the stream has ended.
@@ -278,52 +383,98 @@ class Supervisor:
             self._stumble(conn, run, error, quiet=True)
 
     def _drain(self, conn: psycopg.Connection, run: Running) -> None:
+        """Hear the oldest chunks, a few at a time, in the order they were cut.
+
+        A few rather than all: a rewind hands over dozens at once, and hearing
+        them in one pass would hold the other capture and any stop request
+        behind minutes of transcription. The rest wait on the tmpfs.
+        """
         assert run.capture is not None
-        chunks = run.capture.take()
-        if not chunks:
+        finished = run.capture.take()
+        if finished:
+            # Audio is flowing, which is the only evidence that a connect worked.
+            run.failures = 0
+            run.produced = True
+            run.held.extend(finished)
+        self._shed(conn, run)
+        for _ in range(CHUNKS_PER_TICK):
+            if not run.held or self._stopping.is_set():
+                return
+            if not self._hear(conn, run, run.held[0]):
+                return
+            run.held.popleft()
+
+    def _shed(self, conn: psycopg.Connection, run: Running) -> None:
+        """Drop the oldest chunks past the bound, and count them.
+
+        The transcriber is not keeping up. Dropping bounds the tmpfs and leaves
+        a gap the offsets make visible, which is better than filling quietly to
+        hide it. A rewind raises the bound by what it recovered, or the backlog
+        it exists to hear would be the first thing thrown away.
+        """
+        excess = len(run.held) - (MAX_PENDING_CHUNKS + run.allowance)
+        if excess <= 0:
             return
+        lost = 0.0
+        for _ in range(excess):
+            lost += self._discard(run.held.popleft())
+        run.offset += lost
+        run.captured_until = run.wall_origin + timedelta(seconds=run.offset)
+        store.count_chunk(
+            conn,
+            run.session_id,
+            dropped=excess,
+            seconds=lost,
+            until=run.captured_until,
+            error=f"dropped {excess} chunk(s): the transcriber is behind",
+        )
 
-        if len(chunks) > MAX_PENDING_CHUNKS:
-            # The transcriber is not keeping up. Dropping the oldest bounds
-            # memory and leaves a gap that the offsets make visible, which is
-            # better than a tmpfs quietly filling to hide it.
-            stale, chunks = chunks[:-MAX_PENDING_CHUNKS], chunks[-MAX_PENDING_CHUNKS:]
-            lost = 0.0
-            for path in stale:
-                lost += self._discard(path)
-            run.offset += lost
-            store.count_chunk(
-                conn,
-                run.session_id,
-                dropped=len(stale),
-                seconds=lost,
-                error=f"dropped {len(stale)} chunk(s): the transcriber is behind",
+    def _hear(self, conn: psycopg.Connection, run: Running, path: Path) -> bool:
+        """Transcribe one chunk and account for it. False to keep it for later.
+
+        The file stays until the chunk is accounted for, so a transcriber that
+        does not answer costs a wait rather than the audio: a deploy recreates
+        it beside this container, and a chunk that arrives while it loads its
+        model has nothing wrong with it. `TRANSCRIBER_PATIENCE_SECONDS` of that
+        and chunks are counted as failed again, as they always were, until one
+        is heard.
+        """
+        try:
+            audio = path.read_bytes()
+        except OSError:
+            # Counted at its nominal length: the audio happened, and a clock
+            # that skipped it would make the next rewind fetch it twice.
+            self._account(
+                conn, run, float(run.chunk_seconds), failed=1,
+                error="a chunk went missing before it was read",
             )
+            return True
 
-        for path in chunks:
-            audio = self._read(path)
-            if audio is None:
-                store.count_chunk(conn, run.session_id, failed=1,
-                                  error="a chunk went missing before it was read")
-                continue
-            self._store_chunk(conn, run, audio)
-
-    def _store_chunk(
-        self, conn: psycopg.Connection, run: Running, audio: bytes
-    ) -> None:
         seconds = chunk_seconds_of(audio)
+        if seconds < MIN_AUDIBLE_SECONDS:
+            # The sliver ffmpeg closes on its way out. Nothing to hear, and a
+            # refusal from the transcriber would read as the transcriber down.
+            path.unlink(missing_ok=True)
+            self._account(conn, run, seconds, ok=1)
+            return True
+
         heard = self._transcribe(audio)
         if heard is None:
-            store.count_chunk(
-                conn,
-                run.session_id,
-                failed=1,
-                seconds=seconds,
-                error="the transcriber did not answer",
+            now = time.monotonic()
+            if run.stalled_since is None:
+                run.stalled_since = now
+                logger.warning(
+                    "the transcriber did not answer; holding session %d's chunks",
+                    run.session_id,
+                )
+            if now - run.stalled_since < TRANSCRIBER_PATIENCE_SECONDS:
+                return False
+            path.unlink(missing_ok=True)
+            self._account(
+                conn, run, seconds, failed=1, error="the transcriber did not answer"
             )
-            run.offset += seconds
-            run.chunk_seq += 1
-            return
+            return True
+        run.stalled_since = None
 
         rows: list[tuple[int, int, datetime, float, float, str]] = []
         for start, end, text in _utterances(heard, seconds):
@@ -335,11 +486,41 @@ class Supervisor:
                 max(end - start, 0.0),
                 text,
             ))
-        written = store.append_segments(conn, run.session_id, rows)
+        # The lines and the clock in one transaction. Apart, a restart between
+        # them would leave the lines stored and the clock short of them, and
+        # the rewind would hear that audio a second time.
+        with conn.transaction():
+            written = store.append_segments(conn, run.session_id, rows)
+            self._account(conn, run, seconds, ok=1)
         run.next_seq += written
+        # Unlinked only now it is accounted for. Nothing keeps audio.
+        path.unlink(missing_ok=True)
+        return True
+
+    def _account(
+        self,
+        conn: psycopg.Connection,
+        run: Running,
+        seconds: float,
+        *,
+        ok: int = 0,
+        failed: int = 0,
+        error: str | None = None,
+    ) -> None:
+        """Move the clock past one chunk, here and on the row."""
         run.offset += seconds
         run.chunk_seq += 1
-        store.count_chunk(conn, run.session_id, ok=1, seconds=seconds)
+        run.captured_until = run.wall_origin + timedelta(seconds=run.offset)
+        run.allowance = max(run.allowance - 1, 0)
+        store.count_chunk(
+            conn,
+            run.session_id,
+            ok=ok,
+            failed=failed,
+            seconds=seconds,
+            until=run.captured_until,
+            error=error,
+        )
 
     def _stumble(
         self,
@@ -372,15 +553,6 @@ class Supervisor:
             run.capture.stop()
 
     # -- plumbing ---------------------------------------------------------
-
-    def _read(self, path: Path) -> bytes | None:
-        """The chunk, and then it is gone. Nothing keeps audio."""
-        try:
-            return path.read_bytes()
-        except OSError:
-            return None
-        finally:
-            path.unlink(missing_ok=True)
 
     def _discard(self, path: Path) -> float:
         try:
@@ -440,14 +612,23 @@ class Supervisor:
         self._reconciled = False
 
     def shutdown(self) -> None:
-        """Stop everything, and mark the rows so nothing is left saying 'running'."""
-        for session_id in list(self._running):
-            self._release(session_id)
+        """Put every capture back in the queue, then stop its ffmpeg.
+
+        The rows first. Docker allows ten seconds between SIGTERM and SIGKILL,
+        and an ffmpeg idle at the live edge can take most of one segment to
+        notice it has been asked to go, so the one step that has to happen is
+        done before the ones that can run long. Anything half-heard is thrown
+        away with the tmpfs: `captured_until` never counted it, so the next
+        supervisor rewinds and hears it then.
+        """
         if self._conn is not None and not self._conn.closed:
             try:
                 store.reconcile(self._conn)
             except Exception as exc:
                 logger.warning("could not settle sessions on the way out: %s", exc)
+        for session_id in list(self._running):
+            self._release(session_id)
+        if self._conn is not None and not self._conn.closed:
             self._conn.close()
         self._conn = None
         if self._client is not None:

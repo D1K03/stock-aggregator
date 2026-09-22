@@ -6,9 +6,17 @@ fixed-length WAV files. Everything after this point is the same whether the
 stream came from YouTube, Twitch or something added next year.
 
 **The audio is never written to a disk.** The chunk directory is a tmpfs in the
-container, each file is unlinked as soon as it has been read, and the directory
+container, each file is unlinked as soon as it has been heard, and the directory
 goes when the capture does. `screener.transcribe` holds itself to the same rule
 and for the same reason: what is worth keeping is the text.
+
+**A capture can start behind live.** A live HLS playlist is a window onto the
+recent past rather than a pointer at the present — YouTube's holds an hour,
+Twitch's thirty seconds — and ffmpeg can be told to start that many segments
+from its end. `rewind` works out how many, so a capture that went away for a
+deploy comes back where its audio stopped and reads the backlog at about ninety
+times real time before settling at the live edge. The playlist is read once by
+`probe`, which is the only thing here that knows what the stream is.
 
 yt-dlp is imported inside `probe`, the way `faster_whisper` is inside
 `load_model`. CI installs the `dev` extra and not `stream`, so this module has
@@ -16,6 +24,7 @@ to stay importable without it or the supervisor could not be tested at all.
 """
 
 import logging
+import math
 import queue
 import shutil
 import subprocess
@@ -26,6 +35,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -33,8 +44,14 @@ __all__ = [
     "Probe",
     "ProbeFailed",
     "Recorder",
+    "Rewind",
+    "Window",
     "chunk_seconds_of",
+    "ffmpeg_command",
+    "parse_window",
     "probe",
+    "replay_window",
+    "rewind",
 ]
 
 # 16 kHz mono signed 16-bit, which is exactly what Whisper wants — so nothing
@@ -49,6 +66,16 @@ TERMINATE_TIMEOUT: Final = 5.0
 # Enough stderr to say what went wrong, not enough to hold a log in memory for
 # the length of a broadcast.
 STDERR_LINES: Final = 12
+
+# Where ffmpeg starts a live HLS playlist when it is not told otherwise: three
+# segments from the end (`live_start_index`, libavformat/hls.c). A rewind is
+# counted from here, because this is where every capture that did not rewind
+# started, and so where its clock was anchored.
+LIVE_EDGE_SEGMENTS: Final = 3
+
+# Reading the playlist is one small GET, and a probe that has just spent
+# seconds in yt-dlp should not spend many more on something optional.
+WINDOW_TIMEOUT_SECONDS: Final = 5.0
 
 
 class ProbeFailed(Exception):
@@ -79,11 +106,32 @@ class Recorder(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class Window:
+    """How much of a live stream its playlist still holds.
+
+    The mean segment length rather than the target duration, because the two
+    differ: Twitch declares six seconds and serves two. Zero segments is "cannot
+    rewind" — a playlist that could not be read, a master playlist, or a stream
+    that is not HLS at all — and is never an error.
+
+    `ended` is a playlist that has said `#EXT-X-ENDLIST`: the broadcast is over
+    whatever yt-dlp still reports. Worth knowing because ffmpeg starts a
+    finished playlist at its *first* segment, so treating one as live would read
+    the last hour of the stream back in from the top.
+    """
+
+    segment_seconds: float = 0.0
+    segments: int = 0
+    ended: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Probe:
     """What yt-dlp knows about a stream right now.
 
     `manifest_url` expires — hours, on both platforms — which is why the
-    supervisor probes again on every reconnect instead of holding one.
+    supervisor probes again on every reconnect instead of holding one. So does
+    the window, which slides a segment at a time.
     """
 
     manifest_url: str
@@ -91,6 +139,7 @@ class Probe:
     title: str | None
     channel: str | None
     is_live: bool
+    window: Window = Window()
 
 
 def probe(url: str) -> Probe:
@@ -127,25 +176,130 @@ def probe(url: str) -> Probe:
             raise ProbeFailed("that channel has nothing playing")
         info = first
 
+    chosen = info
     manifest = info.get("url")
     if not manifest:
         requested = info.get("requested_formats")
-        if isinstance(requested, list) and requested:
-            manifest = requested[0].get("url")
+        if isinstance(requested, list) and requested and isinstance(requested[0], dict):
+            chosen = requested[0]
+            manifest = chosen.get("url")
     if not isinstance(manifest, str) or not manifest:
         raise ProbeFailed("yt-dlp found no audio track")
 
+    is_live = bool(info.get("is_live"))
+    protocol = chosen.get("protocol")
+    hls = isinstance(protocol, str) and protocol.startswith("m3u8")
+    window = replay_window(manifest) if is_live and hls else Window()
     return Probe(
         manifest_url=manifest,
         video_id=_text(info.get("id")),
         title=_text(info.get("title")),
         channel=_text(info.get("uploader") or info.get("channel")),
-        is_live=bool(info.get("is_live")),
+        # The playlist has the last word: yt-dlp can go on calling a broadcast
+        # live for a while after the stream itself has said it is over.
+        is_live=is_live and not window.ended,
+        window=window,
     )
 
 
 def _text(value: object) -> str | None:
     return value.strip() or None if isinstance(value, str) else None
+
+
+def replay_window(url: str, *, client: httpx.Client | None = None) -> Window:
+    """Read a live playlist for how far back it reaches. Never raises.
+
+    A failure here costs a rewind, not a capture: the probe has already found
+    the stream, and a capture that starts at the live edge is what every capture
+    did before this existed. The URL is not logged — it carries a signature.
+    """
+    owned = client is None
+    client = client or httpx.Client(
+        timeout=WINDOW_TIMEOUT_SECONDS, follow_redirects=True
+    )
+    try:
+        response = client.get(url)
+        response.raise_for_status()
+        return parse_window(response.text)
+    except Exception as exc:
+        logger.warning("could not read the replay window: %s", type(exc).__name__)
+        return Window()
+    finally:
+        if owned:
+            client.close()
+
+
+def parse_window(playlist: str) -> Window:
+    """The segments an HLS media playlist lists, and how long they are.
+
+    A master playlist names variants rather than segments, so it has no window
+    of its own; nor does anything that is not a playlist. Both come back empty,
+    which is "cannot rewind", rather than as a guess.
+    """
+    text = playlist.lstrip("\ufeff").lstrip()
+    if not text.startswith("#EXTM3U") or "#EXT-X-STREAM-INF" in text:
+        return Window()
+    durations: list[float] = []
+    for line in text.splitlines():
+        if not line.startswith("#EXTINF:"):
+            continue
+        try:
+            durations.append(float(line[len("#EXTINF:"):].split(",", 1)[0]))
+        except ValueError:
+            return Window()
+    ended = "#EXT-X-ENDLIST" in text
+    durations = [seconds for seconds in durations if seconds > 0]
+    if not durations:
+        return Window(ended=ended)
+    return Window(
+        segment_seconds=sum(durations) / len(durations),
+        segments=len(durations),
+        ended=ended,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Rewind:
+    """Where in a live playlist to start, so the audio picks up where it stopped.
+
+    `skipped` is the stream between where the audio stopped and where it starts
+    again: a hole when positive, heard twice when negative. It is what moves
+    the clock, so a line after a hole is still stamped at the second it was
+    said.
+    """
+
+    live_start_index: int | None
+    skipped: float
+
+
+def rewind(gap: float, window: Window, *, limit: float) -> Rewind:
+    """How far behind live to start a capture whose audio stopped `gap` ago.
+
+    `gap` is measured on the capture clock: now, less the moment the stored
+    audio reaches. That clock was anchored where a default start puts the audio
+    — `LIVE_EDGE_SEGMENTS` from the end of the playlist — so the rewind is
+    counted from there too, one segment per `segment_seconds` of gap. It can
+    run the other way: a quick reconnect finds the clock *ahead* of now, and
+    starting nearer the edge is what stops it hearing the same words twice.
+
+    Whole segments, rounded down, so a seam leans toward losing part of one
+    segment rather than repeating it. That is also its precision: ffmpeg counts
+    from the end of its own fetch of the playlist, which moves a segment at a
+    time, so the seam is good to about one segment — five seconds on YouTube,
+    two on Twitch. Bounded by what the playlist still holds and by `limit`,
+    which at zero turns rewinding off; what lies beyond either is lost, and
+    `skipped` says how much.
+    """
+    seconds = window.segment_seconds
+    if limit <= 0 or seconds <= 0 or window.segments <= LIVE_EDGE_SEGMENTS:
+        return Rewind(live_start_index=None, skipped=gap)
+    reach = min(window.segments - LIVE_EDGE_SEGMENTS, int(limit // seconds))
+    back = max(min(math.floor(gap / seconds), reach), 1 - LIVE_EDGE_SEGMENTS)
+    index = -(LIVE_EDGE_SEGMENTS + back)
+    return Rewind(
+        live_start_index=None if index == -LIVE_EDGE_SEGMENTS else index,
+        skipped=gap - back * seconds,
+    )
 
 
 def chunk_seconds_of(audio: bytes) -> float:
@@ -158,6 +312,52 @@ def chunk_seconds_of(audio: bytes) -> float:
     """
     payload = max(len(audio) - WAV_HEADER_BYTES, 0)
     return payload / (SAMPLE_RATE * BYTES_PER_SAMPLE)
+
+
+def ffmpeg_command(
+    manifest_url: str,
+    *,
+    chunk_seconds: int,
+    directory: Path,
+    live_start_index: int | None = None,
+) -> list[str]:
+    """The one ffmpeg a capture runs, as an argument list.
+
+    `-live_start_index` only when a rewind asks for it, and before `-i`: it is
+    an option of the HLS demuxer, so it belongs to the input, and handed to any
+    other kind of input ffmpeg refuses to start at all.
+    """
+    rewinding = (
+        ["-live_start_index", str(live_start_index)]
+        if live_start_index is not None
+        else []
+    )
+    return [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel", "warning",
+        "-nostdin",
+        # Ride out the ordinary blip. The manifest still expires, and that
+        # is the supervisor's problem rather than this one's.
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        *rewinding,
+        "-i", manifest_url,
+        "-vn",
+        "-ac", "1",
+        "-ar", str(SAMPLE_RATE),
+        "-c:a", "pcm_s16le",
+        "-f", "segment",
+        "-segment_time", str(chunk_seconds),
+        "-reset_timestamps", "1",
+        # The point of this flag: ffmpeg names each segment on stdout the
+        # moment it is closed, so nothing has to guess from a modification
+        # time whether a file is still being written to.
+        "-segment_list", "pipe:1",
+        "-segment_list_type", "flat",
+        str(directory / "chunk%06d.wav"),
+    ]
 
 
 class Capture:
@@ -176,14 +376,19 @@ class Capture:
         *,
         chunk_seconds: int,
         work_dir: str,
+        live_start_index: int | None = None,
     ) -> None:
-        self._chunk_seconds = chunk_seconds
         Path(work_dir).mkdir(parents=True, exist_ok=True)
         self.directory = Path(tempfile.mkdtemp(prefix="capture-", dir=work_dir))
         self._ready: queue.Queue[Path] = queue.Queue()
         self._stderr: deque[str] = deque(maxlen=STDERR_LINES)
         self._process = subprocess.Popen(
-            self._command(manifest_url),
+            ffmpeg_command(
+                manifest_url,
+                chunk_seconds=chunk_seconds,
+                directory=self.directory,
+                live_start_index=live_start_index,
+            ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -195,33 +400,6 @@ class Capture:
         ]
         for reader in self._readers:
             reader.start()
-
-    def _command(self, manifest_url: str) -> list[str]:
-        return [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel", "warning",
-            "-nostdin",
-            # Ride out the ordinary blip. The manifest still expires, and that
-            # is the supervisor's problem rather than this one's.
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-i", manifest_url,
-            "-vn",
-            "-ac", "1",
-            "-ar", str(SAMPLE_RATE),
-            "-c:a", "pcm_s16le",
-            "-f", "segment",
-            "-segment_time", str(self._chunk_seconds),
-            "-reset_timestamps", "1",
-            # The point of this flag: ffmpeg names each segment on stdout the
-            # moment it is closed, so nothing has to guess from a modification
-            # time whether a file is still being written to.
-            "-segment_list", "pipe:1",
-            "-segment_list_type", "flat",
-            str(self.directory / "chunk%06d.wav"),
-        ]
 
     def _drain_segments(self) -> None:
         if self._process.stdout is None:  # pragma: no cover - PIPE is always set
@@ -246,7 +424,15 @@ class Capture:
                 logger.debug("ffmpeg: %s", line)
 
     def take(self) -> list[Path]:
-        """Every chunk finished since the last call. Never blocks."""
+        """Every chunk finished since the last call.
+
+        Never blocks while ffmpeg runs. Once it has exited, the reader is given
+        a moment to pass on the last name ffmpeg wrote on the way out, or the
+        supervisor would see a dead process with nothing left to hear and tear
+        the capture down with the end of the stream still in it.
+        """
+        if self._process.poll() is not None:
+            self._readers[0].join(timeout=1.0)
         finished: list[Path] = []
         while True:
             try:

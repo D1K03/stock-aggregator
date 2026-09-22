@@ -36,8 +36,9 @@ it would need authentication of its own, or the honest admission that it has
 none; and it would put the state of a running capture inside a process that can
 die holding it. With the row as the record, a capture left `running` by a
 container that was killed is still visible on the next boot, and `reconcile`
-settles it to `failed` rather than leaving the dashboard reporting a capture
-that is not happening.
+puts it back in the queue rather than leaving the dashboard reporting a capture
+that is not happening. It used to settle it to `failed`; D15 is why it no
+longer does.
 
 The cost is latency — up to one poll on a start or a stop, which is nothing
 against a thing measured in hours — and a query every two seconds, which is one
@@ -113,8 +114,8 @@ rather than a timestamp. With it, a mention keeps the second it was said at,
 which is the difference between a stored transcript and a useful one.
 
 **D6 — Audio is never written to a disk, and never kept.** Chunks land in a
-tmpfs, are POSTed once, and are unlinked. `screener.transcribe` holds itself to
-the same rule and this does not weaken it.
+tmpfs, are POSTed, and are unlinked once they are accounted for.
+`screener.transcribe` holds itself to the same rule and this does not weaken it.
 
 It is also the answer to the storage question that `DESIGN.md` leaves open for
 payloads. A night of audio is gigabytes; a night of text is megabytes; only the
@@ -124,7 +125,8 @@ volume and a bill for something nothing reads.
 The backlog is bounded for the same reason. At most `MAX_PENDING_CHUNKS` may
 queue; past that the oldest is dropped and counted on the session. Growing
 without limit would fill memory to hide a transcriber that is behind, and the
-gap is visible in the offsets anyway.
+gap is visible in the offsets anyway. A rewind (D15) raises the bound by exactly
+what it recovered, because that backlog is the point rather than a symptom.
 
 **D7 — Two streams at once, because the transcriber is one.**
 `screener.transcribe` holds a `BoundedSemaphore(1)` on a two-core container, and
@@ -260,6 +262,64 @@ The cost is real and is recorded in `tests/test_bot.py`: three tools and a line
 of prompt are about 850 characters of fixed overhead on every message of every
 conversation, which is the largest single rise that budget has taken. Raising it
 was the decision; the test is where it is written down.
+
+**D15 — A restart is a reconnect, not an ending.** Added 2026-09-22, before
+Meta Connect. Every deploy recreates this container, because every commit is a
+new image, and until now the old supervisor's shutdown and the new one's boot
+both settled a live capture to `failed / supervisor_restart`. Merging anything
+during a broadcast cost the rest of it.
+
+`reconcile` now puts 'starting' and 'running' back to 'requested', the path a
+new capture and a resumed pause already take, so the transcript carries on from
+`captured_seconds` and the last sequence number. 'stopping' ends, because
+somebody asked. `restarts` counts restarts with no chunk accounted for between
+them, and at three the capture is failed as before. A deploy never gets past
+one; a chunk that takes the supervisor down with it would otherwise be fetched,
+and fail, for ever.
+
+**The gap is heard, not skipped, because a live playlist is a window onto the
+past.** Measured on 2026-09-22 against three YouTube broadcasts: the format
+`bestaudio` selects (234, audio only, HLS) is a media playlist holding **an
+hour** — 720 segments of 5 seconds. ffmpeg's `-live_start_index -N` starts N
+segments from its end, reads the backlog at about **ninety times real time**
+(1,915 seconds of audio in 20.6), and then follows live in the same process.
+Migration 032 adds `captured_until`, the capture clock where the stored audio
+stops. A connect starts `LIVE_EDGE_SEGMENTS + ⌊gap / segment⌋` segments back,
+three being ffmpeg's own default and so the place every clock was anchored.
+
+yt-dlp's `live_from_start` was the obvious alternative and cannot do this: it
+hard-codes `begin_index = 0`, rejects `--download-sections` for that protocol,
+and would read a 24-hour stream from its first segment. Twitch's live playlist
+holds thirty seconds (fifteen of two), so a Twitch restart recovers what fits
+and says what did not. Its in-progress archive VOD holds the whole broadcast
+and is the route if that ever matters; it would be a second capture path.
+
+**Good to one segment, and honest about the rest.** ffmpeg counts N from the
+end of its own fetch of the playlist, which moves five seconds at a time, so a
+seam is right to about one segment. Whole segments are rounded down, so it
+leans toward losing part of one rather than repeating it. Whatever the rewind
+could not reach — part of a segment, past the playlist, past
+`SKYBIRD_MAX_REWIND_SECONDS` — moves the clock on, so the next line is still
+stamped at the second it was said, and anything over five seconds is written
+to `last_error` because the offsets will not show it. A quick reconnect can find
+the clock *ahead* of now, since a start three segments back is stamped as
+though it were live; it then starts nearer the edge instead of hearing the same
+words twice.
+
+**Holding a chunk is what makes the rest work.** A chunk is unlinked only once
+it is accounted for, so anything half-heard when the container goes is heard
+again by the rewind. The transcriber is recreated in the same deploy, so one
+that does not answer is waited on for ninety seconds before chunks count as
+failed. A backlog is heard four chunks a poll, so it cannot hold the other
+capture or a stop request behind minutes of transcription. Ten minutes is the
+limit because the tmpfs is: ffmpeg writes the whole backlog in seconds and it
+waits there to be heard. `SKYBIRD_MAX_REWIND_SECONDS=0` turns all of it off.
+
+**A pause is not rewound over.** `resume` clears `captured_until`, and a chunk
+only writes it while the row is being captured, so a gap somebody chose stays a
+gap. Nor is anything past ten minutes, past what the platform keeps, or the tail
+of a stream that ended while nothing was running. The first deploy of this
+change still ran the old shutdown.
 
 ## What this deliberately does not do
 

@@ -473,6 +473,13 @@ nothing outside imports a submodule directly.
   transcript while freeing its slot against the session cap. `captured_seconds` on the session
   is what lets a resumed capture carry on counting rather than laying a second timeline over
   the first, which is why the clock is in the database and not in the supervisor's memory.
+  **A restart is a reconnect, not an ending**, so a deploy mid-broadcast costs a seam rather
+  than the capture: `reconcile` puts a running capture back to 'requested', and the next
+  connect starts ffmpeg `-live_start_index` segments behind live — as far as `captured_until`
+  says the audio stopped — and reads the backlog at ~90× real time. YouTube's live playlist
+  holds an hour, Twitch's thirty seconds; what is out of reach is written to `last_error`. Good
+  to one segment either way, a pause is never rewound over, `restarts` fails a capture that
+  keeps taking the supervisor down, and `SKYBIRD_MAX_REWIND_SECONDS=0` turns it off. Spec D15.
   Steven controls all of this through `bot/tools/skybird.py` — `watch`, `captures`, `hold` —
   and deliberately **cannot read a transcript**: he starts and stops captures, nothing more.
 - `screener.auth` — GitHub sign-in for the status service. Sessions live in
