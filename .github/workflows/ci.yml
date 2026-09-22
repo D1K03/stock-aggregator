@@ -112,8 +112,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         name: Build the status service image
         with:
           context: .
@@ -122,7 +122,7 @@ jobs:
           load: false
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         name: Build the dashboard image
         with:
           context: web
@@ -131,7 +131,7 @@ jobs:
           load: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         name: Build the transcription image
         with:
           context: .
@@ -147,7 +147,7 @@ jobs:
       # is caught on the pull request rather than at deploy. The gha cache keeps
       # that off every unrelated PR: nothing in the stage changes, so nothing
       # re-runs.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         name: Build the sentiment image
         with:
           context: .
@@ -156,7 +156,7 @@ jobs:
           load: false
           cache-from: type=gha,scope=sentiment
           cache-to: type=gha,mode=max,scope=sentiment
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         name: Build the live capture image
         with:
           context: .
