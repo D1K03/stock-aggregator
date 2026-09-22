@@ -21,7 +21,7 @@ drops and recreates — and has nothing to do with this.
 | Sentiment image | `…-sentiment`, FinBERT as ONNX baked in. The only two-stage build here: torch converts the checkpoint in a builder that is thrown away. |
 | Capture image | `…-skybird`, yt-dlp and ffmpeg. No port, no Caddy route: it reads what to do from Postgres. |
 | Database | `postgres:16` in the stack, on the `pg_data` named volume |
-| Secrets | Infisical, fetched at startup into the process environment |
+| Secrets | Infisical, fetched at startup into the process environment and re-read once a minute, so an edit needs no restart |
 | Bootstrap credentials | `${VPS_APP_DIR}/.env` on the box, root-owned `0600` |
 | Ingress | Cloudflare Tunnel, hostname mapping in the Zero Trust dashboard |
 | SSH | Deploys go over the tailnet; port 22 is still open publicly (see Hardening) |
@@ -44,9 +44,12 @@ done from CI.
    from presenting as a mysterious network timeout.
 2. **Infisical.** Create a project for the screener — its own, not a shared one
    with Job Terminal, so a leaked identity on one stack cannot read the other's
-   secrets. Add a machine identity with Universal Auth, and populate every key
-   in `.env.example` before the first boot. A failed fetch is fatal by design,
-   so a half-populated project means a container that will not start.
+   secrets. Add a machine identity with Universal Auth and give it the
+   **Viewer** role: the containers only read, and an admin identity lets
+   anything inside one of them rewrite a secret every other container picks up
+   within the minute. Populate every key in `.env.example` before the first
+   boot. A failed fetch is fatal by design, so a half-populated project means a
+   container that will not start.
 3. **The env file.** On the box, `${VPS_APP_DIR}/.env` holding only
    `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, `INFISICAL_PROJECT_ID` and
    optionally `INFISICAL_ENV`. These are the only credentials stored on the

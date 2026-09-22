@@ -153,7 +153,7 @@ behind a weight-version bump rather than beside one.
 than per request from a person: its budget starts at zero, it logs one line and
 exits 0, and `restart: unless-stopped` starts it again to exit again. Merging it
 therefore changes nothing for a running deployment until somebody sets
-`RUPERT_DAILY_MAX_CALLS` in Infisical and recreates the container.
+`RUPERT_DAILY_MAX_CALLS` in Infisical, which the next of those restarts reads.
 
 As for `edgar`: its single outbound
 edge goes to sec.gov, and it holds no credential beyond the contact address SEC
@@ -927,6 +927,8 @@ sequenceDiagram
     alt command is migrate
         B->>C: exit 0
     else command is serve
+        B->>I: watch, a daemon thread re-reading once a minute
+        Note over B,I: What changed is written into os.environ and<br/>named in the log. A failed re-read is waited out.
         B->>S: serve
         Note over B,S: Called, not exec'd, so serve's own<br/>SIGTERM handler is the one that runs.
     end

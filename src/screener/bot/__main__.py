@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 
@@ -10,9 +11,16 @@ import psycopg
 
 from screener.bot.config import BotConfig
 from screener.config import settings
-from screener.secrets import SecretsError, load_into_environ
+from screener.secrets import SecretsError, load_into_environ, watch
 
 logger = logging.getLogger(__name__)
+
+# The two settings bound into a gateway session rather than read per message:
+# the token is how the session logged in, and the guild is where `setup_hook`
+# registered the commands. A change to either needs a new session. Everything
+# else the bot reads -- the allow-list, the user map, the model, the OpenRouter
+# key -- is read again by the next message that needs it.
+SESSION_SETTINGS = frozenset({"DISCORD_BOT_TOKEN", "DISCORD_GUILD_ID"})
 
 
 async def _serve(config: BotConfig) -> None:
@@ -23,20 +31,55 @@ async def _serve(config: BotConfig) -> None:
     the process would be killed outright and the gateway session left for
     Discord to time out, showing the bot online for minutes after it died.
     Handling SIGTERM here closes the session first.
+
+    A new token or guild in Infisical reconnects in place: `watch()` hears the
+    change, the session is closed the way SIGTERM closes it, and a new client
+    logs in with the new values while the process carries on. A client cannot
+    be started twice, so it is a new one rather than the old one again.
     """
     from screener.bot.client import ScreenerBot
 
-    assert config.token is not None  # implied by config.enabled
-
-    client = ScreenerBot(config)
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        # close() makes start() return, which unwinds the context manager and
-        # lets the process exit on its own rather than being torn down.
-        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(client.close()))
+    client: ScreenerBot | None = None
+    stopping = asyncio.Event()
+    renewing = asyncio.Event()
 
-    async with client:
-        await client.start(config.token)
+    def stop() -> None:
+        stopping.set()
+        if client is not None:
+            # close() makes start() return, which unwinds the context manager
+            # and lets the process exit on its own rather than being torn down.
+            asyncio.ensure_future(client.close())
+
+    def renew() -> None:
+        if client is None or stopping.is_set():
+            return
+        logger.info("the bot's token or guild changed in Infisical; reconnecting")
+        renewing.set()
+        asyncio.ensure_future(client.close())
+
+    def changed(names: list[str]) -> None:
+        # Called on the watcher's thread. The client belongs to this loop, so
+        # closing it is handed to the loop rather than done from here.
+        if SESSION_SETTINGS.intersection(names):
+            loop.call_soon_threadsafe(renew)
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop)
+    watch(on_change=changed)
+
+    while not stopping.is_set():
+        assert config.token is not None  # implied by config.enabled
+        client = ScreenerBot(config)
+        async with client:
+            await client.start(config.token)
+        if not renewing.is_set():
+            return
+        renewing.clear()
+        config = BotConfig.from_env()
+        if not config.enabled:
+            logger.error("DISCORD_BOT_TOKEN is no longer set; staying disconnected")
+            return
 
 
 def _check_database() -> bool:
@@ -135,7 +178,10 @@ def main() -> int:
         logger.error(
             "could not register commands in guild %s. Is the bot in that "
             "server, and was it invited with the applications.commands scope?",
-            config.guild_id,
+            # Read now rather than taken from boot: the session that failed may
+            # have been a reconnect for a new guild, and naming the old one
+            # would send somebody to check the wrong server.
+            os.environ.get("DISCORD_GUILD_ID"),
         )
         return 1
     logger.info("bot stopped")

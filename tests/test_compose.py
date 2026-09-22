@@ -153,3 +153,47 @@ def test_the_connector_runs_as_its_own_role():
     api = services()["api"]
     assert "postgresql://playground_mcp:" in api
     assert "PLAYGROUND_MCP_DATABASE_URL:" in api
+
+
+# -- following Infisical ------------------------------------------------------
+#
+# A value edited in Infisical reaches a running container because its process
+# calls `screener.secrets.watch()` after it boots. A service that stopped
+# calling it would go on running whatever it booted with, and look exactly as
+# healthy as the ones that follow along -- the failure this file exists for.
+
+# Every service handed a machine identity, and the entry point that keeps what
+# it loaded current.
+WATCHES_INFISICAL = {
+    "api": "src/screener/boot/startup.py",
+    "bot": "src/screener/bot/__main__.py",
+    "magpie": "src/screener/magpie/__main__.py",
+    "reddit": "src/screener/reddit/__main__.py",
+    "edgar": "src/screener/edgar/__main__.py",
+    "rupert": "src/screener/rupert/__main__.py",
+    "nightly": "src/screener/nightly/__main__.py",
+}
+
+# Handed one and deliberately reading it once, each for a stated reason.
+READS_INFISICAL_ONCE = {
+    "skybird": "reads none of what Infisical holds, and its own settings are "
+               "fixed per capture: a chunk length changed under a running "
+               "capture would misplace every timestamp after it",
+}
+
+
+def test_every_service_that_loads_infisical_follows_it_or_says_why_not():
+    # So a service added later has to be argued onto one side of the line.
+    holding = {
+        name for name, block in services().items() if "INFISICAL_CLIENT_ID:" in block
+    }
+    assert holding == set(WATCHES_INFISICAL) | set(READS_INFISICAL_ONCE)
+
+
+def test_the_services_that_follow_infisical_start_the_watcher():
+    quiet = [
+        name
+        for name, path in WATCHES_INFISICAL.items()
+        if "watch(" not in (ROOT / path).read_text()
+    ]
+    assert not quiet, f"{quiet} read Infisical at boot and never look again"

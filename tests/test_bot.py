@@ -893,3 +893,102 @@ def test_the_prompt_says_a_scrape_is_never_answered_from_memory():
     prompt = agent.SYSTEM_PROMPT.lower()
     assert "every time" in prompt
     assert "stale" in prompt or "changes" in prompt
+
+
+# -- following Infisical ----------------------------------------------------
+#
+# The token and the guild are the two settings a gateway session is bound to,
+# so a change to either reconnects -- inside the process, because the whole
+# point is that editing Infisical does not restart a container.
+
+
+class _FakeSession:
+    """A client that connects when started and disconnects when closed."""
+
+    made: list["_FakeSession"] = []
+
+    def __init__(self, config: BotConfig) -> None:
+        self.config = config
+        self.token: str | None = None
+        self._closed = asyncio.Event()
+        _FakeSession.made.append(self)
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    async def start(self, token: str) -> None:
+        self.token = token
+        await self._closed.wait()
+
+    async def close(self) -> None:
+        self._closed.set()
+
+
+async def _until(condition: Callable[[], bool]) -> None:
+    async def poll() -> None:
+        while not condition():
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(poll(), timeout=5)
+
+
+@pytest.fixture
+def sessions(monkeypatch):
+    """`_serve` with a fake client, and the callback it hands to `watch()`."""
+    from screener.bot import __main__ as module
+
+    heard: list[Callable[[list[str]], None]] = []
+
+    def fake_watch(
+        on_change: Callable[[list[str]], None] | None = None, **_: object
+    ) -> None:
+        assert on_change is not None, "the bot must hand watch() a way to reconnect"
+        heard.append(on_change)
+
+    _FakeSession.made = []
+    monkeypatch.setattr(module, "watch", fake_watch)
+    monkeypatch.setattr(client, "ScreenerBot", _FakeSession)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "the-old-token")
+    return module, heard
+
+
+def test_a_token_changed_in_infisical_reconnects_in_place(sessions, monkeypatch):
+    module, heard = sessions
+
+    async def scenario() -> None:
+        serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
+        await _until(lambda: bool(_FakeSession.made) and _FakeSession.made[0].token is not None)
+
+        monkeypatch.setenv("DISCORD_BOT_TOKEN", "the-new-token")
+        heard[0](["DISCORD_BOT_TOKEN"])  # as the watcher does, once it has read it
+        await _until(lambda: len(_FakeSession.made) == 2 and _FakeSession.made[1].token is not None)
+
+        await _FakeSession.made[1].close()
+        await asyncio.wait_for(serving, timeout=5)
+
+    asyncio.run(scenario())
+
+    assert [s.token for s in _FakeSession.made] == ["the-old-token", "the-new-token"]
+
+
+def test_anything_else_changing_leaves_the_session_alone(sessions):
+    # The allow-list, the model and the OpenRouter key are read per message, so
+    # reconnecting for them would only drop the bot offline for nothing.
+    module, heard = sessions
+
+    async def scenario() -> None:
+        serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
+        await _until(lambda: bool(_FakeSession.made) and _FakeSession.made[0].token is not None)
+
+        heard[0](["ALLOWED_DISCORD_USER_IDS", "OPENROUTER_API_KEY"])
+        for _ in range(20):
+            await asyncio.sleep(0)
+        assert len(_FakeSession.made) == 1
+
+        await _FakeSession.made[0].close()
+        await asyncio.wait_for(serving, timeout=5)
+
+    asyncio.run(scenario())

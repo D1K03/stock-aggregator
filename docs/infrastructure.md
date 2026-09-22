@@ -882,7 +882,14 @@ other projects, and there is no resource limit configured on any of them.
 
 Everything lives in **Infisical**, project `stock-aggregator`, environment
 `prod`. `screener.secrets.load_into_environ()` pulls them into `os.environ` at
-startup, before anything reads configuration.
+startup, before anything reads configuration, and `screener.secrets.watch()`
+keeps them current after it: a daemon thread in every long-running process
+re-reads Infisical once a minute and writes what changed into the same
+`os.environ`.
+
+**So an edit in Infisical needs no restart and no deploy.** It is live within
+the minute, and the log line `updated N secret(s) from Infisical: NAMES` says
+which process picked up what: names, never values.
 
 The only credentials stored on the box are the three that authenticate that
 exchange. Everything else is fetched with them and never touches disk.
@@ -891,16 +898,49 @@ To add a secret: put it in Infisical, read it through
 `screener.config.env` in the config object of whichever subsystem owns it. Do
 not add it to `screener.config.Settings` — that holds the database URL and
 nothing else, deliberately, so a process that only posts an alert does not need
-a database URL it never touches.
+a database URL it never touches. **Build that config object when it is used,
+never once at boot**: a value held from startup is the one thing a live edit
+cannot reach.
+
+When a change takes effect:
+
+| Where it is read | When a change applies |
+|---|---|
+| Status service, magpie, OpenRouter, Discord webhook, blob store, proxy | The next request, scrape or call |
+| `edgar`, `rupert`, `reddit` | The next pass. Switched off (address unset, budget 0), the worker exits before that pass |
+| `nightly` | The next night: its clients are built as the night runs |
+| The bot | Per message, except `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`, which reconnect it in place |
+| `skybird` | At its next start. A capture's chunk length is fixed for its life, so it deliberately does not watch |
 
 Behaviour worth knowing:
 
 - **No credentials configured is a silent no-op**, which is how local runs and
   CI work with no stubbing.
-- **A failed fetch is fatal.** Half a configuration fails later and somewhere
-  less obvious.
+- **A failed fetch at startup is fatal.** Half a configuration fails later and
+  somewhere less obvious. **A failed re-read is not**: the process is already
+  running on values that worked, so it logs a warning and tries again next
+  minute.
 - **Existing environment variables win**, so a `docker compose run -e …`
-  override while debugging is not silently replaced.
+  override while debugging is not silently replaced, at startup or after it.
+  Only names a process took from Infisical are ever replaced.
+- **Deleting a secret unsets it**, because unsetting is how several things here
+  are switched off. The exception is an answer with no secrets at all, which is
+  refused: no deployment of this project has an empty environment, so that is a
+  fault, and applying it would unset every credential at once.
+- **A value the identity may list but not read is fatal**, not loaded. Infisical
+  answers that case with the text `<hidden-by-infisical>` in place of the value
+  rather than with an error, which would otherwise start every container with it
+  as its token, password and key.
+- **The token is kept.** Infisical rate-limits logins by address at 60 a minute,
+  the box is one address, and two other stacks on it read the same Infisical, so
+  each process logs in once and reuses the thirty-day token, logging in again
+  only on a 401.
+- **The machine identity is a Viewer.** The containers only read. An admin
+  identity, which it was until 2026-09-22, lets anything inside one container
+  rewrite a secret that every other container then picks up within the minute.
+- **`INFISICAL_REFRESH_SECONDS=0` switches watching off**, putting every process
+  back on the values it booted with. The free plan allows 120 secret reads a
+  minute per address; the stack uses seven.
 
 ---
 
