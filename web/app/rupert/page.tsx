@@ -273,8 +273,9 @@ export default function RupertPage() {
                 <code>RUPERT_DAILY_MAX_CALLS</code> is 0, so the container exits
                 rather than resolving anything. It is the only thing here that
                 spends money per item rather than per question from a person, so
-                it ships off and the budget is also the switch. Setting it needs
-                the container recreated, not restarted.{" "}
+                it ships off and the budget is also the switch. Setting it in
+                Infisical is enough: while off, the container restarts on its
+                own, and the next restart reads it.{" "}
                 {(spend?.decisions_total ?? 0) > 0
                   ? "Everything below is what it decided while it was last running."
                   : "It has not decided anything yet, so everything below is empty rather than quiet."}

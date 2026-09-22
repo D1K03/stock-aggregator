@@ -184,7 +184,11 @@ class ScreenerBot(discord.Client):
         if not wants_reply(direct=direct, mentioned=self.user in message.mentions):
             return
 
-        if not self._config.permits(message.author.id):
+        # Read now, not taken from the session. The allow-list lives in Infisical
+        # and changes under a running process, and a revocation has to reach the
+        # next message rather than the next reconnect -- the slash-command check
+        # in `checks.py` reads it per interaction for the same reason.
+        if not BotConfig.from_env().permits(message.author.id):
             logger.warning("refused a mention from discord user %s", message.author.id)
             await asyncio.to_thread(
                 record,

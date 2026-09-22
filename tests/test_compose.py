@@ -14,6 +14,7 @@ on purpose -- the same shape as the playground's deny list in
 have to be argued about before it is silently either.
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -190,10 +191,23 @@ def test_every_service_that_loads_infisical_follows_it_or_says_why_not():
     assert holding == set(WATCHES_INFISICAL) | set(READS_INFISICAL_ONCE)
 
 
+def _calls_watch(path: Path) -> bool:
+    """Whether the module calls `watch(...)`, rather than merely mentioning it.
+
+    A text search is satisfied by a comment saying "`watch()` keeps the
+    environment in step", which three of these modules carry, so it would go on
+    passing with every call deleted.
+    """
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "watch"
+        for node in ast.walk(ast.parse(path.read_text()))
+    )
+
+
 def test_the_services_that_follow_infisical_start_the_watcher():
     quiet = [
-        name
-        for name, path in WATCHES_INFISICAL.items()
-        if "watch(" not in (ROOT / path).read_text()
+        name for name, path in WATCHES_INFISICAL.items() if not _calls_watch(ROOT / path)
     ]
     assert not quiet, f"{quiet} read Infisical at boot and never look again"

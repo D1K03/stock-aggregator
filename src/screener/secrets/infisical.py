@@ -229,19 +229,30 @@ def refresh() -> list[str]:
     """Bring `os.environ` into line with Infisical, returning the names that changed.
 
     Only what this process took from Infisical is replaced; a name the container
-    set itself still wins, as it did at boot. A name new in Infisical is added
-    and one deleted there is removed, because unsetting a variable is how several
-    things here are switched off and that should not wait for a restart.
+    set itself still wins, as it did at boot. A name new in Infisical is added.
+
+    A name deleted there is blanked rather than removed. Every reader in the
+    tree goes through `screener.config.env`, which treats empty as unset, so the
+    effect is the same -- unsetting is how several things here are switched off,
+    and that should not wait for a restart -- but a name removed from
+    `os.environ` under another thread can make that thread's walk of the
+    environment raise `KeyError` halfway through, and httpx takes exactly that
+    walk, looking for proxy settings, every time a client is built.
 
     Except when Infisical answers with nothing at all. No deployment of this
     project has an empty environment, so an empty answer is a fault somewhere
-    between here and there, and applying it would unset every credential in every
+    between here and there, and applying it would blank every credential in every
     container within the minute. It is refused, and said.
+
+    A value the environment will not hold is skipped by name, so it cannot stop
+    the rest of the read landing or hide a change made beside it.
 
     New values are written one after another, so a reader in the middle of the
     loop can see a new access key beside the old secret for the microseconds
     between them. That costs one failed request, which is cheaper than a lock
-    every configuration read in the tree would have to take.
+    every configuration read in the tree would have to take. A pair saved one at
+    a time in Infisical is mismatched for longer: until the read after the
+    second save.
     """
     identity = _identity()
     if identity is None:
@@ -257,18 +268,27 @@ def refresh() -> list[str]:
         changed: list[str] = []
         for key, value in secrets.items():
             if key in owned:
-                if os.environ.get(key) != value:
-                    os.environ[key] = value
+                if os.environ.get(key) != value and _put(key, value):
                     changed.append(key)
-            elif key not in os.environ:
-                os.environ[key] = value
+            elif key not in os.environ and _put(key, value):
                 owned.add(key)
                 changed.append(key)
         for key in owned - secrets.keys():
-            os.environ.pop(key, None)
-            owned.discard(key)
-            changed.append(key)
+            if os.environ.get(key) and _put(key, ""):
+                changed.append(key)
     return sorted(changed)
+
+
+def _put(key: str, value: str) -> bool:
+    """Write one value into the environment, or say by name why it would not go."""
+    try:
+        os.environ[key] = value
+    except (ValueError, OSError):
+        # A NUL byte, or an `=` in a name: nothing a process can hold. The
+        # message names the key and never shows the value.
+        logger.warning("the environment refused Infisical's value for %s; skipped", key)
+        return False
+    return True
 
 
 def watch(

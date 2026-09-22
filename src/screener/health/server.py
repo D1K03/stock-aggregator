@@ -1513,7 +1513,8 @@ class Handler(BaseHTTPRequestHandler):
 
         Deliberately *not* the same switch as `RUPERT_DAILY_MAX_CALLS`. That one
         lives in Infisical and means "this container has no business running";
-        changing it needs the container recreated. This is the operator's switch
+        a change to it lands at the next pass, or the next restart while off.
+        This is the operator's switch
         — reversible in a second, for "not tonight" — and it is a row the pass
         reads at the top of each wake, which is how it takes effect without a
         deploy.

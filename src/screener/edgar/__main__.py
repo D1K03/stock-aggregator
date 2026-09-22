@@ -64,9 +64,10 @@ def _refusal(config: EdgarConfig) -> int | None:
     # Not an error. An unset contact address is how this is switched off, and
     # exiting zero is what `screener.reddit` does with an empty subreddit list.
     # `restart: unless-stopped` restarts on any exit code, so the container
-    # comes back, reads Infisical again and exits again -- a cheap loop, no
-    # connection and no socket -- and setting the address in Infisical is all
-    # it takes to turn it back on, because the next of those restarts reads it.
+    # comes back, reads Infisical again and exits again -- a cheap loop, one
+    # Infisical read a restart and nothing sent to SEC or the database -- and
+    # setting the address in Infisical is all it takes to turn it back on,
+    # because the next of those restarts reads it.
     # Set in the compose file instead, it would need the container recreated,
     # because `environment:` is fixed at create time.
     logger.info("EDGAR_CONTACT_EMAIL is not set; not ingesting insider transactions")

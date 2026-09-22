@@ -84,7 +84,8 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   is both the switch and the list. Apify remains rejected (per-result fees compound daily);
   make a case if you think it earns its place.
 - Secrets come from Infisical at startup and are kept current after it: an edit there reaches
-  every long-running container within a minute, with no restart and no deploy. Ingress is a
+  every long-running process but skybird within a minute, and is used from its next request,
+  call or pass, with no restart and no deploy. Ingress is a
   Cloudflare Tunnel, SSH is Tailscale-only, and deploys are a GHCR image rolled out by
   `.github/workflows/deploy.yml`.
 
@@ -165,17 +166,19 @@ nothing outside imports a submodule directly.
   owns its own (`fetch.config`, `ai.config`, `notify.config`), so a process posting an alert
   does not need a database URL it will never use.
 - `screener.secrets` — Infisical into `os.environ`, stdlib `urllib` only. `watch()`, started by
-  every long-running entry point after `load_into_environ()`, re-reads it once a minute
-  (`INFISICAL_REFRESH_SECONDS`, 0 to switch off) and writes what changed into the same
-  `os.environ`. **That only works because nothing caches configuration**: every config object is
-  built when it is used, so do not add one that is read once and held: a worker reads its config
-  at the top of each pass, and the bot, whose token and guild are bound into a gateway session,
-  reconnects when either changes. Skybird is the one service that reads once, on purpose, and
-  `tests/test_compose.py` makes a new service choose a side. Only names this process took from
-  Infisical are replaced, so the container's own environment still wins; a deleted name is
-  removed, except when Infisical answers with nothing at all; a value the identity may list but
-  not read (`<hidden-by-infisical>`) is fatal at boot rather than loaded. The machine identity is
-  a **Viewer**, and should stay one.
+  every long-running entry point but skybird's after `load_into_environ()`, re-reads it once a
+  minute (`INFISICAL_REFRESH_SECONDS`, read when the watcher starts; 0 switches it off) and
+  writes what changed into the same `os.environ`. **That only works because nothing caches
+  configuration**: every config object is built when it is used, so do not add one that is read
+  once and held. Workers read theirs at the top of each pass, the bot reads its allow-list per
+  message and reconnects when its token or guild changes, and nightly's schedule is read once on
+  purpose, being fixed by the compose file. Skybird does not watch, because a capture's chunk
+  length is fixed for its life, and `tests/test_compose.py` makes a new service choose a side.
+  Only names this process took from Infisical are replaced, so the container's own environment
+  still wins. A deleted name is blanked rather than removed, which `screener.config.env` reads as
+  unset and which cannot race a thread walking the environment; an empty answer from Infisical is
+  refused. A value the identity may list but not read (`<hidden-by-infisical>`) is fatal at boot
+  and refused on a re-read. The machine identity is a **Viewer**, and should stay one.
 - `screener.fetch` — `fetch(url, strategies)` over a `direct -> isp_proxy -> unlocker` chain,
   plus `LanePool`, which is the one thing that chain structurally cannot be: a session held
   across requests so a cookie outlives the call that fetched it. A lane is one client, one jar,

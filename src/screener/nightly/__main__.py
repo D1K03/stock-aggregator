@@ -184,15 +184,16 @@ def main(argv: list[str] | None = None) -> int:
     # The night's own clients -- the blob store, the Yahoo lanes, the webhook --
     # are built as it runs, so keeping the environment current is all it takes
     # for them to use what Infisical holds tonight rather than at boot.
+    #
+    # The schedule itself is deliberately read once. Its hour and its switch are
+    # fixed by the compose file, which Infisical cannot override, and reading it
+    # again at 23:00 would turn a typo made during the day into a scheduler that
+    # dies on waking and loses the night with nothing posted, where holding the
+    # boot values runs the night and leaves the typo for the next deploy's
+    # smoke test.
     watch()
 
     while not stopping.is_set():
-        # And the schedule is read again every time round, as the other workers
-        # read theirs every pass.
-        config = NightlyConfig.from_env()
-        if not config.enabled:
-            logger.info("NIGHTLY_ENABLED is false; not scheduling")
-            return 0
         _tick(config, datetime.now(timezone.utc))
 
         if stopping.is_set():

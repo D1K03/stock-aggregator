@@ -157,7 +157,7 @@ class FakeInfisical:
     edits it between reads the way a person edits the project in the browser.
     """
 
-    def __init__(self, monkeypatch, secrets, *, lifetime=None):
+    def __init__(self, monkeypatch, secrets, *, lifetime: int | None = THIRTY_DAYS):
         self.secrets = dict(secrets)
         self.hidden: set[str] = set()
         self.lifetime = lifetime
@@ -165,6 +165,7 @@ class FakeInfisical:
         self.reads = 0
         self.revoked: set[str] = set()
         self.refuse_reads: int | None = None
+        self.break_reads: Exception | None = None
         monkeypatch.setattr(
             "screener.secrets.infisical.urllib.request.urlopen", self.urlopen
         )
@@ -178,6 +179,8 @@ class FakeInfisical:
             return io.BytesIO(json.dumps(body).encode())
 
         self.reads += 1
+        if self.break_reads is not None:
+            raise self.break_reads
         token = (request.get_header("Authorization") or "").removeprefix("Bearer ")
         status = 401 if token in self.revoked else self.refuse_reads
         if status is not None:
@@ -238,9 +241,13 @@ def test_a_name_added_in_infisical_is_added_here(monkeypatch):
     assert os.environ["SCREENER_NEW"] == "arrived"
 
 
-def test_a_name_deleted_in_infisical_is_removed_here(monkeypatch):
+def test_a_name_deleted_in_infisical_reads_as_unset_here(monkeypatch):
     # And how one is switched off: unset is the off switch for several things
-    # here, and it should not wait for a deploy.
+    # here, and it should not wait for a deploy. Blanked rather than removed,
+    # because removing a name under a thread walking the environment makes that
+    # walk raise; every reader goes through `env`, which reads empty as unset.
+    from screener.config import env
+
     _configure(monkeypatch)
     project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first", "SCREENER_GONE": "x"})
     load_into_environ()
@@ -248,8 +255,65 @@ def test_a_name_deleted_in_infisical_is_removed_here(monkeypatch):
     del project.secrets["SCREENER_GONE"]
 
     assert refresh() == ["SCREENER_GONE"]
-    assert "SCREENER_GONE" not in os.environ
+    assert env.optional("SCREENER_GONE") is None
+    assert "SCREENER_GONE" in os.environ
     assert os.environ["SCREENER_KEY"] == "first"
+
+
+def test_a_deleted_name_is_reported_once_not_every_minute(monkeypatch):
+    # Reported every time, a deleted DISCORD_GUILD_ID would reconnect the bot
+    # once a minute for ever.
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first", "SCREENER_GONE": "x"})
+    load_into_environ()
+
+    del project.secrets["SCREENER_GONE"]
+
+    assert refresh() == ["SCREENER_GONE"]
+    assert refresh() == []
+
+
+def test_a_name_added_after_boot_is_then_followed_like_any_other(monkeypatch):
+    # Added once is not enough: a later edit and a later deletion have to land
+    # too, which they only do if the new name is recorded as Infisical's.
+    from screener.config import env
+
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+
+    project.secrets["SCREENER_NEW"] = "one"
+    assert refresh() == ["SCREENER_NEW"]
+
+    project.secrets["SCREENER_NEW"] = "two"
+    assert refresh() == ["SCREENER_NEW"]
+    assert os.environ["SCREENER_NEW"] == "two"
+
+    del project.secrets["SCREENER_NEW"]
+    assert refresh() == ["SCREENER_NEW"]
+    assert env.optional("SCREENER_NEW") is None
+
+    project.secrets["SCREENER_NEW"] = "three"
+    assert refresh() == ["SCREENER_NEW"]
+    assert os.environ["SCREENER_NEW"] == "three"
+
+
+def test_a_value_the_environment_refuses_does_not_hide_the_rest(monkeypatch, caplog):
+    # A NUL byte cannot go into an environment. Skipped by name, so a token
+    # changed in the same minute still lands and is still reported -- which is
+    # what the bot's reconnect waits to hear.
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+
+    project.secrets["SCREENER_KEY"] = "second"
+    project.secrets["SCREENER_BAD"] = "before\x00after"
+
+    assert refresh() == ["SCREENER_KEY"]
+    assert os.environ["SCREENER_KEY"] == "second"
+    assert "SCREENER_BAD" not in os.environ
+    assert "SCREENER_BAD" in caplog.text
+    assert "before" not in caplog.text
 
 
 def test_a_name_the_container_set_still_wins_after_boot(monkeypatch):
@@ -325,12 +389,40 @@ def test_the_token_is_kept_between_reads(monkeypatch):
 
 def test_a_token_without_a_lifetime_is_used_once(monkeypatch):
     _configure(monkeypatch)
-    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"}, lifetime=None)
     load_into_environ()
 
     refresh()
 
     assert project.logins == 2
+
+
+def test_a_token_past_its_deadline_is_replaced_before_it_is_used(monkeypatch):
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+
+    infisical._held.token_until = 0.0
+
+    refresh()
+
+    assert project.logins == 2
+    assert project.reads == 2
+
+
+def test_a_refusal_other_than_401_does_not_log_in_again(monkeypatch):
+    # Only a 401 says the token is the problem. Logging in again on a 403 or a
+    # 503 would spend the login allowance during exactly the outage it cannot
+    # fix.
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+
+    project.refuse_reads = 403
+    with pytest.raises(SecretsError, match="HTTP 403"):
+        refresh()
+
+    assert project.logins == 1
 
 
 def test_a_revoked_token_is_replaced_rather_than_failing_the_read(monkeypatch):
@@ -375,6 +467,7 @@ def test_watch_hears_a_change_and_says_which_names_never_which_values(monkeypatc
             stop.set()
             thread.join(5)
 
+    assert not thread.is_alive()
     assert heard[0] == ["SCREENER_KEY"]
     assert os.environ["SCREENER_KEY"] == STORED_VALUE
     assert "SCREENER_KEY" in caplog.text
@@ -406,6 +499,65 @@ def test_watch_waits_out_a_failed_read_rather_than_dying(monkeypatch, caplog):
 
     assert os.environ["SCREENER_KEY"] == "second"
     assert "keeping what is loaded" in caplog.text
+
+
+def test_watch_survives_a_failure_that_is_not_infisicals(monkeypatch, caplog):
+    # A dropped connection surfaces as `http.client.RemoteDisconnected`, which
+    # the request wrapper does not turn into a SecretsError. It must not end the
+    # watcher, or the process stops following Infisical while looking fine.
+    import http.client
+
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+    project.break_reads = http.client.RemoteDisconnected("gone")
+
+    arrived = threading.Event()
+    stop, thread = _watching(monkeypatch, lambda names: arrived.set())
+    try:
+        deadline = time.monotonic() + 5
+        while project.reads < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        project.break_reads = None
+        project.secrets["SCREENER_KEY"] = "second"
+        assert arrived.wait(5)
+    finally:
+        stop.set()
+        thread.join(5)
+
+    assert not thread.is_alive()
+    assert "RemoteDisconnected" in caplog.text
+
+
+def test_watch_survives_a_listener_that_fails(monkeypatch):
+    # The listener is the bot's reconnect. One that raises must not take the
+    # watcher with it, or the next change is never heard.
+    _configure(monkeypatch)
+    project = FakeInfisical(monkeypatch, {"SCREENER_KEY": "first"})
+    load_into_environ()
+
+    heard: list[list[str]] = []
+    second = threading.Event()
+
+    def on_change(names):
+        heard.append(names)
+        if len(heard) == 1:
+            raise RuntimeError("the listener fell over")
+        second.set()
+
+    stop, thread = _watching(monkeypatch, on_change)
+    try:
+        project.secrets["SCREENER_KEY"] = "second"
+        deadline = time.monotonic() + 5
+        while not heard and time.monotonic() < deadline:
+            time.sleep(0.01)
+        project.secrets["SCREENER_KEY"] = "third"
+        assert second.wait(5)
+    finally:
+        stop.set()
+        thread.join(5)
+
+    assert heard == [["SCREENER_KEY"], ["SCREENER_KEY"]]
 
 
 def test_nothing_is_watched_without_a_machine_identity(monkeypatch):

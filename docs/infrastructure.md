@@ -908,8 +908,8 @@ When a change takes effect:
 |---|---|
 | Status service, magpie, OpenRouter, Discord webhook, blob store, proxy | The next request, scrape or call |
 | `edgar`, `rupert`, `reddit` | The next pass. Switched off (address unset, budget 0), the worker exits before that pass |
-| `nightly` | The next night: its clients are built as the night runs |
-| The bot | Per message, except `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`, which reconnect it in place |
+| `nightly` | The next night: its clients are built as the night runs. Its schedule is read once, being fixed by the compose file |
+| The bot | Per message, the allow-list included, except `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`, which reconnect it in place |
 | `skybird` | At its next start. A capture's chunk length is fixed for its life, so it deliberately does not watch |
 
 Behaviour worth knowing:
@@ -923,14 +923,23 @@ Behaviour worth knowing:
 - **Existing environment variables win**, so a `docker compose run -e …`
   override while debugging is not silently replaced, at startup or after it.
   Only names a process took from Infisical are ever replaced.
-- **Deleting a secret unsets it**, because unsetting is how several things here
-  are switched off. The exception is an answer with no secrets at all, which is
-  refused: no deployment of this project has an empty environment, so that is a
-  fault, and applying it would unset every credential at once.
-- **A value the identity may list but not read is fatal**, not loaded. Infisical
+- **Deleting a secret switches it off**, because unsetting is how several things
+  here are switched off. It is blanked rather than removed: `screener.config.env`
+  reads empty as unset, and a name removed under a thread that is walking the
+  environment, as httpx does for proxy settings on every client it builds, makes
+  that walk raise. An answer with no secrets at all is refused: no deployment of
+  this project has an empty environment, so that is a fault, and applying it
+  would blank every credential at once.
+- **A pair saved one at a time is mismatched in between.** An access key and its
+  secret edited separately run mismatched until the read after the second save,
+  up to a minute.
+- **Removing a login from `ALLOWED_GITHUB_LOGINS` stops new sign-ins and the
+  claude.ai connector, not a dashboard session already open**, which lasts until
+  it expires (`SESSION_DAYS`, 30 by default). That predates live refresh.
+- **A value the identity may list but not read is never loaded.** Infisical
   answers that case with the text `<hidden-by-infisical>` in place of the value
-  rather than with an error, which would otherwise start every container with it
-  as its token, password and key.
+  rather than with an error. At startup that is fatal; on a re-read it is
+  refused and the loaded values are kept.
 - **The token is kept.** Infisical rate-limits logins by address at 60 a minute,
   the box is one address, and two other stacks on it read the same Infisical, so
   each process logs in once and reuses the thirty-day token, logging in again
@@ -938,9 +947,9 @@ Behaviour worth knowing:
 - **The machine identity is a Viewer.** The containers only read. An admin
   identity, which it was until 2026-09-22, lets anything inside one container
   rewrite a secret that every other container then picks up within the minute.
-- **`INFISICAL_REFRESH_SECONDS=0` switches watching off**, putting every process
-  back on the values it booted with. The free plan allows 120 secret reads a
-  minute per address; the stack uses seven.
+- **`INFISICAL_REFRESH_SECONDS=0` switches watching off** from each process's
+  next start: it is read when the watcher starts, not live. The free plan allows
+  120 secret reads a minute per address; the stack uses seven.
 
 ---
 

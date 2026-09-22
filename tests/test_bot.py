@@ -1,5 +1,8 @@
 import asyncio
 import contextlib
+import os
+import signal
+import threading
 import types
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
@@ -899,7 +902,8 @@ def test_the_prompt_says_a_scrape_is_never_answered_from_memory():
 #
 # The token and the guild are the two settings a gateway session is bound to,
 # so a change to either reconnects -- inside the process, because the whole
-# point is that editing Infisical does not restart a container.
+# point is that editing Infisical does not restart a container. Everything else,
+# the allow-list first, is read per message.
 
 
 class _FakeSession:
@@ -930,9 +934,20 @@ class _FakeSession:
 async def _until(condition: Callable[[], bool]) -> None:
     async def poll() -> None:
         while not condition():
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.001)
 
     await asyncio.wait_for(poll(), timeout=5)
+
+
+def _connected(count: int) -> Callable[[], bool]:
+    return lambda: len(_FakeSession.made) == count and _FakeSession.made[-1].token is not None
+
+
+def _from_the_watcher(callback: Callable[[list[str]], None], names: list[str]) -> None:
+    """Call back the way `watch()` does: from its own thread, not the loop's."""
+    thread = threading.Thread(target=callback, args=(names,))
+    thread.start()
+    thread.join(5)
 
 
 @pytest.fixture
@@ -952,6 +967,7 @@ def sessions(monkeypatch):
     monkeypatch.setattr(module, "watch", fake_watch)
     monkeypatch.setattr(client, "ScreenerBot", _FakeSession)
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "the-old-token")
+    monkeypatch.delenv("DISCORD_GUILD_ID", raising=False)
     return module, heard
 
 
@@ -960,11 +976,11 @@ def test_a_token_changed_in_infisical_reconnects_in_place(sessions, monkeypatch)
 
     async def scenario() -> None:
         serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
-        await _until(lambda: bool(_FakeSession.made) and _FakeSession.made[0].token is not None)
+        await _until(_connected(1))
 
         monkeypatch.setenv("DISCORD_BOT_TOKEN", "the-new-token")
-        heard[0](["DISCORD_BOT_TOKEN"])  # as the watcher does, once it has read it
-        await _until(lambda: len(_FakeSession.made) == 2 and _FakeSession.made[1].token is not None)
+        await asyncio.to_thread(_from_the_watcher, heard[0], ["DISCORD_BOT_TOKEN"])
+        await _until(_connected(2))
 
         await _FakeSession.made[1].close()
         await asyncio.wait_for(serving, timeout=5)
@@ -974,6 +990,27 @@ def test_a_token_changed_in_infisical_reconnects_in_place(sessions, monkeypatch)
     assert [s.token for s in _FakeSession.made] == ["the-old-token", "the-new-token"]
 
 
+def test_a_guild_changed_in_infisical_reconnects_to_register_there(sessions, monkeypatch):
+    # The commands are registered in `setup_hook`, once a session, so a new
+    # guild is only reached by a new session.
+    module, heard = sessions
+
+    async def scenario() -> None:
+        serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
+        await _until(_connected(1))
+
+        monkeypatch.setenv("DISCORD_GUILD_ID", "424242")
+        await asyncio.to_thread(_from_the_watcher, heard[0], ["DISCORD_GUILD_ID"])
+        await _until(_connected(2))
+
+        await _FakeSession.made[1].close()
+        await asyncio.wait_for(serving, timeout=5)
+
+    asyncio.run(scenario())
+
+    assert [s.config.guild_id for s in _FakeSession.made] == [None, 424242]
+
+
 def test_anything_else_changing_leaves_the_session_alone(sessions):
     # The allow-list, the model and the OpenRouter key are read per message, so
     # reconnecting for them would only drop the bot offline for nothing.
@@ -981,14 +1018,76 @@ def test_anything_else_changing_leaves_the_session_alone(sessions):
 
     async def scenario() -> None:
         serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
-        await _until(lambda: bool(_FakeSession.made) and _FakeSession.made[0].token is not None)
+        await _until(_connected(1))
 
-        heard[0](["ALLOWED_DISCORD_USER_IDS", "OPENROUTER_API_KEY"])
-        for _ in range(20):
-            await asyncio.sleep(0)
+        await asyncio.to_thread(
+            _from_the_watcher, heard[0], ["ALLOWED_DISCORD_USER_IDS", "OPENROUTER_API_KEY"]
+        )
+        await asyncio.sleep(0.05)
         assert len(_FakeSession.made) == 1
 
         await _FakeSession.made[0].close()
         await asyncio.wait_for(serving, timeout=5)
 
     asyncio.run(scenario())
+
+
+def test_sigterm_still_closes_the_session_and_ends_the_process(sessions):
+    # The reason `_serve` handles signals at all: a container stop should close
+    # the gateway session rather than leave Discord showing the bot online.
+    module, _ = sessions
+
+    async def scenario() -> None:
+        serving = asyncio.ensure_future(module._serve(BotConfig.from_env()))
+        await _until(_connected(1))
+
+        os.kill(os.getpid(), signal.SIGTERM)
+        await asyncio.wait_for(serving, timeout=5)
+
+    asyncio.run(scenario())
+
+    assert len(_FakeSession.made) == 1
+
+
+class _PastTheGate(Exception):
+    """Raised by the first thing after the allow-list, to stop there."""
+
+
+def test_a_user_revoked_in_infisical_is_refused_on_their_next_message(monkeypatch):
+    # Mentions and DMs are where people actually talk to Steven, so this is the
+    # revocation that matters: it has to land on the next message, not on the
+    # next reconnect.
+    monkeypatch.setenv("ALLOWED_DISCORD_USER_IDS", "111,222")
+    bot = client.ScreenerBot(BotConfig.from_env())
+    me = types.SimpleNamespace(id=999)
+    monkeypatch.setattr(client.ScreenerBot, "user", property(lambda self: me))
+
+    refused: list[str] = []
+
+    def fake_record(**fields: object) -> None:
+        if fields.get("outcome") == "refused":
+            refused.append(str(fields.get("actor")))
+
+    def past_the_gate(durations: object) -> str:
+        raise _PastTheGate
+
+    monkeypatch.setattr(client, "record", fake_record)
+    monkeypatch.setattr(client, "hearing", past_the_gate)
+
+    def mention_from(user_id: int) -> Any:
+        return types.SimpleNamespace(
+            author=types.SimpleNamespace(bot=False, id=user_id),
+            channel=object(),
+            mentions=[me],
+            attachments=[],
+            content="<@999> hello",
+        )
+
+    # Infisical drops 222, and the watcher writes the new list in.
+    monkeypatch.setenv("ALLOWED_DISCORD_USER_IDS", "111")
+
+    asyncio.run(bot.on_message(mention_from(222)))
+    assert refused == ["222"]
+
+    with pytest.raises(_PastTheGate):
+        asyncio.run(bot.on_message(mention_from(111)))

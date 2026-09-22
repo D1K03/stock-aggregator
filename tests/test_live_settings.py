@@ -132,26 +132,3 @@ def test_reddit_walks_the_subreddits_infisical_holds_now(worker, monkeypatch):
 
     assert reddit.main() == 0
     assert walked == [("stocks",), ("stocks", "wallstreetbets")]
-
-
-def test_nightly_runs_each_night_on_what_infisical_holds_by_then(worker, monkeypatch):
-    from screener.nightly import __main__ as nightly
-
-    worker(nightly)
-    monkeypatch.setenv("NIGHTLY_ENABLED", "true")
-    monkeypatch.setenv("NIGHTLY_ATTEMPTS", "3")
-    attempts = []
-
-    def tick(config, now):
-        attempts.append(config.attempts)
-        if len(attempts) == 1:
-            monkeypatch.setenv("NIGHTLY_ATTEMPTS", "5")
-        else:
-            monkeypatch.setenv("NIGHTLY_ENABLED", "false")
-        if len(attempts) >= PASSES:
-            nightly.stopping.set()
-
-    monkeypatch.setattr(nightly, "_tick", tick)
-
-    assert nightly.main() == 0
-    assert attempts == [3, 5]
