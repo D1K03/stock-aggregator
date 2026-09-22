@@ -24,7 +24,7 @@ from typing import Any
 
 from screener.reddit.config import RedditConfig
 from screener.reddit.ingest import once, queue
-from screener.secrets import SecretsError, load_into_environ
+from screener.secrets import SecretsError, load_into_environ, watch
 
 logger = logging.getLogger(__name__)
 
@@ -87,17 +87,26 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
 
-    interval = config.refresh_hours * 3600
-    # A pass that failed should not wait the full cycle to try again. The usual
-    # cause is transient — the mirror having a moment, or the schema not applied
-    # yet on a first boot — and six hours is a long time to sit on either.
-    retry = min(300, interval)
     logger.info(
         "ingesting %s every %dh, %d day backfill",
         ", ".join(config.subreddits), config.refresh_hours, config.backfill_days,
     )
+    watch()
 
     while not stopping.is_set():
+        # Read again every pass rather than once at boot, as edgar and rupert
+        # do: `watch()` keeps the environment in step with Infisical, and a
+        # subreddit added there should be walked on the next pass.
+        config = RedditConfig.from_env()
+        if not config.enabled:
+            logger.info("REDDIT_SUBREDDITS is empty; nothing to ingest")
+            return 0
+        interval = config.refresh_hours * 3600
+        # A pass that failed should not wait the full cycle to try again. The
+        # usual cause is transient — the mirror having a moment, or the schema
+        # not applied yet on a first boot — and six hours is a long time to sit
+        # on either.
+        retry = min(300, interval)
         wait = interval
         try:
             once(config)

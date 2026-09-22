@@ -392,6 +392,19 @@ everything else is fetched with them and never touches disk. A missing identity 
 no-op so local development and CI read a `.env` as normal, but a *failed* fetch is fatal —
 starting with half a configuration means failing later, somewhere less obvious.
 
+**And they are kept current, rather than fetched once.** Every long-running process re-reads
+Infisical once a minute and writes what changed into the same environment, so an edit in
+Infisical is live within the minute with no restart and no deploy. That rests on one rule already
+kept everywhere: configuration is built when it is used, never cached, so a value read again is a
+value that has changed. Workers read theirs at the top of each pass; the bot, whose token and guild
+are fixed for the life of a gateway session, reconnects in place. Skybird alone reads once,
+because a capture's chunk length is fixed for the life of the capture. A failed re-read keeps what
+is loaded rather than exiting, because the process is already running on values that worked.
+The price is that a typo in Infisical is live within the minute too, with no deploy smoke test in
+the way, which is why the machine identity is a **Viewer**: the containers only ever read, and
+an admin identity would let anything inside one container rewrite what every other container
+then picks up.
+
 **Ingress is a Cloudflare Tunnel**, which dials outward. Nothing listens on the public interface
 and there is no firewall rule to maintain. The cost is that the hostname mapping lives in
 Cloudflare's dashboard rather than in the repository; accepted because there is one rule, and

@@ -83,8 +83,10 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   requests off one address and a pinned lane measured 1.07x direct latency; `BRIGHTDATA_PROXY_IPS`
   is both the switch and the list. Apify remains rejected (per-result fees compound daily);
   make a case if you think it earns its place.
-- Secrets come from Infisical at startup. Ingress is a Cloudflare Tunnel, SSH is Tailscale-only,
-  and deploys are a GHCR image rolled out by `.github/workflows/deploy.yml`.
+- Secrets come from Infisical at startup and are kept current after it: an edit there reaches
+  every long-running container within a minute, with no restart and no deploy. Ingress is a
+  Cloudflare Tunnel, SSH is Tailscale-only, and deploys are a GHCR image rolled out by
+  `.github/workflows/deploy.yml`.
 
 ## Commands
 
@@ -142,7 +144,8 @@ the driver, and event-risk flags. Delivery is a single HTTP POST to a Discord we
   regex shortlists candidate symbols, a decision model picks which one the sentence is actually
   about, and FinBERT reads what resolved. No arguments and no subcommands: `RUPERT_DAILY_MAX_CALLS`
   is the budget and the off switch at once, and it defaults to 0, so the container exits 0 until
-  it is set and then needs recreating (`docker compose up -d rupert`) rather than restarting.
+  it is set. Each of Docker's restarts reads Infisical again, so setting it there is all it takes
+  to turn it on; changed while running, it applies from the next pass, and 0 stops it before one.
 - Run the scheduler: `python -m screener.nightly` (the container's command) — waits for 23:00
   UTC, runs prices, fundamentals and scoring in order, and posts to Discord only when a night is
   given up. `NIGHTLY_ENABLED=false` exits the process; `restart: unless-stopped` brings the
@@ -161,7 +164,18 @@ nothing outside imports a submodule directly.
 - `screener.config` — process configuration. Credentials do **not** live here. Each subsystem
   owns its own (`fetch.config`, `ai.config`, `notify.config`), so a process posting an alert
   does not need a database URL it will never use.
-- `screener.secrets` — Infisical into `os.environ`, stdlib `urllib` only.
+- `screener.secrets` — Infisical into `os.environ`, stdlib `urllib` only. `watch()`, started by
+  every long-running entry point after `load_into_environ()`, re-reads it once a minute
+  (`INFISICAL_REFRESH_SECONDS`, 0 to switch off) and writes what changed into the same
+  `os.environ`. **That only works because nothing caches configuration**: every config object is
+  built when it is used, so do not add one that is read once and held: a worker reads its config
+  at the top of each pass, and the bot, whose token and guild are bound into a gateway session,
+  reconnects when either changes. Skybird is the one service that reads once, on purpose, and
+  `tests/test_compose.py` makes a new service choose a side. Only names this process took from
+  Infisical are replaced, so the container's own environment still wins; a deleted name is
+  removed, except when Infisical answers with nothing at all; a value the identity may list but
+  not read (`<hidden-by-infisical>`) is fatal at boot rather than loaded. The machine identity is
+  a **Viewer**, and should stay one.
 - `screener.fetch` — `fetch(url, strategies)` over a `direct -> isp_proxy -> unlocker` chain,
   plus `LanePool`, which is the one thing that chain structurally cannot be: a session held
   across requests so a cookie outlives the call that fetched it. A lane is one client, one jar,

@@ -428,9 +428,10 @@ services:
   # worth knowing about this container. It is the only service here that spends
   # money per item rather than per request from a person, so its budget starts
   # at zero and it exits 0 saying so. `restart: unless-stopped` then brings it
-  # back to exit again, which means turning it on needs the container recreated
-  # (`docker compose up -d rupert`) rather than merely restarted -- the same
-  # shape `NIGHTLY_ENABLED` already has, and worth the symmetry.
+  # back to exit again, and each of those boots reads Infisical afresh, so
+  # setting the budget there is all it takes to turn it on. Once running it
+  # reads the budget again before every pass, so lowering it applies to the next
+  # one and a zero stops it before that pass rather than after.
   rupert:
     image: ghcr.io/d1k03/stock-aggregator:${SCREENER_IMAGE_TAG:-latest}
     restart: unless-stopped

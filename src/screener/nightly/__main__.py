@@ -25,7 +25,7 @@ from screener.nightly.night import NightReport, already_scored, run_night
 from screener.nightly.schedule import is_due, next_trigger
 from screener.notify import Alert, ChannelError, DiscordWebhook, NotificationChannel
 from screener.scoring import NoBarsVisible, ScoringInProgress
-from screener.secrets import SecretsError, load_into_environ
+from screener.secrets import SecretsError, load_into_environ, watch
 
 logger = logging.getLogger(__name__)
 
@@ -181,8 +181,18 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, stop)
 
     logger.info("scheduling a night at %02d:00 UTC", config.trigger_hour)
+    # The night's own clients -- the blob store, the Yahoo lanes, the webhook --
+    # are built as it runs, so keeping the environment current is all it takes
+    # for them to use what Infisical holds tonight rather than at boot.
+    watch()
 
     while not stopping.is_set():
+        # And the schedule is read again every time round, as the other workers
+        # read theirs every pass.
+        config = NightlyConfig.from_env()
+        if not config.enabled:
+            logger.info("NIGHTLY_ENABLED is false; not scheduling")
+            return 0
         _tick(config, datetime.now(timezone.utc))
 
         if stopping.is_set():

@@ -13,7 +13,7 @@ from screener.health import serve
 from screener.migrate import apply_migrations
 from screener.partitions import ensure_partitions
 from screener.playground import ensure_password
-from screener.secrets import SecretsError, load_into_environ
+from screener.secrets import SecretsError, load_into_environ, watch
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +112,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "migrate":
         return 0
+
+    # Only the server watches: `migrate` and `selftest` are over in seconds.
+    # Every request builds its configuration as it arrives -- sign-in, the
+    # model, the scraper's address -- so a value that changes in Infisical is
+    # the value the next request uses, with nothing here to restart.
+    watch()
 
     # Called directly rather than exec'd. The sibling project execs because its
     # server is a different program; ours is in this interpreter, and keeping it
