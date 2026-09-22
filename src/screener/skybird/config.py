@@ -40,6 +40,38 @@ POLL_SECONDS = 2.0
 # hide a transcriber that is not keeping up.
 MAX_PENDING_CHUNKS = 8
 
+# How far behind live a resumed capture will start. A deploy costs well under a
+# minute; this covers a crash, a slow boot and a Postgres restart with room over.
+# Bounded by the tmpfs rather than by the stream — YouTube keeps an hour — since
+# ffmpeg writes the whole backlog in seconds and it waits there to be heard: ten
+# minutes is forty chunks, about 20 MB of the 64 a session shares with one other.
+# `SKYBIRD_MAX_REWIND_SECONDS=0` turns rewinding off. A restart applies it, and
+# a restart no longer costs the capture.
+DEFAULT_MAX_REWIND_SECONDS = 600
+
+# Chunks heard per capture per poll. A backlog after a rewind is dozens of them,
+# and hearing them all in one pass would hold up the other capture's chunks and
+# a stop request behind a queue that is minutes of transcription long.
+CHUNKS_PER_TICK = 4
+
+# How long a transcriber that does not answer is waited on before chunks are
+# counted as failed. A deploy recreates it beside skybird, and a chunk that
+# arrives while it is loading the model has nothing wrong with it.
+TRANSCRIBER_PATIENCE_SECONDS = 90.0
+
+# Restarts in a row with nothing accounted for between them before a capture is
+# failed rather than resumed. A deploy is one; the next chunk puts it back to 0.
+MAX_RESTARTS = 3
+
+# Shorter than this is not sent to the transcriber at all. ffmpeg closes a
+# sliver of a segment as it exits, the transcriber refuses one, and a refusal
+# reads exactly like a transcriber that is down — so it would be waited on.
+MIN_AUDIBLE_SECONDS = 0.5
+
+# A seam is only reported as missed audio past this. A rewind is good to about
+# one segment either way, so a few seconds is its precision rather than a loss.
+MIN_REPORTED_LOSS_SECONDS = 5.0
+
 # Chunks are refused above this by `screener.transcribe` anyway; catching it
 # here means a bad setting fails at startup rather than once an hour.
 MAX_CHUNK_SECONDS = int(MAX_SECONDS)
@@ -54,6 +86,7 @@ class SkybirdConfig:
     max_sessions: int = DEFAULT_MAX_SESSIONS
     embed_parents: tuple[str, ...] = DEFAULT_EMBED_PARENTS
     work_dir: str = DEFAULT_WORK_DIR
+    max_rewind_seconds: int = DEFAULT_MAX_REWIND_SECONDS
 
     @classmethod
     def from_env(cls) -> "SkybirdConfig":
@@ -68,11 +101,21 @@ class SkybirdConfig:
             raise RuntimeError(
                 f"SKYBIRD_MAX_SESSIONS must be at least 1, got {sessions}"
             )
+        rewind = env.integer("SKYBIRD_MAX_REWIND_SECONDS", DEFAULT_MAX_REWIND_SECONDS)
+        if not 0 <= rewind <= DEFAULT_MAX_REWIND_SECONDS:
+            # Capped, not merely positive: the ceiling is the tmpfs, and a
+            # rewind past it fills the disk ffmpeg writes to and kills both
+            # captures rather than recovering either.
+            raise RuntimeError(
+                "SKYBIRD_MAX_REWIND_SECONDS must be between 0 and "
+                f"{DEFAULT_MAX_REWIND_SECONDS}, got {rewind}"
+            )
         return cls(
             chunk_seconds=chunk,
             max_sessions=sessions,
             embed_parents=_parents(env.optional("SKYBIRD_EMBED_PARENTS")),
             work_dir=env.text("SKYBIRD_WORK_DIR", DEFAULT_WORK_DIR),
+            max_rewind_seconds=rewind,
         )
 
 

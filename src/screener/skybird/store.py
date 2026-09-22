@@ -4,7 +4,7 @@ The tables are also the control plane: the status service writes a row in
 'requested' and the supervisor in the capture container reads it. That is why
 there is no internal HTTP surface between the two, and why a capture survives
 the container that was running it — a session left 'running' by a process that
-died is still there on the next boot, and `reconcile` is what notices.
+died is still there on the next boot, and `reconcile` puts it back in the queue.
 
 Connections are passed in and never opened here. Nothing in this project pools,
 and the two callers want opposite lifetimes: the status service opens one per
@@ -19,6 +19,7 @@ from typing import Any, Final
 
 import psycopg
 
+from screener.skybird.config import MAX_RESTARTS
 from screener.skybird.platforms import StreamRef
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,8 @@ _COLUMNS: Final = """
     s.id, s.platform, s.external_id, s.channel, s.title, s.source_url,
     s.embed_url, s.state, s.stop_reason, s.requested_by, s.requested_at,
     s.started_at, s.stopped_at, s.chunk_seconds, s.chunks_ok, s.chunks_failed,
-    s.chunks_dropped, s.last_error, s.captured_seconds
+    s.chunks_dropped, s.last_error, s.captured_seconds, s.captured_until,
+    s.restarts
 """
 
 
@@ -94,6 +96,12 @@ class Session:
     # what the transcript's offsets count, and it lives here rather than in the
     # supervisor because a pause has to come back and carry on counting.
     captured_seconds: float = 0.0
+    # The capture clock where the stored audio stops, which is how far behind
+    # live a restarted capture starts. None when there is nothing to recover: a
+    # capture that has heard nothing yet, or one somebody resumed from a pause.
+    captured_until: datetime | None = None
+    # Restarts in a row with no chunk accounted for between them.
+    restarts: int = 0
     segment_count: int = 0
     last_segment_at: datetime | None = None
 
@@ -181,8 +189,10 @@ def _session(row: Sequence[Any]) -> Session:
         chunks_dropped=row[16],
         last_error=row[17],
         captured_seconds=float(row[18]),
-        segment_count=row[19] if len(row) > 19 else 0,
-        last_segment_at=row[20] if len(row) > 20 else None,
+        captured_until=row[19],
+        restarts=row[20],
+        segment_count=row[21] if len(row) > 21 else 0,
+        last_segment_at=row[22] if len(row) > 22 else None,
     )
 
 
@@ -345,6 +355,10 @@ def describe(
     not erase the one the previous probe found. `started_at` is stamped once and
     survives a reconnect for the same reason — it anchors every offset in the
     transcript.
+
+    Only a row still being started becomes 'running'. A pause or a stop that
+    lands while the probe is out is somebody's decision, and the probe coming
+    back must not quietly undo it; the next poll tears the new ffmpeg down.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -353,8 +367,12 @@ def describe(
                set title      = coalesce(%s, title),
                    channel    = coalesce(%s, channel),
                    embed_url  = coalesce(%s, embed_url),
-                   state      = case when %s::boolean then 'running' else state end,
-                   started_at = case when %s::boolean then coalesce(started_at, now())
+                   state      = case when %s::boolean
+                                      and state in ('starting','running')
+                                     then 'running' else state end,
+                   started_at = case when %s::boolean
+                                      and state in ('starting','running')
+                                     then coalesce(started_at, now())
                                      else started_at end
              where id = %s
             """,
@@ -416,12 +434,18 @@ def resume(conn: psycopg.Connection, session_id: int) -> bool:
     resuming a third stream waits its turn rather than overrunning the
     transcriber. The transcript carries on from where it stopped, because
     `captured_seconds` and the sequence numbers are both in the database.
+
+    It carries on from *now*, though, and not from where the audio stopped:
+    `captured_until` goes, so the next connect starts at the live edge instead
+    of rewinding into the stream. A pause is a gap somebody chose. Nothing
+    heard late can put it back, because `count_chunk` only writes it while the
+    row is being captured.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
             update skybird.stream_session
-               set state = 'requested', last_error = null
+               set state = 'requested', last_error = null, captured_until = null
              where id = %s and state = 'paused'
             """,
             (session_id,),
@@ -452,27 +476,73 @@ def finish(
         )
 
 
-def reconcile(conn: psycopg.Connection) -> int:
-    """Settle captures left behind by a supervisor that died.
+def reconcile(conn: psycopg.Connection, *, max_restarts: int = MAX_RESTARTS) -> int:
+    """Settle captures left behind by a supervisor that stopped.
 
-    Runs once, after the advisory lock is taken and before anything is started,
-    so 'starting' or 'running' at that moment can only mean a process that is no
-    longer there. Marked failed rather than stopped: nobody asked for it to end,
-    and a row that says otherwise would read as a clean finish.
+    Runs each time the advisory lock is taken, before anything is started, and
+    once more on the way out of a clean shutdown. 'starting' or 'running' at
+    either moment means a process that is no longer there, or is about not to
+    be.
+
+    Such a capture goes back in the queue rather than ending. The process went
+    away; the stream did not, and nobody asked for it to stop. 'requested' is
+    the path a new capture and a resumed pause both take, so it probes afresh,
+    waits its turn under the session cap and carries the transcript on from
+    `captured_seconds` and the last sequence number. `captured_until` is left as
+    it was, and that is what tells the next connect how far behind live to
+    start, so the audio from while nothing was running is heard after all.
+
+    Two exceptions. 'stopping' was already asked to end, so it ends. And a
+    capture that has been through `max_restarts` of these without a chunk
+    accounted for in between is failed, as every restart used to be: that is
+    not a deploy but a capture that takes its supervisor down with it, and
+    resuming it would only fetch the same audio again.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
             update skybird.stream_session
-               set state = 'failed', stop_reason = 'supervisor_restart',
-                   stopped_at = now()
+               set state = case
+                       when state = 'stopping' then 'stopped'
+                       when restarts >= %(max)s then 'failed'
+                       else 'requested'
+                   end,
+                   stop_reason = case
+                       when state <> 'stopping' and restarts >= %(max)s
+                       then 'supervisor_restart'
+                       else stop_reason
+                   end,
+                   stopped_at = case
+                       when state = 'stopping' or restarts >= %(max)s then now()
+                       else stopped_at
+                   end,
+                   last_error = case
+                       when state <> 'stopping' and restarts >= %(max)s
+                       then 'restarted ' || restarts
+                            || ' times without capturing anything in between'
+                       else last_error
+                   end,
+                   restarts = case
+                       when state = 'stopping' then restarts
+                       else restarts + 1
+                   end
              where state in ('starting','running','stopping')
-            """
+            returning state
+            """,
+            {"max": max_restarts},
         )
-        settled = cur.rowcount
-    if settled:
-        logger.warning("reconciled %d capture(s) left by a previous run", settled)
-    return settled
+        settled = [row[0] for row in cur.fetchall()]
+    requeued = settled.count("requested")
+    if requeued:
+        logger.warning("re-queued %d capture(s) left by a previous run", requeued)
+    failed = settled.count("failed")
+    if failed:
+        logger.warning(
+            "failed %d capture(s) restarted %d times without a chunk in between",
+            failed,
+            max_restarts,
+        )
+    return len(settled)
 
 
 def count_chunk(
@@ -483,6 +553,7 @@ def count_chunk(
     failed: int = 0,
     dropped: int = 0,
     seconds: float = 0.0,
+    until: datetime | None = None,
     error: str | None = None,
 ) -> None:
     """Move the chunk counters, and record the last thing that went wrong.
@@ -496,6 +567,13 @@ def count_chunk(
     including one that failed to transcribe and one that was dropped -- the
     audio happened either way, and an offset that skipped it would put every
     line after the gap at the wrong second.
+
+    `until` is the capture clock at the end of that audio, kept so a restart
+    knows how far behind live to start again — and kept only while the row is
+    being captured, so a chunk still being heard when somebody pauses and
+    resumes cannot re-arm a rewind across the gap they chose. Any chunk
+    accounted for also puts `restarts` back to zero: the loop that fetched it is
+    evidently working.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -505,10 +583,16 @@ def count_chunk(
                    chunks_failed    = chunks_failed + %s,
                    chunks_dropped   = chunks_dropped + %s,
                    captured_seconds = captured_seconds + %s,
+                   captured_until   = case
+                                          when state in ('starting','running')
+                                          then coalesce(%s, captured_until)
+                                          else captured_until
+                                      end,
+                   restarts         = case when %s then 0 else restarts end,
                    last_error       = coalesce(%s, last_error)
              where id = %s
             """,
-            (ok, failed, dropped, seconds, error, session_id),
+            (ok, failed, dropped, seconds, until, seconds > 0, error, session_id),
         )
 
 
@@ -534,8 +618,15 @@ def append_segments(
     Empty text is dropped rather than stored. Whisper is run with a voice
     filter, so silence comes back as nothing at all, and a row saying nothing
     was said is not worth the space or the scroll.
+
+    A NUL is taken out first: Postgres refuses one in `text`, and the refusal
+    would come back on every retry of the same audio, which since a restart
+    now resumes is a loop rather than one lost chunk.
     """
-    values = [row for row in rows if row[5].strip()]
+    values = [
+        (*row[:5], row[5].replace("\x00", "")) for row in rows
+    ]
+    values = [row for row in values if row[5].strip()]
     if not values:
         return 0
     with conn.cursor() as cur:
